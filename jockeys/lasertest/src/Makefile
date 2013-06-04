@@ -7,7 +7,7 @@
 ####################################################################################
 
 # Makefile for default local settings
-include $(EQUID_PATH)/Mk/default.mk
+-include $(EQUID_PATH)/Mk/default.mk
 
 # Optional global makefile overriding (cross)compiler settings etc.
 -include /etc/robot/overwrite.mk
@@ -40,10 +40,16 @@ COPY_ETC_DST=../bin
 # A call to "make all" will screw everything up!
 
 .PHONY: $(TARGET)
-$(TARGET): all obj
+
+$(TARGET): check-env all obj
 	$(CXX) $(CXXDEFINE) -o ../bin/$@ $(OBJS) $(CXXFLAGS) $(LDFLAGS) 
 	$(STRIP) ../bin/$@
 	$(CSIZE) ../bin/$@
+
+check-env:
+ifndef EQUID_PATH
+    $(error EQUID_PATH is undefined)
+endif
 
 upload: all obj
 	$(STRIP) ../bin/$(TARGET)
