@@ -145,7 +145,7 @@ LDFLAGS=$(MIDDLEWARE_LIBS) \
 
 
 # Semaphores / mutexes
-LDFLAGS += -lpthread
+LDFLAGS += -lpthread -lv4l2 -lv4lconvert
 
 # Just use normal compiler, uncomment if you want to cross-compile
 # This will add a -DRUNONPC flag to gcc or g++ which can subsequently be

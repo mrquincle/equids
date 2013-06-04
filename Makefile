@@ -10,7 +10,7 @@ include Mk/default.mk
 # errors in that way. Manually catching the error does not respect "make -k". 
 # Moreover, with a for-loop the make cannot be executed in parallel.
 
-JOCKEYS=jockeys/lasertest
+JOCKEYS=jockeys/lasertest jockeys/laserscan
 
 jockeys: $(JOCKEYS)
 

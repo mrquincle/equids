@@ -1,26 +1,28 @@
 /**
- * @brief Control the laser (actually an actuator, not a sensor)
+ * 456789------------------------------------------------------------------------------------------------------------120
+ *
+ * @brief Control the laser (which is an actuator, not a sensor)
  * @file CLaser.h
  *
- * This file is created at Almende B.V. It is open-source software and part of the Common 
- * Hybrid Agent Platform (CHAP). A toolbox with a lot of open-source tools, ranging from 
- * thread pools and TCP/IP components to control architectures and learning algorithms. 
+ * This file is created at Almende B.V. and Distributed Organisms B.V. It is open-source software and belongs to a
+ * larger suite of software that is meant for research on self-organization principles and multi-agent systems where
+ * learning algorithms are an important aspect.
+ *
  * This software is published under the GNU Lesser General Public license (LGPL).
  *
- * It is not possible to add usage restrictions to an open-source license. Nevertheless,
- * we personally strongly object against this software being used by the military, in the
- * bio-industry, for animal experimentation, or anything that violates the Universal
- * Declaration of Human Rights.
+ * It is not possible to add usage restrictions to an open-source license. Nevertheless, we personally strongly object
+ * against this software being used for military purposes, factory farming, animal experimentation, and "Universal
+ * Declaration of Human Rights" violations.
  *
- * Copyright © 2012 Anne van Rossum <anne@almende.com>
+ * Copyright (c) 2013 Anne C. van Rossum <anne@almende.org>
  *
- * @author  Anne C. van Rossum
- * @date    Jul 30, 2012
- * @project Replicator FP7
- * @company Almende B.V.
- * @case    modular robotics / sensor fusion
+ * @author    Anne C. van Rossum
+ * @date      Jul 30, 2012
+ * @project   Replicator
+ * @company   Almende B.V.
+ * @company   Distributed Organisms B.V.
+ * @case      Sensor fusion
  */
-
 
 #ifndef CLASER_H_
 #define CLASER_H_

@@ -1,8 +1,8 @@
 /**
  * 456789------------------------------------------------------------------------------------------------------------120
  *
- * @brief Test the laser
- * @file lasertest.cpp
+ * @brief Get a laser scan from the combination of laser and camera
+ * @file laserscan.cpp
  *
  * This file is created at Almende B.V. and Distributed Organisms B.V. It is open-source software and belongs to a
  * larger suite of software that is meant for research on self-organization principles and multi-agent systems where
@@ -21,7 +21,7 @@
  * @project   Replicator
  * @company   Almende B.V.
  * @company   Distributed Organisms B.V.
- * @case      Testing
+ * @case      Sensor fusion
  */
 
 #include <sys/types.h>
@@ -46,13 +46,14 @@
  **********************************************************************************************************************/
 
 #include <CLaser.h>
+#include <CCamera.h>
 
 /***********************************************************************************************************************
  * Implementation
  **********************************************************************************************************************/
 
 //! The name of the controller can be used for controller selection
-std::string NAME = "LaserTest";
+std::string NAME = "LaserScan";
 
 /**
  * If the user presses Ctrl+C, this can be used to do memory deallocation or a last communication with the MSPs.
@@ -77,15 +78,6 @@ int main(int argc, char **argv) {
 	IRobotFactory factory;
 	RobotBase* robot = factory.GetRobot();
 	RobotBase::RobotType robot_type = factory.GetType();
-
-	switch(robot_type) {
-	case RobotBase::UNKNOWN: std::cout << "Detected unknown robot" << std::endl; break;
-	case RobotBase::KABOT: std::cout << "Detected Karlsruhe robot" << std::endl; break;
-	case RobotBase::ACTIVEWHEEL: std::cout << "Detected Active Wheel robot" << std::endl; break;
-	case RobotBase::SCOUTBOT: std::cout << "Detected Scout robot" << std::endl; break;
-	default:
-		std::cout << "No known type (even not unknown). Did initialization go well?" << std::endl;
-	}
 
 	std::cout << "Setup laser functionality" << std::endl;
 	CLaser laser(robot, robot_type);
