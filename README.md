@@ -24,6 +24,9 @@ The server side utilities that for example show the camera images coming from th
 
 The only thing that is required for compilation is to set one environmental variable:
 
-cd "the path where you checked out this repository"
-export EQUID_PATH=`pwd`
+    cd "the path where you checked out this repository"
+    export EQUID_PATH=`pwd`
 
+## Copyright
+
+Something like BSD / LGPL, contact us to make sure.
