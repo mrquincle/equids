@@ -63,10 +63,6 @@ bool CLaser::IsOn() {
 void CLaser::On() {
 	status_on = true;
 	switch (robot_type) {
-//	case RobotBase::ACTIVEWHEEL: {
-//		ActiveWheel *bot = (ActiveWheel*)robot_base;
-//		break;
-//	}
 	case RobotBase::KABOT: {
 		KaBot *bot = (KaBot*)robot_base;
 		bot->activateLaser(status_on);
@@ -76,11 +72,10 @@ void CLaser::On() {
 		printf("%s: For scout\n", __func__);
 		ScoutBot *bot = (ScoutBot*)robot_base;
 		bot->activateLaser(status_on);
-		bot->sides[3]->led.all(LED_RED);
-		bot->sides[3]->led.single((LEDPosition)(3), LED_MAGENTA);
+		bot->SetLEDAll(3, LED_RED);
 		break;
 	}
-	default:
+	case RobotBase::ACTIVEWHEEL: default:
 		fprintf(stderr, "I don't know how to turn on the laser on this robot type\n");
 		break;
 	}
@@ -98,11 +93,12 @@ void CLaser::Off() {
 		printf("%s: For scout\n", __func__);
 		ScoutBot *bot = (ScoutBot*)robot_base;
 		bot->activateLaser(status_on);
-		bot->sides[3]->led.all(LED_WHITE);
-		bot->sides[3]->led.single((LEDPosition)(3), LED_WHITE);
+		bot->SetLEDAll(3, LED_WHITE);
+//		bot->sides[3]->led.all(LED_WHITE);
+//		bot->sides[3]->led.single((LEDPosition)(3), LED_WHITE);
 		break;
 	}
-	default:
+	case RobotBase::ACTIVEWHEEL: default:
 		fprintf(stderr, "I don't know how to turn off the laser on this robot type\n");
 		break;
 	}
@@ -122,7 +118,7 @@ void CLaser::Toggle() {
 		bot->activateLaser(status_on);
 		break;
 	}
-	default:
+	case RobotBase::ACTIVEWHEEL: default:
 		fprintf(stderr, "I don't know how to toggle the laser on this robot type\n");
 		break;
 	}

@@ -10,7 +10,10 @@ include Mk/default.mk
 # errors in that way. Manually catching the error does not respect "make -k". 
 # Moreover, with a for-loop the make cannot be executed in parallel.
 
-JOCKEYS=jockeys/lasertest jockeys/laserscan
+JOCKEYS=jockeys/lasertest jockeys/laserscan jockeys/avoidall
+#JOCKEYS=jockeys/avoidall
+
+CLEANJOCKEYS=$(addsuffix .clean,$(JOCKEYS))
 
 jockeys: $(JOCKEYS)
 
@@ -19,11 +22,18 @@ $(JOCKEYS):
 
 all: check-env jockeys
 
+$(CLEANJOCKEYS): %.clean:
+	$(MAKE) -C $* clean	
+
+clean-jockeys: $(CLEANJOCKEYS)
+
+clean: check-env clean-jockeys
+
 check-env:
 ifndef EQUID_PATH
   export EQUID_PATH:=$(CURDIR)
 endif
 
 # List all the phony targets
-.PHONY: jockeys $(JOCKEYS) all
+.PHONY: jockeys $(JOCKEYS) all clean-jockeys $(CLEANJOCKEYS) clean
 

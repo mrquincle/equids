@@ -5,12 +5,27 @@
 # you to use it over multiple projects
 ####################################################################################
 
+# Use a file local.mk to adapt this file, do not change this file itself, except for
+# changes that you want to be valid for everybody! Do not commit this local.mk to 
+# the repository. The local.mk file is included in the end so it can overwrite
+# everything in this file.
+SELF_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
+
+# The file paths.mk contains references to the following:
+# - RUNTIME_PATH_ROOT, where you want your compiled applications to end up
+# - GENERAL_SOFTWARE_PATH, where you installed e.g. uClinux
+# - MIDDLEWARE_PATH_ROOT, parent folder if irobot and/or hdmr+
+# Overwrite them in paths.local.mk and do not commit that file
+include $(SELF_DIR)/paths.mk
+
 ####################################################################################
 # Define your target
 ####################################################################################
 
 # The target can be a Raspberry PI, a Surveyor or Replicator robot with a Blackfin
-# processor, or your host machine which is probably an x86.
+# processor, or your host machine which is probably an x86. This option will also
+# be propagated to the compiler, so you can use #ifdef TARGET_PLATFORM==HOST in your
+# code to distinguish the robot use case from the one running on your laptop.
 #TARGET_PLATFORM=RASPBERRY, BLACKFIN, or HOST
 TARGET_PLATFORM=BLACKFIN
 
@@ -20,23 +35,13 @@ TARGET_PLATFORM=BLACKFIN
 TARGET_MIDDLEWARE=HDMR
 
 ####################################################################################
-# Create specific macro that can be used in the code to decide if the thing is
-# running on the robot, or - with some fake input - on a laptop / desktop
-####################################################################################
-
-ifeq ($(TARGET_PLATFORM),HOST)
-RUNONPC=true
-else
-RUNONPC=false
-endif
-
-####################################################################################
 # Specific macros for the academic Replicator robots
 ####################################################################################
-MULTI_CONTROLLER=false
+
+# ...
 
 ####################################################################################
-# Defaults
+# Defaults, empty
 ####################################################################################
 
 COMPILER_PREFIX=
@@ -57,46 +62,50 @@ COMPILER=bfin-linux-uclibc
 # Toolchain from:
 #  "aptitude install blackfin-toolchain-uclinux blackfin-toolchain-linux-uclibc"
 # is by default installed in /opt/uClinux
-CROSS_COMPILER_PATH=/opt/uClinux/$(COMPILER)/bin
-
-CROSS_COMPILER_INCLUDE_PATH:=/opt/uClinux/$(COMPILER)/$(COMPILER)/runtime/usr/include
+CROSS_COMPILER_PATH=$(GENERAL_SOFTWARE_PATH)/uClinux/$(COMPILER)/bin
+CROSS_COMPILER_INCLUDE_PATH:=$(GENERAL_SOFTWARE_PATH)/uClinux/$(COMPILER)/$(COMPILER)/runtime/usr/include
 
 # Where to install the binaries or libraries
-RUNTIME_PATH=/data/blackfin/usr
+RUNTIME_PATH=$(RUNTIME_PATH_ROOT)/blackfin/usr
 
-# The following flags are required for the bfin-uclinux compiler
-#LDFLAGS += -Wl,-elf2flt 
-
-# Assume for now the Blackfin 561 architecture
+# Target the (dual-core) Blackfin 561 architecture
 CXXFLAGS=-mcpu=bf561
 CFLAGS=-mcpu=bf561 
 
-# Special stack-size options
+# Special stack-size options, default size is 128k (0x20000), double it to 256k
 # http://docs.blackfin.uclinux.org/doku.php?id=uclinux-dist:debugging_applications
-# default size is 128k (0x20000), we are doubling it to 256k
 STACKSIZE=0x40000
 CFLAGS += -Wl,--defsym,__stacksize=$(STACKSIZE)
 CXXFLAGS += -Wl,--defsym,__stacksize=$(STACKSIZE)
 
 endif
 
+####################################################################################
+# Path and prefix to the ARM compiler specific to the Raspberry PI
+####################################################################################
+
 ifeq ($(TARGET_PLATFORM),RASPBERRY)
 
+# This is a hardware implemented floating point ARM processor
 COMPILER=arm-linux-gnueabihf
 
-CROSS_COMPILER_PATH=/opt/raspberrypi/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian/bin
-
-RUNTIME_PATH=/data/raspberry/usr
-
-#CXXFLAGS+=-Wl,--no-eh-frame-hdr
+# Toolchain can be obtained from Raspberry PI creators themselves
+CROSS_COMPILER_PATH=$(GENERAL_SOFTWARE_PATH)/raspberrypi/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian/bin
+CROSS_COMPILER_INCLUDE_PATH=$(GENERAL_SOFTWARE_PATH)/raspberrypi/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian/include
+# Where to install the binaries or libraries
+RUNTIME_PATH=$(RUNTIME_PATH_ROOT)/raspberry/usr
 
 endif
 
+####################################################################################
+# In case when - indeed - a certain middleware is used
+####################################################################################
+
+# Update variable TARGET, update paths, etc.
+
 ifneq ($(TARGET_PLATFORM),HOST)
-# COMPILER_PREFIX and TARGET are the same thing used by different Makefiles
 COMPILER_PREFIX=$(COMPILER)-
 TARGET=$(COMPILER_PREFIX)
-
 PATH:=$(PATH):$(CROSS_COMPILER_PATH)
 endif
 
@@ -109,66 +118,58 @@ MIDDLEWARE_LIBS=
 
 ifeq ($(TARGET_MIDDLEWARE),HDMR)
 
-HDMR_PATH=/home/ahb/hdmrplus_install
-SOAP_PATH=/home/ahb/gsoap-2.8.7
+HDMR_PATH=$(MIDDLEWARE_PATH_ROOT)/hdmrplus_install
+SOAP_PATH=$(MIDDLEWARE_PATH_ROOT)/gsoap-2.8.7
 
 MIDDLEWARE_INCLUDES=-I$(HDMR_PATH)/include -I$(SOAP_PATH)/gsoap
 MIDDLEWARE_LIBS=-L$(HDMR_PATH)/lib -L$(SOAP_PATH)/gsoap -lirobot_app -lirobot_common -lPeer -lUdata -lpthread
-
 endif
 
 ifeq ($(TARGET_MIDDLEWARE),IROBOT)
 
-IROBOT_PATH=/home/anne/myworkspace/stuttgart/irobot
-LIBCAM_PATH=/home/anne/myworkspace/stuttgart/irobot/libcam
+IROBOT_PATH=$(MIDDLEWARE_PATH_ROOT)/irobot
+LIBCAM_PATH=$(MIDDLEWARE_PATH_ROOT)/irobot/libcam
 
 MIDDLEWARE_INCLUDES=-I$(IROBOT_PATH)/include -I$(LIBCAM_PATH)/include 
 MIDDLEWARE_LIBS=-L$(IROBOT_PATH)/lib -ljpeg
-
 endif
 
 ####################################################################################
-# Default compilation, assembler options
+# Additional options for your controllers
 ####################################################################################
 
-CXXFLAGS+=-O3 -Wno-error=unused-function
+CONTROLLER_LIBS=-lpthread -lv4l2 -lv4lconvert
+
+
+####################################################################################
+# Compilation and assembler options, level of warnings, optimisation
+####################################################################################
+
+DEBUGFLAGS=-O3
+CFLAGS+=$(DEBUGFLAGS) -Wno-error=unused-function
+CXXFLAGS+=$(CFLAGS)
 ASMFLAGS=
-DEBUGFLAGS=-O0
 
-CXXINCLUDE += $(MIDDLEWARE_INCLUDES) -I$(CROSS_COMPILER_INCLUDE_PATH) -I$(RUNTIME_PATH)/local/include -I$(RUNTIME_PATH)/include
+####################################################################################
+# Include all paths and flags in the final variables that are used by the user
+####################################################################################
 
-CXXFLAGS+=$(CXXINCLUDE)
+CINCLUDES += $(MIDDLEWARE_INCLUDES) -I$(CROSS_COMPILER_INCLUDE_PATH) \
+	-I$(RUNTIME_PATH)/local/include -I$(RUNTIME_PATH)/include
+
+CXXINCLUDES += $(CINCLUDES)
+
+CFLAGS+=$(CINCLUDES)
+CXXFLAGS+=$(CXXINCLUDES)
 
 LDFLAGS=$(MIDDLEWARE_LIBS) \
+	$(CONTROLLER_LIBS) \
 	-L$(RUNTIME_PATH)/lib \
 	-L$(RUNTIME_PATH)/local/lib 
 
-
-# Semaphores / mutexes
-LDFLAGS += -lpthread -lv4l2 -lv4lconvert
-
-# Just use normal compiler, uncomment if you want to cross-compile
-# This will add a -DRUNONPC flag to gcc or g++ which can subsequently be
-# used in the code to distinguish between code for on the robot and on the PC
-ifeq ($(RUNONPC),true)
-COMPILER_PREFIX=
-CFLAGS += -DRUNONPC -Wall
-CXXFLAGS += -DRUNONPC -Wall
-else
-#CFLAGS += -mmulticore -mcoreb
-#CXXFLAGS += -mmulticore -mcoreb
-#CFLAGS += -mstack-check-l1
-#CXXFLAGS += -mstack-check-l1
-endif
-
-ifeq ($(MULTI_CONTROLLER),true)
-CFLAGS += -DMULTI_CONTROLLER
-CXXFLAGS += -DMULTI_CONTROLLER
-endif
-
-ifeq ($(MULTI_CONTROLLER),true)
-LDFLAGS += -lrt
-endif
+####################################################################################
+# The shorthands for compiler, linker, assembler, etc. Use these in your Makefiles
+####################################################################################
 
 CC=$(COMPILER_PREFIX)gcc
 CXX=$(COMPILER_PREFIX)g++
@@ -179,9 +180,9 @@ NM=$(COMPILER_PREFIX)nm
 AR=$(COMPILER_PREFIX)ar
 
 ####################################################################################
-# Where can the libraries be found?
+# Final destination path
 ####################################################################################
 
-# For v4l-utils
-DESTDIR=/home/anne/mydata
+DESTDIR=$(RUNTIME_PATH_ROOT)
 
+-include $(SELF_DIR)/local.mk
