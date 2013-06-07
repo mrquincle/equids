@@ -1,6 +1,6 @@
 # Equids
 
-The jockeys have to ride something... :-) This can be seen as a modular application software approach. The software in this directory uses the old-fashioned irobot middleware, but it can use the new HDMR+ middleware through the wrapirobot glue code.
+The jockeys have to ride something... :-) This can be seen as a modular application software approach. The software in this directory uses the old-fashioned IRobot middleware, but it can use the new HDMR+ middleware through the "wrapirobot" glue code.
 
 This directory is divided into several subdirectories:
 
@@ -26,6 +26,14 @@ The only thing that is required for compilation is to set one environmental vari
 
     cd "the path where you checked out this repository"
     export EQUID_PATH=`pwd`
+
+If you run everything from the EQUIDS environment, you won't need to set this environmental variable, it will be automatically set in that Makefil.
+
+## Server-side
+
+On the server we require the HDMR+ middleware that has the "wrapirobot" glue layer. This allows you to use the old IRobot middleware calls and requires you to only change a few lines in your controller code. You can find the "wrapirobot" code at https://github.com/mrquincle/wrapirobot.
+
+The HDMR+ middleware is proprietary, created by [Karlsruhe Institute of Technology (KIT)](http://www.kit.edu/english/) and the code can be found at a [Stuttgart University SVN server](http://ipvs.informatik.uni-stuttgart.de/software/repos/software/HDMR-Plus) for Replicator/Symbrion project partners only.
 
 ## Copyright
 
