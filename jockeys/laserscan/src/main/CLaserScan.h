@@ -54,11 +54,17 @@ public:
 	//! All the necessary initialisation, needs to be called before anything
 	int Init();
 
+	//! Stop everything
+	void Stop();
+
 	//! Get the distance to an object using laser and camera data
-	int GetDistance(int &distance, int *dist_vec, int dist_vec_length);
+	void GetDistance(int &distance);
 
 	//! Set the refresh rate of the module (will make the distance less accurate of course)
 	void SetRefreshRate(int rate);
+
+	//! Fill small array from big one
+	void Fill(int *in, int in_size, int *out, int out_size);
 
 	//! Setter for limits, top < bottom... (awkward, yes)
 	inline void setLimits(int top, int bottom) { topRowLimit = top; bottomRowLimit = bottom; }
@@ -74,16 +80,16 @@ protected:
 	int InitCam(int imgWidth, int imgHeight, int laserResolution);
 
 	//! Generate laser vector using two cameras, one with laser on, one with laser off
-	int generateVector(CRawImage* laserImage, CRawImage* noLaserImage, unsigned char* vec);
+	int generateVector(CRawImage* laserImage, CRawImage* noLaserImage, int* vec);
 
 	//! Generate vector from difference image
-	unsigned char* generateVector(CRawImage* diffImage, int & vec_size);
+//	unsigned char* generateVector(CRawImage* diffImage, int & vec_size);
 
 	//! Scan outputs two float vectors from one vector of distances
-	void computeScan(unsigned char* vec,float* x,float* y);
+	void computeScan(int* vec,float* x,float* y);
 
 	//! Return difference between two images
-	CRawImage* diff(CRawImage* laserImage, CRawImage* noLaserImage);
+	CRawImage* diff(CRawImage* laserImage, CRawImage* noLaserImage, bool plain);
 
 	bool isMoreRed(CRawImage &img1, CRawImage &img2, int pos);
 private:
@@ -105,11 +111,12 @@ private:
 
 	int cameraDeviceHandler;
 
-	char *pix_buf;
-	unsigned char *laserVec;
+//	char *pix_buf;
+	int *laserVec;
 	int *laserSmallVec;
-	float *laserX;
-	float *laserY;
+	int laserSmallVecSize;
+//	float *laserX;
+//	float *laserY;
 
 	int imageWidth;
 	int imageHeight;
@@ -118,7 +125,7 @@ private:
 	int threshold;
 	int topRowLimit;
 	int bottomRowLimit;
-	int diff_treshold;
+	int diff_threshold;
 
 };
 

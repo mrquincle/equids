@@ -79,31 +79,37 @@ CCamera::CCamera(): defaultImage(CRawImage(640,480,3))
 	brightness = 0;
 	initialized = false;
 	save_images = false;
-	camdevfd = 0;
+	camdevfd = -1;
 	pixel_format = V4L2_PIX_FMT_YUYV;
+	print_debug = false;
 	return;
 }
 
-CCamera::~CCamera()
-{
+CCamera::~CCamera() {
+	Stop();
 }
 
 int CCamera::Init(const char *deviceName, int &devfd, int width, int height)
 {
-	printf("CCamera: Open device %s\n", deviceName);
+	if (print_debug)
+		printf("CCamera: Open device %s\n", deviceName);
 	//devfd = open_device();
 	camdevfd = cam_opendev(deviceName, width, height, 1);
 	this->width = width;
 	this->height = height;
-//	init_device();
-//	start_capturing();
 	if (!camdevfd) {
 		printf("CCamera: Cannot open video device\n");
 		return -1;
 	} else {
-		printf("CCamera: Device %s opened\n", deviceName);
+		if (print_debug)
+			printf("CCamera: Device %s opened\n", deviceName);
 	}
 	devfd = camdevfd;
+
+	// we will need to capture a few images to get rid of the greenish pictures in the beginning
+	for (int i = 0; i < 10; ++i) {
+		cam_capture(camdevfd, width, height);
+	}
 	return 0;
 }
 
@@ -121,6 +127,13 @@ int CCamera::dummyInit(const char *directoryName) {
 	return 0;
 }
 
+void CCamera::Stop() {
+	if (camdevfd >= 0) cam_closedev(camdevfd);
+	camdevfd = -1;
+	if (print_debug)
+		printf("Camera device handler closed\n");
+}
+
 /**
  * Fill a previously allocated image with new data from the buffer in the v4l camera driver. This
  */
@@ -128,21 +141,15 @@ int CCamera::renewImage(CRawImage* image, bool convert)
 {
 	if (dummy_mode) return dummyImage(image);
 
-//	refresh_image();
-
 	size_t yuv_size = width*height*2;
-	printf("Size is %i\n", (int)yuv_size);
+	if (print_debug)
+		printf("Size is %i\n", (int)yuv_size);
 	assert (yuv_size > 0);
 	unsigned char* buffer = NULL;
 	buffer = cam_capture(camdevfd, width, height);
-//
-//	struct v4lbuffer b = get_result();
-//	if (b.length != yuv_size) {
-//		fprintf(stderr, "Length is %i while we would expect (640x480x2=%i)\n", (int)b.length, (int)yuv_size);
-//		assert(false);
-//	}
-//	assert (b.length == yuv_size);
-	printf("Grabbed frame, now copy to buffer in CRawImage\n");
+
+	if (print_debug)
+		printf("Grabbed frame, now copy to buffer in CRawImage\n");
 
 	if (save_images) {
 		char fileName[256];
@@ -154,13 +161,38 @@ int CCamera::renewImage(CRawImage* image, bool convert)
 	}
 
 	if (convert) {
-		fprintf(stderr, "I do not know how to convert anymore!.\n");
-		//yuv422_to_rgb(image->data, (unsigned char*)b.start, b.length);
+		yuv422_to_rgb(image->data, (unsigned char*)buffer, yuv_size);
 	} else {
+		fprintf(stderr, "Just realize that you copied the original Bayer pattern formatted data.\n");
 		memcpy(image->data,buffer,yuv_size);
 	}
 	return 0; 
 }
+
+/**
+ * Denoise image by capturing another one and averaging over the two.
+ */
+int CCamera::denoiseImageByCapturingAnother(CRawImage* image)
+{
+	if (dummy_mode) return dummyImage(image);
+
+	size_t yuv_size = width*height*2;
+	if (print_debug)
+		printf("Size is %i\n", (int)yuv_size);
+	assert (yuv_size > 0);
+	unsigned char* buffer = NULL;
+	buffer = cam_capture(camdevfd, width, height);
+
+	if (print_debug)
+		printf("Grabbed frame, now copy to buffer in CRawImage\n");
+
+	yuv422_to_rgb(defaultImage.data, (unsigned char*)buffer, yuv_size);
+
+	image->average(defaultImage);
+
+	return 0;
+}
+
 
 int CCamera::dummyImage(CRawImage* image)
 {
@@ -194,7 +226,8 @@ int CCamera::dummyImage(CRawImage* image)
 void CCamera::yuv422_to_rgb(unsigned char * output_ptr, unsigned char * input_ptr,
 		size_t width_times_height)
 {
-	printf("Convert yuv to rgb\n");
+	if (print_debug)
+		printf("Convert yuv to rgb\n");
 	unsigned int i, size;
 	unsigned char Y0, Y1, U, V;
 	unsigned char *buff = input_ptr;
@@ -227,7 +260,8 @@ void CCamera::yuv422_to_rgb(unsigned char * output_ptr, unsigned char * input_pt
 		*output_pt++ = YUV2G(Y1, U, V);
 		*output_pt++ = YUV2B(Y1, U, V);
 	}
-	printf("Compare %i with %i\n", (int)(output_pt - output_ptr), (int)(height*width*3));
+	if (print_debug)
+		printf("Compare %i with %i\n", (int)(output_pt - output_ptr), (int)(height*width*3));
 	assert((output_pt - output_ptr) == height*width*3);
 }
 

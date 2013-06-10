@@ -51,7 +51,7 @@ void CMotors::setSpeeds(int forward, int turn) {
 	case RobotBase::SCOUTBOT: {
 		ScoutBot *bot = (ScoutBot*)robot_base;
 		// expects left, right
-		bot->Move(forward-turn, forward+turn);
+		bot->Move(forward, turn);
 //		bot->moveForward(forward);
 //		bot->moveRight(turn);
 		break;

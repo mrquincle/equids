@@ -70,7 +70,7 @@ void interrupt_signal_handler(int signal) {
  * Basically only turns on and off the laser for a couple of times.
  */
 int main(int argc, char **argv) {
-	int nof_switches = 10;
+	int nof_switches = 2;
 
 	struct sigaction a;
 	a.sa_handler = &interrupt_signal_handler;
@@ -90,11 +90,22 @@ int main(int argc, char **argv) {
 	CMotors motors(robot, robot_type);
 	motors.init();
 
-	motors.setSpeeds(20, 10);
+	motors.setSpeeds(100, 0);
 	sleep(2);
+
+	motors.setSpeeds(-100, 0);
+	sleep(2);
+
+	motors.setSpeeds(0, 100);
+	sleep(2);
+
+	motors.setSpeeds(0, -100);
+	sleep(2);
+
+	motors.setSpeeds(0, 0);
 	motors.halt();
 
-	fprintf(stdout,"Stopping laser test.");
+	fprintf(stdout,"Stopping avoidance.");
 	return 0;
 }
 

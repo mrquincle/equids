@@ -58,6 +58,9 @@ public:
 	//! Copy constructor
 	CRawImage(const CRawImage & other);
 
+	//! Average two images, write result to this image
+	void average(const CRawImage & other);
+
 	//! Only valid if bpp=3, returns an rgb pixel
 	Pixel getPixel(int x, int y);
 

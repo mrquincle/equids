@@ -45,8 +45,8 @@
  * Jockey framework includes
  **********************************************************************************************************************/
 
-#include <CLaser.h>
-#include <CCamera.h>
+#include <CLaserScan.h>
+//#include <CCamera.h>
 
 /***********************************************************************************************************************
  * Implementation
@@ -79,14 +79,38 @@ int main(int argc, char **argv) {
 	RobotBase* robot = factory.GetRobot();
 	RobotBase::RobotType robot_type = factory.GetType();
 
-	std::cout << "Setup laser functionality" << std::endl;
-	CLaser laser(robot, robot_type);
-	for (int i = 0; i < nof_switches; ++i) {
-		(i % 2) ? laser.Off() : laser.On();
-		sleep(2);
-	}
+	robot->SetLEDAll(0, LED_OFF);
+	robot->SetLEDAll(1, LED_RED);
+	robot->SetLEDAll(2, LED_GREEN);
 
-	fprintf(stdout,"Stopping laser test.");
+	std::cout << "Setup laser functionality" << std::endl;
+	CLaserScan scan(robot, robot_type, 640, 480, 640);
+	scan.Init();
+
+	int ticks = 30;
+	for (int t = 0; t < ticks; ++t) {
+		int distance = 0;
+//		int dist_vector_len = 5;
+//		int dist_vector[dist_vector_len];
+//		for (int i = 0; i < dist_vector_len; i++) {
+//			dist_vector[i] = 0;
+//		}
+
+		scan.GetDistance(distance); //,dist_vector,dist_vector_len);
+
+		cout << "Distance: " << distance << " cm" << std::endl;
+//		for (int i = 0; i < dist_vector_len; i++) {
+//			std::cout << dist_vector[i] << ' ';
+//		}
+//		std::cout << std::endl;
+	}
+	// flush, because deallocation can go wrong somewhere and we'd have a memory dump
+	std::cout << std::endl << flush;
+
+	fprintf(stdout,"Now try to stop and deallocate everything.\n");
+	scan.Stop();
+	// robot should be automatically deleted by the factory
+	fprintf(stdout,"Stopping laser test.\n");
 	return 0;
 }
 

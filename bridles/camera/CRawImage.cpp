@@ -55,6 +55,16 @@ CRawImage::CRawImage(const CRawImage & other): width(other.width), height(other.
 	  updateHeader();
 }
 
+//! Average two images, write result to this image
+void CRawImage::average(const CRawImage & other) {
+	assert (size == other.size);
+	assert (height == other.height);
+	for (int i = 0; i < size; ++i) {
+		data[i] = (data[i] + other.data[i]) / 2;
+	}
+}
+
+
 #define ASSERT(condition) { \
 	if(!(condition)){ \
 		std::cerr << "ASSERT FAILED: " << #condition << " @ " << __FILE__ << " (" << __LINE__ << ")" << std::endl; \
@@ -199,6 +209,7 @@ int CRawImage::getSaveNumber()
 
 CRawImage::~CRawImage()
 {
+//	printf("Deallocate image of size %i\n", size);
 	if (data != NULL) {
 		free(data);
 	}
@@ -208,7 +219,7 @@ void CRawImage::makeMonochrome() {
 	assert (bpp == 3);
 	assert (data != NULL);
 	assert (width > 0);
-	printf("Size is %i\n", size);
+//	printf("%s(): Size is %i\n", __func__, size);
 	swap();
 
 	unsigned char* newData = (unsigned char*)calloc(width*height,sizeof(unsigned char));

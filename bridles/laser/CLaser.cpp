@@ -46,7 +46,9 @@ CLaser::CLaser(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 }
 
 CLaser::~CLaser() {
-
+	robot_base = NULL;
+	status_on = false;
+	printf("Laser object deallocated\n");
 }
 
 /**
@@ -69,7 +71,7 @@ void CLaser::On() {
 		break;
 	}
 	case RobotBase::SCOUTBOT: {
-		printf("%s: For scout\n", __func__);
+//		printf("%s: For scout\n", __func__);
 		ScoutBot *bot = (ScoutBot*)robot_base;
 		bot->activateLaser(status_on);
 		bot->SetLEDAll(3, LED_RED);
@@ -90,7 +92,7 @@ void CLaser::Off() {
 		break;
 	}
 	case RobotBase::SCOUTBOT: {
-		printf("%s: For scout\n", __func__);
+//		printf("%s: For scout\n", __func__);
 		ScoutBot *bot = (ScoutBot*)robot_base;
 		bot->activateLaser(status_on);
 		bot->SetLEDAll(3, LED_WHITE);
@@ -113,7 +115,7 @@ void CLaser::Toggle() {
 		break;
 	}
 	case RobotBase::SCOUTBOT: {
-		printf("%s: For scout\n", __func__);
+//		printf("%s: For scout\n", __func__);
 		ScoutBot *bot = (ScoutBot*)robot_base;
 		bot->activateLaser(status_on);
 		break;

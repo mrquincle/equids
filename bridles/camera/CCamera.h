@@ -36,10 +36,15 @@ public:
 	//! If you want to load images from a directory use this "dummy" camera
 	int dummyInit(const char *directoryName);
 
+	void Stop();
+
 	~CCamera();
 
 	//! This gets you a new image, by default it will convert it to RGB values
 	int renewImage(CRawImage* image, bool convert);
+
+	//! Denoise image by capturing another image and averaging over the two
+	int denoiseImageByCapturingAnother(CRawImage* image);
 
 	void setGain(int value);
 	int getGain();
@@ -75,6 +80,7 @@ private:
 	int camdevfd;
 
 	int pixel_format;
+	bool print_debug;
 };
 
 #endif
