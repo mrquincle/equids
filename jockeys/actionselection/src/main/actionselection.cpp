@@ -1,8 +1,8 @@
 /**
  * 456789------------------------------------------------------------------------------------------------------------120
  *
- * @brief Get a laser scan from the combination of laser and camera
- * @file laserscan.cpp
+ * @brief Back and forth controller
+ * @file backandforth.cpp
  *
  * This file is created at Almende B.V. and Distributed Organisms B.V. It is open-source software and belongs to a
  * larger suite of software that is meant for research on self-organization principles and multi-agent systems where
@@ -21,7 +21,7 @@
  * @project   Replicator
  * @company   Almende B.V.
  * @company   Distributed Organisms B.V.
- * @case      Sensor fusion
+ * @case      Testing
  */
 
 #include <sys/types.h>
@@ -41,19 +41,21 @@
 
 #include <IRobot.h>
 
+//#include <comm/IRComm.h>
+
 /***********************************************************************************************************************
  * Jockey framework includes
  **********************************************************************************************************************/
 
-#include <CLaserScan.h>
-//#include <CCamera.h>
+#include "../eth/CMessage.h"
+#include "../eth/CMessageClient.h"
 
 /***********************************************************************************************************************
  * Implementation
  **********************************************************************************************************************/
 
 //! The name of the controller can be used for controller selection
-std::string NAME = "LaserScan";
+std::string NAME = "BackAndForth";
 
 /**
  * If the user presses Ctrl+C, this can be used to do memory deallocation or a last communication with the MSPs.
@@ -61,47 +63,78 @@ std::string NAME = "LaserScan";
 void interrupt_signal_handler(int signal) {
 	if (signal == SIGINT) {
 		//RobotBase::MSPReset();
-		exit(0);
+		exit(EXIT_SUCCESS);
 	}
-}
-
-void safe_close() {
-	// flush, because deallocation can go wrong somewhere and we'd have a memory dump
-	std::cout << std::endl << flush;
-	printf("Robot object is automatically deleted by the factory.\n");
 }
 
 /**
  * Basically only turns on and off the laser for a couple of times.
  */
 int main(int argc, char **argv) {
-	int nof_switches = 10;
-
 	struct sigaction a;
 	a.sa_handler = &interrupt_signal_handler;
 	sigaction(SIGINT, &a, NULL);
 
-	IRobotFactory factory;
-	RobotBase* robot = factory.GetRobot();
-	RobotBase::RobotType robot_type = factory.GetType();
-
-	robot->SetLEDAll(0, LED_OFF);
-	robot->SetLEDAll(1, LED_RED);
-	robot->SetLEDAll(2, LED_GREEN);
-
-	std::cout << "Setup laser functionality" << std::endl;
-	CLaserScan scan(robot, robot_type, 640, 480, 640);
-	scan.Init();
-
-	int ticks = 30;
-	for (int t = 0; t < ticks; ++t) {
-		int distance = 0;
-		scan.GetDistance(distance);
-		cout << "Distance: " << distance << " cm" << std::endl;
+	std::string port0, port1;
+	if (argc > 2) {
+		port0 = std::string(argv[1]);
+		port1 = std::string(argv[2]);
+	} else {
+		std::cout << "Usage: actionselection port0 port1" << std::endl;
+		return EXIT_FAILURE;
 	}
 
-	safe_close();
-	scan.Stop();
+	RobotBase* robot = RobotBase::Instance();
+	RobotBase::RobotType robot_type = RobotBase::Initialize(NAME);
+
+//	IRobotFactory factory;
+//	RobotBase* robot = factory.GetRobot();
+//	RobotBase::RobotType robot_type = factory.GetType();
+
+	switch(robot_type) {
+	case RobotBase::UNKNOWN: std::cout << "Detected unknown robot" << std::endl; break;
+	case RobotBase::KABOT: std::cout << "Detected Karlsruhe robot" << std::endl; break;
+	case RobotBase::ACTIVEWHEEL: std::cout << "Detected Active Wheel robot" << std::endl; break;
+	case RobotBase::SCOUTBOT: std::cout << "Detected Scout robot" << std::endl; break;
+	default:
+		std::cout << "No known type (even not unknown). Did initialization go well?" << std::endl;
+	}
+
+	CMessageClient client[2];
+	std::string host = "127.0.0.1";
+	bool requirements[] = {true,false,false,false,false};
+	std::cout << "Create (receiving) client on port " << port0 << std::endl;
+	client[0].init(host.c_str(), port0.c_str(), requirements);
+	std::cout << "Create (receiving) client on port " << port1 << std::endl;
+	client[1].init(host.c_str(), port1.c_str(), requirements);
+
+	CMessage message;
+	for (int i = 0; i < 10; ++i) {
+		int index = i % 2;
+		int other = 1 - index;
+		message.type = MSG_STOP;
+		std::cout << "Stop controller " << index << std::endl;
+		client[index].sendMessage(&message);
+
+		usleep(400000);
+
+		message.type = MSG_SPEED;
+		if (index == 0) {
+			message.value1 = 50;
+			message.value2 = -50;
+			message.value3 = 0;
+		}
+		else {
+			message.value1 = -50;
+			message.value2 = 50;
+			message.value3 = 0;
+		}
+		std::cout << "Start controller " << other << " with value " << message.value1 << std::endl;
+		client[other].sendMessage(&message);
+		usleep(400000);
+	}
+
+	printf("Stopping %s\n", NAME.c_str());
 	return 0;
 }
 

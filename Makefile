@@ -1,8 +1,8 @@
 include Mk/default.mk
 
-####################################################################################
+#######################################################################################################################
 # Explanation
-####################################################################################
+#######################################################################################################################
 
 # Of course you can have a for-loop in a Makefile, however, such a loop is a SHELL 
 # loop. This means, that an error will not be automatically propagate back to this
@@ -10,8 +10,10 @@ include Mk/default.mk
 # errors in that way. Manually catching the error does not respect "make -k". 
 # Moreover, with a for-loop the make cannot be executed in parallel.
 
-JOCKEYS=jockeys/lasertest jockeys/laserscan jockeys/avoidall
-#JOCKEYS=jockeys/avoidall
+#JOCKEYS=jockeys/lasertest jockeys/laserscan jockeys/avoidall
+#JOCKEYS=jockeys/position
+JOCKEYS=jockeys/backandforth jockeys/actionselection
+#JOCKEYS=jockeys/laserscan
 
 CLEANJOCKEYS=$(addsuffix .clean,$(JOCKEYS))
 

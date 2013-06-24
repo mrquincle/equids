@@ -32,7 +32,8 @@ TARGET_PLATFORM=BLACKFIN
 # There are currently only two types of middleware targets supported, there is the
 # IROBOT middleware from Stuttgart and there is the HDMR middleware from Karlsruhe.
 # The IROBOT middleware has nothing with the iRobot / Roomba robot.
-TARGET_MIDDLEWARE=HDMR
+#TARGET_MIDDLEWARE=HDMR
+TARGET_MIDDLEWARE=IROBOT
 
 ####################################################################################
 # Specific macros for the academic Replicator robots
@@ -120,9 +121,17 @@ ifeq ($(TARGET_MIDDLEWARE),HDMR)
 
 HDMR_PATH=$(MIDDLEWARE_PATH_ROOT)/hdmrplus_install
 SOAP_PATH=$(MIDDLEWARE_PATH_ROOT)/gsoap-2.8.7
+WAPI_PATH=/data/blackfin/usr
 
-MIDDLEWARE_INCLUDES=-I$(HDMR_PATH)/include -I$(SOAP_PATH)/gsoap
-MIDDLEWARE_LIBS=-L$(HDMR_PATH)/lib -L$(SOAP_PATH)/gsoap -lirobot_app -lirobot_common -lPeer -lUdata -lpthread
+MIDDLEWARE_INCLUDES=-I$(HDMR_PATH)/include -I$(SOAP_PATH)/gsoap 
+MIDDLEWARE_LIBS=-L$(HDMR_PATH)/lib -L$(SOAP_PATH)/gsoap -lirobot_app \
+	-lirobot_common -lirobot_wrap -lPeer -lUdata -lpthread
+
+ifeq ($(ZIGBEE),true)
+MIDDLEWARE_INCLUDES+=-I$(WAPI_PATH)/include
+MIDDLEWARE_LIBS+=-L$(WAPI_PATH)/lib -lWAPI
+endif
+
 endif
 
 ifeq ($(TARGET_MIDDLEWARE),IROBOT)
@@ -131,7 +140,7 @@ IROBOT_PATH=$(MIDDLEWARE_PATH_ROOT)/irobot
 LIBCAM_PATH=$(MIDDLEWARE_PATH_ROOT)/irobot/libcam
 
 MIDDLEWARE_INCLUDES=-I$(IROBOT_PATH)/include -I$(LIBCAM_PATH)/include 
-MIDDLEWARE_LIBS=-L$(IROBOT_PATH)/lib -ljpeg
+MIDDLEWARE_LIBS=-L$(IROBOT_PATH)/lib -ljpeg -lirobot
 endif
 
 ####################################################################################

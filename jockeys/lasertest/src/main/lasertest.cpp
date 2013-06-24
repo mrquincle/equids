@@ -41,6 +41,8 @@
 
 #include <IRobot.h>
 
+#include <comm/IRComm.h>
+
 /***********************************************************************************************************************
  * Jockey framework includes
  **********************************************************************************************************************/
@@ -86,6 +88,9 @@ int main(int argc, char **argv) {
 	default:
 		std::cout << "No known type (even not unknown). Did initialization go well?" << std::endl;
 	}
+
+	std::string msg = "test";
+	IRComm::SendMessage(0, msg.c_str(), msg.size());
 
 	std::cout << "Setup laser functionality" << std::endl;
 	CLaser laser(robot, robot_type);

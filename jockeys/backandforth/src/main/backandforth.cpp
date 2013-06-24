@@ -1,8 +1,8 @@
 /**
  * 456789------------------------------------------------------------------------------------------------------------120
  *
- * @brief Get a laser scan from the combination of laser and camera
- * @file laserscan.cpp
+ * @brief Back and forth controller
+ * @file backandforth.cpp
  *
  * This file is created at Almende B.V. and Distributed Organisms B.V. It is open-source software and belongs to a
  * larger suite of software that is meant for research on self-organization principles and multi-agent systems where
@@ -21,7 +21,7 @@
  * @project   Replicator
  * @company   Almende B.V.
  * @company   Distributed Organisms B.V.
- * @case      Sensor fusion
+ * @case      Testing
  */
 
 #include <sys/types.h>
@@ -41,19 +41,22 @@
 
 #include <IRobot.h>
 
+//#include <comm/IRComm.h>
+
 /***********************************************************************************************************************
  * Jockey framework includes
  **********************************************************************************************************************/
 
-#include <CLaserScan.h>
-//#include <CCamera.h>
+#include "../eth/CMessage.h"
+#include "../eth/CMessageServer.h"
+#include "../motor/CMotors.h"
 
 /***********************************************************************************************************************
  * Implementation
  **********************************************************************************************************************/
 
 //! The name of the controller can be used for controller selection
-std::string NAME = "LaserScan";
+std::string NAME = "BackAndForth";
 
 /**
  * If the user presses Ctrl+C, this can be used to do memory deallocation or a last communication with the MSPs.
@@ -65,43 +68,83 @@ void interrupt_signal_handler(int signal) {
 	}
 }
 
-void safe_close() {
-	// flush, because deallocation can go wrong somewhere and we'd have a memory dump
-	std::cout << std::endl << flush;
-	printf("Robot object is automatically deleted by the factory.\n");
-}
-
 /**
  * Basically only turns on and off the laser for a couple of times.
  */
 int main(int argc, char **argv) {
-	int nof_switches = 10;
-
 	struct sigaction a;
 	a.sa_handler = &interrupt_signal_handler;
 	sigaction(SIGINT, &a, NULL);
 
-	IRobotFactory factory;
-	RobotBase* robot = factory.GetRobot();
-	RobotBase::RobotType robot_type = factory.GetType();
+	RobotBase* robot = RobotBase::Instance();
+	RobotBase::RobotType robot_type = RobotBase::Initialize(NAME);
 
-	robot->SetLEDAll(0, LED_OFF);
-	robot->SetLEDAll(1, LED_RED);
-	robot->SetLEDAll(2, LED_GREEN);
+	for (int i = 0; i < 4; ++i)
+		robot->SetPrintEnabled(i, false);
 
-	std::cout << "Setup laser functionality" << std::endl;
-	CLaserScan scan(robot, robot_type, 640, 480, 640);
-	scan.Init();
+	std::string port = "50004";
+	if (argc > 1) {
+		port = std::string(argv[1]);
+	} else {
+		std::cout << "Standard port " << port << " will be used, make sure the other binary uses another" << std::endl;
+	}
+//	IRobotFactory factory;
+//	RobotBase* robot = factory.GetRobot();
+//	RobotBase::RobotType robot_type = factory.GetType();
 
-	int ticks = 30;
-	for (int t = 0; t < ticks; ++t) {
-		int distance = 0;
-		scan.GetDistance(distance);
-		cout << "Distance: " << distance << " cm" << std::endl;
+	switch(robot_type) {
+	case RobotBase::UNKNOWN: std::cout << "Detected unknown robot" << std::endl; break;
+	case RobotBase::KABOT: std::cout << "Detected Karlsruhe robot" << std::endl; break;
+	case RobotBase::ACTIVEWHEEL: std::cout << "Detected Active Wheel robot" << std::endl; break;
+	case RobotBase::SCOUTBOT: std::cout << "Detected Scout robot" << std::endl; break;
+	default:
+		std::cout << "No known type (even not unknown). Did initialization go well?" << std::endl;
 	}
 
-	safe_close();
-	scan.Stop();
+	std::cout << "Create (receiving) message server on port " << port << std::endl;
+	CMessageServer *server;
+	server = new CMessageServer();
+	server->initServer(port.c_str());
+
+	std::cout << "Create motor object" << std::endl;
+	CMotors motors(robot, robot_type);
+
+	bool stopRobot = false;
+	CMessage message;
+	message.type = MSG_NONE;
+	while (!stopRobot){
+		message = server->getMessage();
+		if (message.type != MSG_NONE)
+			printf("Command: %s %i %i %i\n", message.getStrType(),message.value1,message.value2,message.value3);
+		switch (message.type){
+		case MSG_STOP: {
+			motors.setSpeeds(0,0);
+			robot->pauseSPI(true);
+			break;
+		}
+		case MSG_SPEED: {
+			robot->pauseSPI(false);
+			motors.setSpeeds(message.value2,message.value1);
+			break;
+		}
+		case MSG_QUIT: {
+			motors.setSpeeds(0,0);
+			robot->pauseSPI(true);
+			stopRobot = true;
+			break;
+		}
+		case MSG_NONE: {
+			break;
+		}
+		default: {
+			std::cerr << "Did not understand message " << message.type << std::endl;
+			break;
+		}
+		}
+		usleep(200000); // check every 0.2 second
+	}
+
+	printf("Stopping %s\n", NAME.c_str());
 	return 0;
 }
 
