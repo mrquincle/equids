@@ -55,7 +55,10 @@
  **********************************************************************************************************************/
 
 //! The name of the controller can be used for controller selection
-std::string NAME = "BackAndForth";
+std::string NAME = "ActionSelection";
+
+#define DEBUG \
+	NAME << '[' << getpid() << "] " << __func__ << "(): "
 
 /**
  * If the user presses Ctrl+C, this can be used to do memory deallocation or a last communication with the MSPs.
@@ -113,26 +116,40 @@ int main(int argc, char **argv) {
 		int index = i % 2;
 		int other = 1 - index;
 		message.type = MSG_STOP;
-		std::cout << "Stop controller " << index << std::endl;
+		std::cout << DEBUG << "Stop controller " << index << std::endl;
 		client[index].sendMessage(&message);
+		sleep(1);
 
-		usleep(400000);
+		message.type = MSG_START;
+		std::cout << DEBUG << "Start controller " << other << std::endl;
+		client[other].sendMessage(&message);
+		sleep(1);
 
 		message.type = MSG_SPEED;
-		if (index == 0) {
-			message.value1 = 50;
-			message.value2 = -50;
-			message.value3 = 0;
-		}
-		else {
-			message.value1 = -50;
-			message.value2 = 50;
-			message.value3 = 0;
-		}
-		std::cout << "Start controller " << other << " with value " << message.value1 << std::endl;
-		client[other].sendMessage(&message);
-		usleep(400000);
+		message.value1 = 50;
+		message.value2 = -50;
+		message.value3 = 0;
+
+		std::cout << DEBUG << "Send controller 0 speed value " << message.value1 << ',' << message.value2 << std::endl;
+		client[0].sendMessage(&message);
+		sleep(1);
+
+		message.value1 = -50;
+		message.value2 = 50;
+		message.value3 = 0;
+
+		std::cout << DEBUG << ": Send controller 1 speed value " << message.value1 << ',' << message.value2 << std::endl;
+		client[1].sendMessage(&message);
+		sleep(1);
 	}
+	message.type = MSG_SPEED;
+	message.value1 = 0;
+	message.value2 = 0;
+	client[0].sendMessage(&message);
+	client[1].sendMessage(&message);
+	message.type = MSG_QUIT;
+	client[0].sendMessage(&message);
+	client[1].sendMessage(&message);
 
 	printf("Stopping %s\n", NAME.c_str());
 	return 0;

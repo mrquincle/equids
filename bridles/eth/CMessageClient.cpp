@@ -16,7 +16,8 @@ CMessageClient::~CMessageClient()
 int CMessageClient::sendMessage(CMessage* message)
 {
   message->pack();
-  fprintf(stdout,"Message %s %i %i %i,%i,%i,%i\n",message->getStrType(),message->value1,message->value2,message->buf[0],message->buf[1],message->buf[2],message->buf[3]);
+  fprintf(stdout,"Message %s: %i,%i [%i,%i,%i,%i]\n",message->getStrType(),message->value1,message->value2,\
+		  message->buf[0],message->buf[1],message->buf[2],message->buf[3]);
   if (send(mySocket,message->buf,MESSAGE_LENGTH,MSG_NOSIGNAL) == MESSAGE_LENGTH) return 0; else
   {
     fprintf(stdout,"Network error\r\n");
@@ -43,7 +44,7 @@ int CMessageClient::init(const char *ip,const char* port,bool requirements[])
     }
     if (result == 0)
     {
-	    if (send(mySocket,requirements,5*sizeof(bool),MSG_NOSIGNAL) == 4*sizeof(bool)) // change this to 5*sizeof(bool) ?
+	    if (send(mySocket,requirements,5*sizeof(bool),MSG_NOSIGNAL) == 5*sizeof(bool)) // change this to 5*sizeof(bool) ?
 	    	return 0;
 	    else
 	    {

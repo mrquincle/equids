@@ -105,6 +105,7 @@ CMessage CMessageServer::getMessage()
 	sem_wait(&dataSem);
 	result = message;
 	messageRead++; 
+	message.type = MSG_NONE;
 	sem_post(&dataSem);
 	return result;
 }
