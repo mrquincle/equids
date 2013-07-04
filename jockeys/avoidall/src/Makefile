@@ -6,6 +6,12 @@
 # Default configuration files
 ####################################################################################
 
+# Overwrite EQUID_PATH if the env. var. does not exist with a relative path
+ifndef $(EQUID_PATH)
+	EQUID_PATH:=$(PWD)/../../..
+	export EQUID_PATH
+endif
+
 # Makefile for default local settings
 -include $(EQUID_PATH)/Mk/default.mk
 
@@ -16,7 +22,11 @@
 # List the directories you want to include from the "bridles" 
 ####################################################################################
 
-SUBDIRS=motor laser camera common main
+SUBDIRS+=main
+SUBDIRS+=motor
+SUBDIRS+=common
+SUBDIRS+=laser
+SUBDIRS+=camera
 
 ####################################################################################
 # Name of the final binary
@@ -25,62 +35,66 @@ SUBDIRS=motor laser camera common main
 TARGET=avoidall
 
 ####################################################################################
-# Describe the directories you want to include from the "bridles" 
+# Content of Makefile
 ####################################################################################
 
-# BLOB for all object files
+# Make temporary targets for cleaning and copying
+CLEAN_SUBDIRS=$(addsuffix .clean,$(SUBDIRS))
+COPY_SUBDIRS=$(addsuffix .copy,$(SUBDIRS))
+
+# Blob for all object files
 OBJS=$(wildcard ../obj/*.o)
 
-COPY_ETC_CMD=../etc/copy.sh
-COPY_ETC_SRC=../etc
-COPY_ETC_DST=../bin
-
-# This setup requires you to call "make". 
-# A call to "make all" will screw everything up!
-
-.PHONY: $(TARGET) all check-env copyobj $(SUBDIRS)
-
-$(TARGET): check-env all copyobj
-	$(CXX) $(CXXDEFINE) -o ../bin/$@ $(OBJS) $(CXXFLAGS) $(LDFLAGS)
+# Target to build
+$(TARGET): check-env all
+	$(CXX) $(CXXDEFINE) -o ../bin/$@ $(OBJS) $(CXXFLAGS) $(LDFLAGS) 
 	$(STRIP) ../bin/$@
 	$(CSIZE) ../bin/$@
 
+# Check the environmental variable EQUID_PATH
 check-env:
 ifndef EQUID_PATH
-    $(error EQUID_PATH is undefined)
+	$(warning Warning: EQUID_PATH is undefined.)
 endif
 
+# Upload target to robot, strips it
 upload: all obj
 	$(STRIP) ../bin/$(TARGET)
 	#cat ../bin/robotServer|netcat -l -p 7878 
 
-createdirs:
+# Default build target
+all: clean create-dirs build-subdirs copy-subdirs
+
+# Default clean target
+clean: clean-subdirs
+	@echo "Cleaning all objects and binaries in parent directory"
+	rm -f ../obj/*.o
+	rm -f ../bin/$(TARGET)
+
+# Create directories where binaries and objects are stored
+create-dirs:
+	@echo "Create target directories"
 	mkdir -p ../obj
 	mkdir -p ../bin
 
-subdirs: $(SUBDIRS)
-	@echo "Make all subdirectories" 
+# Collect build, clean, and copy targets
+build-subdirs: $(SUBDIRS)
+clean-subdirs: $(CLEAN_SUBDIRS)
+copy-subdirs: $(COPY_SUBDIRS)
 
+# What to do on make:
 $(SUBDIRS):
-	@echo "Make subdirectory" $@ 
+	@echo "make $@"
 	$(MAKE) -C $@
 
-all: clean createdirs subdirs
+# What to do on make clean:
+$(CLEAN_SUBDIRS): %.clean:
+	$(MAKE) -C $* clean 
 
-copyobj: all
-	@echo "Copy objects from subdirs to \"obj\" directory"
-	@for i in $(SUBDIRS) ;\
-	do \
-	echo "Copying all from $(CURRENT_DIR)/$$i..."; \
-	cp $$i/*.o ../obj; \
-	done
+# What to do on make copy:
+$(COPY_SUBDIRS): %.copy:
+	@echo "Copy objects from $* to \"obj\" directory"
+	cp $*/*.o ../obj;
 
-clean:
-	@for i in $(SUBDIRS) ;\
-	do \
-	echo "cleaning" all "in $(CURRENT_DIR)/$$i..."; \
-	$(MAKE) -C $$i clean; \
-	done
-	@echo "cleaning all objs"
-	@rm -f ../obj/*.o
-	@rm -f ../bin/$(TARGET)
+.PHONY: $(TARGET) all $(SUBDIRS) clean clean-subdirs $(CLEAN_SUBDIRS) copy-subdirs $(COPY_SUBDIRS)
+

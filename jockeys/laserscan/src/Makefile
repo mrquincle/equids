@@ -6,6 +6,12 @@
 # Default configuration files
 ####################################################################################
 
+# Overwrite EQUID_PATH if the env. var. does not exist with a relative path
+ifndef $(EQUID_PATH)
+	EQUID_PATH:=$(PWD)/../../..
+	export EQUID_PATH
+endif
+
 # Makefile for default local settings
 -include $(EQUID_PATH)/Mk/default.mk
 
@@ -16,10 +22,10 @@
 # List the directories you want to include from the "bridles" 
 ####################################################################################
 
+SUBDIRS+=main
 SUBDIRS+=laser
 SUBDIRS+=camera
 SUBDIRS+=common
-SUBDIRS+=main
 
 ####################################################################################
 # Name of the final binary
@@ -28,81 +34,66 @@ SUBDIRS+=main
 TARGET=laserscan
 
 ####################################################################################
-# Describe the directories you want to include from the "bridles" 
+# Content of Makefile
 ####################################################################################
 
-# BLOB for all object files
+# Make temporary targets for cleaning and copying
+CLEAN_SUBDIRS=$(addsuffix .clean,$(SUBDIRS))
+COPY_SUBDIRS=$(addsuffix .copy,$(SUBDIRS))
+
+# Blob for all object files
 OBJS=$(wildcard ../obj/*.o)
 
-COPY_ETC_CMD=../etc/copy.sh
-COPY_ETC_SRC=../etc
-COPY_ETC_DST=../bin
-
-# This setup requires you to call "make". 
-# A call to "make all" will screw everything up!
-
-.PHONY: $(TARGET)
-
-$(TARGET): check-env all obj
-	$(CXX) $(CXXDEFINE) -o ../bin/$@ $(OBJS) $(CXXFLAGS) $(LDFLAGS)
+# Target to build
+$(TARGET): check-env all
+	$(CXX) $(CXXDEFINE) -o ../bin/$@ $(OBJS) $(CXXFLAGS) $(LDFLAGS) 
 	$(STRIP) ../bin/$@
 	$(CSIZE) ../bin/$@
 
+# Check the environmental variable EQUID_PATH
 check-env:
 ifndef EQUID_PATH
-    $(error EQUID_PATH is undefined)
+	$(warning Warning: EQUID_PATH is undefined.)
 endif
 
+# Upload target to robot, strips it
 upload: all obj
 	$(STRIP) ../bin/$(TARGET)
 	#cat ../bin/robotServer|netcat -l -p 7878 
 
-makedirs:
-	mkdir -p ../obj
-	mkdir -p ../bin
+# Default build target
+all: clean create-dirs build-subdirs copy-subdirs
 
-.PHONY: all
-all: clean makedirs 
-	@for i in $(SUBDIRS) ;\
-	do \
-	echo "making" all "in $(CURRENT_DIR)/$$i..."; \
-	$(MAKE) -C $$i all; \
-	done
-
-obj: all
-	@echo "Copy objects from subdirs to \"obj\" directory"
-	@for i in $(SUBDIRS) ;\
-	do \
-	echo "Copying all from $(CURRENT_DIR)/$$i..."; \
-	cp $$i/*.o ../obj; \
-	done
-
-etc: ../bin/.etc
-	#cp -r ../etc/$$i ../bin; \
-	#
-
-../bin/.etc:
-	@echo "Copy dirs from etc"
-	$(COPY_ETC_CMD) $(COPY_ETC_SRC) $(COPY_ETC_DST)
-	touch ../bin/.etc
-
-cleanetc:
-	rm -f ../bin/.etc	
-
-	#cp -r ../etc/$$i ../bin; 
-forceetc:
-	@echo "Copy dirs from etc"
-	$(COPY_ETC_CMD) $(COPY_ETC_SRC) $(COPY_ETC_DST)
-	touch ../bin/.etc
-
-clean:
-	@for i in $(SUBDIRS) ;\
-	do \
-	echo "cleaning" all "in $(CURRENT_DIR)/$$i..."; \
-	$(MAKE) -C $$i clean; \
-	done
-	echo "cleaning all objs"
+# Default clean target
+clean: clean-subdirs
+	@echo "Cleaning all objects and binaries in parent directory"
 	rm -f ../obj/*.o
 	rm -f ../bin/$(TARGET)
 
+# Create directories where binaries and objects are stored
+create-dirs:
+	@echo "Create target directories"
+	mkdir -p ../obj
+	mkdir -p ../bin
+
+# Collect build, clean, and copy targets
+build-subdirs: $(SUBDIRS)
+clean-subdirs: $(CLEAN_SUBDIRS)
+copy-subdirs: $(COPY_SUBDIRS)
+
+# What to do on make:
+$(SUBDIRS):
+	@echo "make $@"
+	$(MAKE) -C $@
+
+# What to do on make clean:
+$(CLEAN_SUBDIRS): %.clean:
+	$(MAKE) -C $* clean 
+
+# What to do on make copy:
+$(COPY_SUBDIRS): %.copy:
+	@echo "Copy objects from $* to \"obj\" directory"
+	cp $*/*.o ../obj;
+
+.PHONY: $(TARGET) all $(SUBDIRS) clean clean-subdirs $(CLEAN_SUBDIRS) copy-subdirs $(COPY_SUBDIRS)
 
