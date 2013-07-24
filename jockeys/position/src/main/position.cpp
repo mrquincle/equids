@@ -1,8 +1,8 @@
 /**
  * 456789------------------------------------------------------------------------------------------------------------120
  *
- * @brief User infrared to avoid all collisions
- * @file avoidall.cpp
+ * @brief Establishing position and communicating it with others
+ * @file position.cpp
  *
  * This file is created at Almende B.V. and Distributed Organisms B.V. It is open-source software and belongs to a
  * larger suite of software that is meant for research on self-organization principles and multi-agent systems where
@@ -21,7 +21,7 @@
  * @project   Replicator
  * @company   Almende B.V.
  * @company   Distributed Organisms B.V.
- * @case      Sensor fusion
+ * @case      Testing
  */
 
 #include <sys/types.h>
@@ -45,15 +45,18 @@
  * Jockey framework includes
  **********************************************************************************************************************/
 
-#include <CMotors.h>
-#include <CInfrared.h>
+/***********************************************************************************************************************
+ * Additional library includes
+ **********************************************************************************************************************/
+
+//#include <wapi/wapi.h>
 
 /***********************************************************************************************************************
  * Implementation
  **********************************************************************************************************************/
 
 //! The name of the controller can be used for controller selection
-std::string NAME = "AvoidInfraRed";
+std::string NAME = "Position";
 
 /**
  * If the user presses Ctrl+C, this can be used to do memory deallocation or a last communication with the MSPs.
@@ -65,52 +68,42 @@ void interrupt_signal_handler(int signal) {
 	}
 }
 
+//using namespace wapi;
+
+#define JOIN_CHANNEL 55
+
+void safe_close() {
+	// flush, because deallocation can go wrong somewhere and we'd have a memory dump
+	std::cout << std::endl << flush;
+	sleep(1);
+	printf("Robot object is automatically deleted by the factory.\n");
+}
+
 /**
  * Basically only turns on and off the laser for a couple of times.
  */
 int main(int argc, char **argv) {
-	int nof_switches = 2;
+	int nof_switches = 10;
 
 	struct sigaction a;
 	a.sa_handler = &interrupt_signal_handler;
 	sigaction(SIGINT, &a, NULL);
 
-	RobotBase* robot = RobotBase::Instance();
-	RobotBase::RobotType robot_type = RobotBase::Initialize(NAME);
+	IRobotFactory factory;
+	RobotBase* robot = factory.GetRobot();
+	RobotBase::RobotType robot_type = factory.GetType();
 
-//	IRobotFactory factory;
-//	RobotBase* robot = factory.GetRobot();
-//	RobotBase::RobotType robot_type = factory.GetType();
+//	WAPI wapi(0);
+//	int wapi_error = wapi.join(JOIN_CHANNEL);
+//	if(WAPI::WAPI_OK != wapi_error)
+//	{
+//		std::cout << "Cannot join to channel " << JOIN_CHANNEL << " wapi_error " <<
+//				wapi_error << endl;
+//		return (EXIT_FAILURE);
+//	}
+	std::cout << "Joined to channel " << JOIN_CHANNEL << endl;
 
-	for (int i = 0; i < 4; ++i)
-		robot->SetPrintEnabled(i, false);
-
-	// we need to initialize the motors before calibrate infrared (which turns the robot around)
-	CMotors motors(robot, robot_type);
-	motors.init();
-
-	std::cout << "Setup infrared functionality" << std::endl;
-	CInfrared infrared(robot, robot_type);
-	infrared.calibrate();
-
-	infrared.distance(0);
-
-	motors.setSpeeds(100, 0);
-	sleep(2);
-
-	motors.setSpeeds(-100, 0);
-	sleep(2);
-
-	motors.setSpeeds(0, 100);
-	sleep(2);
-
-	motors.setSpeeds(0, -100);
-	sleep(2);
-
-	motors.setSpeeds(0, 0);
-	motors.halt();
-
-	fprintf(stdout,"Stopping avoidance.");
+	safe_close();
 	return 0;
 }
 

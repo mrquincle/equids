@@ -2,7 +2,7 @@
 # Compile it separately for debugging purposes.
 
 # Load default Makefile for a bridle in the jockey framework 
--include $(EQUID_PATH)/Mk/default.mk
+include $(EQUID_PATH)/Mk/default.mk
 # Override default Makefile options with a local Makefile
 -include $(EQUID_PATH)/Mk/local.mk
 
@@ -10,14 +10,9 @@
 OBJS=$(patsubst %.cpp,%.o,$(wildcard *.cpp))
 
 # The directories that this "bridle" depends on
-CXXINCLUDE+=-I./ -I../motor -I../filesystem -I../common
+CXXINCLUDE+=-I./
 
-all: check-env $(OBJS) 
-
-check-env:
-ifndef EQUID_PATH
-    $(error EQUID_PATH is undefined)
-endif
+all: $(OBJS) 
 
 .cpp.o:
 	$(CXX)  $(CXXFLAGS) $(CXXDEFINE) -c  $(CXXINCLUDE) $< 

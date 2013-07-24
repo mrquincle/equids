@@ -10,7 +10,7 @@
 OBJS=$(patsubst %.cpp,%.o,$(wildcard *.cpp))
 
 # The directories that this "bridle" depends on
-CXXINCLUDE+=-I./ -I../motor -I../filesystem -I../common
+CXXINCLUDE+=-I./ 
 
 all: check-env $(OBJS) 
 

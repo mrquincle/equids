@@ -30,15 +30,29 @@
 #include <IRobot.h>
 #include <CMotors.h>
 
+#include <vector>
+
+#include <worldfile.h>
+
+#include <CMultiHistogram.h>
+
 class CInfrared {
 public:
 	CInfrared(RobotBase *robot_base, RobotBase::RobotType robot_type);
 
 	~CInfrared();
 
-	void calibrate();
+	void calibrate(bool turn_around = true);
 
 	int reflective(int i);
+
+	int ambient(int i);
+
+	//! Get distance measurement
+	int distance(int i);
+
+	//! Get preferred direction
+	void direction(float & angle);
 private:
 	CMotors *motors;
 
@@ -49,7 +63,18 @@ private:
 	int irled_count;
 
 	bool save_to_file;
+
+	std::vector<int32_t> offset_reflective;
+
+	std::vector<int32_t> offset_ambient;
+
+	CMultiHistogram<int32_t, int32_t> hist_reflective;
+
+	CMultiHistogram<int32_t, int32_t> hist_ambient;
+
+	Worldfile optionfile;
 };
 
 
 #endif /* CINFRARED_H_ */
+
