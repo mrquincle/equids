@@ -243,8 +243,8 @@
 	 // Clear the entity list
   private: void ClearEntities();
 
-	 // Add a entity
-  private: int AddEntity(int parent, const char *type);
+	 // Add a entity, use parent=GetEntityCount()-1
+  public: int AddEntity(int parent, const char *type);
 
     // Get the number of entities.
   public: int GetEntityCount();
@@ -253,7 +253,7 @@
   public: const char *GetEntityType(int entity);
 
 	 // Lookup a entity number by type name
-	 // Returns -1 if there is entity with this type
+	 // Returns -1 if there is no entity with this type
   public: int LookupEntity(const char *type);
   
 	 // Get a entity's parent entity.

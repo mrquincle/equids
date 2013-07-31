@@ -52,10 +52,24 @@ public:
 
   void go();
 
+  //! Speed and radius are translated into commands for left and right
+  void translate(int speed, int radius, int & left, int & right);
+protected:
+
+  //! From speed command to value for wheel velocity
+  int cmd_to_ctrl(unsigned int speed);
 private:
 	//! Reference to the robot class and type
 	RobotBase *robot_base;
 	RobotBase::RobotType robot_type;
+
+	int max_radius;
+	int min_wheel_velocity; // minimum value to the motors
+	int max_wheel_velocity; // maximum value to the motors
+	int min_speed; // minimum value to be used by user of this class
+	int max_speed; // maximum value to be used by user of this class
+	int axle_track; // length of the axle, distance between the centerline of the two wheels on both side of an axle
+	bool left_right_reversed;
 };
 
 #endif /* CMOTOR_H_ */

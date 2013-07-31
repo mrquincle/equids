@@ -13,91 +13,26 @@ CMessageServer::~CMessageServer()
 {
 }
 
-void* connectLoop(void *serv)
+static void addMessage(const ELolMessage *msg, void * connection, void * serv)
 {
-	struct sockaddr_in clientAddr;
-	socklen_t addrLen = sizeof(clientAddr);
-	CMessageServer* server = (CMessageServer*) serv;
-	int newServer = 0;
-	while (true)
-	{
-		newServer = accept(server->serverSocket, (struct sockaddr *)&clientAddr,&addrLen);
-		if (newServer > -1){
-			if (debug) fprintf(stdout,"Incoming connection from %s.",inet_ntoa(clientAddr.sin_addr));
-			if (debug) fprintf(stdout,"Incoming connection accepted on socket level %i.",newServer);
-			sem_wait(&server->connectSem);
-			server->mySocket = newServer;
-			sem_post(&server->connectSem);
-			pthread_t* thread=(pthread_t*)malloc(sizeof(pthread_t));
-			pthread_create(thread,NULL,&serverLoop,(void*)server);
-		}else{
-			if (debug) fprintf(stdout,"Accept on listening socked failed.");
-		}
-	}
-	return NULL;
+   CMessageServer* server = (CMessageServer*) serv;
+   if (server!=NULL) {
+      sem_wait(&server->dataSem);
+      server->message.set(msg);
+      server->messageRead = 0;
+      sem_post(&server->dataSem);
+   }
 }
+
 
 int CMessageServer::initServer(const char* port)
 {
-	int used_port = atoi(port);
-	struct sockaddr_in mySocketAddr;
-	mySocketAddr.sin_family = AF_INET;
-	mySocketAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	mySocketAddr.sin_port = htons(used_port);
-	serverSocket = socket(AF_INET, SOCK_STREAM, 0);
-	if (serverSocket < 0)
-	{
-		if (debug) fprintf(stdout,"Cannot create socket ");
-		return -1;
-	}
-	if (bind(serverSocket,( struct sockaddr *)&mySocketAddr,sizeof(mySocketAddr)) < 0)
-	{
-		if (debug) fprintf(stdout,"Cannot bind socket.");
-		return -2;
-	}
-	if (listen(serverSocket,1) < 0)
-	{
-		if (debug) fprintf(stdout,"cannot make socket listen.");
-	}
-	pthread_t* thread=(pthread_t*)malloc(sizeof(pthread_t));
-	pthread_create(thread,NULL,&connectLoop,(void*)this);
-	return 0;
+   jockey_IPC.SetCallback(addMessage, this);
+   jockey_IPC.Name("jockey IPC");
+   jockey_IPC.Start("localhost", atoi(port), true);
+   return 0;
 }
 
-void* serverLoop(void* serv)
-{
-	SClientInfo info;
-	CMessage message; 
-	CMessageServer* server = (CMessageServer*) serv;
-	sem_wait(&server->connectSem);
-	info.socket = server->mySocket;
-	info.sem = &server->dataSem;
-	sem_post(&server->connectSem);
-	server->getClientInfo(info.socket,&info.write);
-	int dataOk = 0;
-	bool connected = true;
-	while (connected){
-		dataOk = 0;
-		message = server->checkForMessage(info.socket);
-		if (debug) fprintf(stdout,"Message received %s %i %i %i,%i,%i,%i from %i.",message.getStrType(),message.value1,message.value2,info.socket,message.buf[0],message.buf[1],message.buf[2],message.buf[3]);
-		sem_wait(info.sem);
-		if (info.odometry) server->sendDoubles(info.socket,server->odometry,10);
-		if (info.buttons) server->sendBools(info.socket,server->buttons,10);
-		if (info.rotation) server->sendInts(info.socket,server->rotation,1);
-		if (info.ir) server->sendInts(info.socket,server->ir,4);
-		sem_post(info.sem);
-		if (info.write){
-			if (debug) fprintf(stdout,"Sending message to main server.");
-			sem_wait(info.sem);
-			server->message = message;
-			server->messageRead = 0; 
-			sem_post(info.sem);
-		}
-		if (message.type == MSG_QUIT) connected = false;
-	}
-	server->closeConnection(info.socket);
-	return NULL;
-}
 
 CMessage CMessageServer::getMessage()
 {
@@ -110,6 +45,7 @@ CMessage CMessageServer::getMessage()
 	return result;
 }
 
+/*
 bool CMessageServer::getClientInfo(int socket,bool data[])
 {
 	bool result;
@@ -134,8 +70,10 @@ bool CMessageServer::getClientInfo(int socket,bool data[])
 	}
 	return result;
 }
+*/
 
-CMessage CMessageServer::checkForMessage(int socket)
+/*
+CMessage CMessageServer::checkForMessage()
 {
 	CMessage message;
 	int receiveResult = recv(socket,&message.buf,MESSAGE_LENGTH,MSG_WAITALL);
@@ -151,8 +89,10 @@ CMessage CMessageServer::checkForMessage(int socket)
 	}
 	return message;
 }
+*/
 
-void CMessageServer::update(double posit[],bool butto[],int rotat[],int irr[]) 
+/*
+void CMessageServer::update(double posit[],bool butto[],int rotat[],int irr[])
 {
 	sem_wait(&dataSem);
 	memcpy(odometry,posit,10*sizeof(double));	
@@ -161,7 +101,9 @@ void CMessageServer::update(double posit[],bool butto[],int rotat[],int irr[])
 	memcpy(ir,irr,4*sizeof(int));
 	sem_post(&dataSem);
 }
+*/
 
+/*
 int CMessageServer::sendPosition(int socket,double buffer[])
 {
 	    if (send(socket,buffer,4*sizeof(double),MSG_NOSIGNAL) == 4*sizeof(double)) return 0; else
@@ -203,10 +145,11 @@ int CMessageServer::sendBools(int socket,bool buffer[],int len)
 		 }
 		 return 0;
 }
+*/
 
-int CMessageServer::closeConnection(int socket)
+int CMessageServer::closeConnection()
 {
-	close(socket);
+	jockey_IPC.Stop();
 	connected = false;
 	return 0;
 }

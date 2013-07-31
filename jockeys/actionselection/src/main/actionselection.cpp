@@ -47,8 +47,8 @@
  * Jockey framework includes
  **********************************************************************************************************************/
 
+#include "../eth/CEquids.h"
 #include "../eth/CMessage.h"
-#include "../eth/CMessageClient.h"
 
 /***********************************************************************************************************************
  * Implementation
@@ -57,8 +57,13 @@
 //! The name of the controller can be used for controller selection
 std::string NAME = "ActionSelection";
 
-#define DEBUG \
-	NAME << '[' << getpid() << "] " << __func__ << "(): "
+typedef enum
+{
+   S_FORTH = 0,
+   S_BACK,
+   S_QUIT
+} TState;
+
 
 /**
  * If the user presses Ctrl+C, this can be used to do memory deallocation or a last communication with the MSPs.
@@ -74,84 +79,70 @@ void interrupt_signal_handler(int signal) {
  * Basically only turns on and off the laser for a couple of times.
  */
 int main(int argc, char **argv) {
+    CEquids equids;
 	struct sigaction a;
 	a.sa_handler = &interrupt_signal_handler;
 	sigaction(SIGINT, &a, NULL);
 
-	std::string port0, port1;
-	if (argc > 2) {
-		port0 = std::string(argv[1]);
-		port1 = std::string(argv[2]);
+	if (argc > 1) {
+      std::cout << "Reading init" << std::endl;
+		if (!equids.init(argv[1])) {
+           std::cout << "Wrong configuration file " << argv[1] << std::endl;
+           return EXIT_FAILURE;
+        }
+      std::cout << "Finish init" << std::endl;
 	} else {
-		std::cout << "Usage: actionselection port0 port1" << std::endl;
+		std::cout << "Usage: actionselection jockey_cfg" << std::endl;
 		return EXIT_FAILURE;
 	}
 
-	RobotBase* robot = RobotBase::Instance();
-	RobotBase::RobotType robot_type = RobotBase::Initialize(NAME);
 
-//	IRobotFactory factory;
-//	RobotBase* robot = factory.GetRobot();
-//	RobotBase::RobotType robot_type = factory.GetType();
 
-	switch(robot_type) {
-	case RobotBase::UNKNOWN: std::cout << "Detected unknown robot" << std::endl; break;
-	case RobotBase::KABOT: std::cout << "Detected Karlsruhe robot" << std::endl; break;
-	case RobotBase::ACTIVEWHEEL: std::cout << "Detected Active Wheel robot" << std::endl; break;
-	case RobotBase::SCOUTBOT: std::cout << "Detected Scout robot" << std::endl; break;
-	default:
-		std::cout << "No known type (even not unknown). Did initialization go well?" << std::endl;
-	}
+    int forth = equids.find("forth");
+    int back = equids.find("back");
 
-	CMessageClient client[2];
-	std::string host = "127.0.0.1";
-	bool requirements[] = {true,false,false,false,false};
-	std::cout << "Create (receiving) client on port " << port0 << std::endl;
-	client[0].init(host.c_str(), port0.c_str(), requirements);
-	std::cout << "Create (receiving) client on port " << port1 << std::endl;
-	client[1].init(host.c_str(), port1.c_str(), requirements);
+    if (forth==-1) {
+       std::cout << "Not deffined jockey forth" << std::endl;
+       equids.quit();
+       return EXIT_FAILURE;
+    }
+    if (back==-1) {
+       std::cout << "Not deffined jockey back" << std::endl;
+       equids.quit();
+       return EXIT_FAILURE;
+    }
+    
+    TState state = S_FORTH;
+    int num=0;
+    bool quit = false;
 
-	CMessage message;
-	for (int i = 0; i < 10; ++i) {
-		int index = i % 2;
-		int other = 1 - index;
-		message.type = MSG_STOP;
-		std::cout << DEBUG << "Stop controller " << index << std::endl;
-		client[index].sendMessage(&message);
-		sleep(1);
-
-		message.type = MSG_START;
-		std::cout << DEBUG << "Start controller " << other << std::endl;
-		client[other].sendMessage(&message);
-		sleep(1);
-
-		message.type = MSG_SPEED;
-		message.value1 = 50;
-		message.value2 = -50;
-		message.value3 = 0;
-
-		std::cout << DEBUG << "Send controller 0 speed value " << message.value1 << ',' << message.value2 << std::endl;
-		client[0].sendMessage(&message);
-		sleep(1);
-
-		message.value1 = -50;
-		message.value2 = 50;
-		message.value3 = 0;
-
-		std::cout << DEBUG << ": Send controller 1 speed value " << message.value1 << ',' << message.value2 << std::endl;
-		client[1].sendMessage(&message);
-		sleep(1);
-	}
-	message.type = MSG_SPEED;
-	message.value1 = 0;
-	message.value2 = 0;
-	client[0].sendMessage(&message);
-	client[1].sendMessage(&message);
-	message.type = MSG_QUIT;
-	client[0].sendMessage(&message);
-	client[1].sendMessage(&message);
-
-	printf("Stopping %s\n", NAME.c_str());
+    equids.initJockey(forth);
+    while (!quit) {
+       switch(state) {
+          case S_FORTH:
+             sleep(1);
+             equids.switchToJockey(back);
+             state = S_BACK;
+             break;
+          case S_BACK:
+             sleep(1);
+             num++;
+             if (num>3) {
+                state = S_QUIT;
+                std::cout << "Quit system" <<std::endl;
+             } else {
+                equids.switchToJockey(forth);
+                state = S_FORTH;
+             }
+             break;
+          case S_QUIT:
+             quit = true;
+             break;
+       }
+       usleep(50000);
+    }
+             
+	equids.quit();
 	return 0;
 }
 

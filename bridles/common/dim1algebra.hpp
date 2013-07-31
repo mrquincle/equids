@@ -38,6 +38,10 @@
 #include <cmath>
 #include <iterator>
 
+/***********************************************************************************************************************
+ * General README for dim1algebra.hpp
+ **********************************************************************************************************************/
+
 /**
  * Some general information for folks that are unaware of the standard STL functions... There are many methods
  * available that should be enough to get you started. Look at <algorithm> and <numeric> for specific implementations.
@@ -51,6 +55,9 @@
  * It is important to note that a result vector should have allocated enough entries beforehand. This will not be done
  * by the STL methods themselves. It is also easy to see that it is impossible for the function to check if v2 is
  * actually of the same size (or larger) than v1.
+ *
+ * Todo:
+ *  - add some entropies
  */
 
 /***********************************************************************************************************************
@@ -168,6 +175,78 @@ T hyperbolic(const T & x, const T & y) {
 	return std::abs(std::log(x) - std::log(y));
 }
 
+/**
+ * Cap a value if it is beyond a certain range given by minimum and maximum.
+ * @param x                  value to be capped
+ * @param min                minimum value
+ * @param max                maximum value
+ * @return                   value or its minimum or maximum
+ */
+template<typename T>
+T cap_range(T x, T min, T max) {
+	return (x > max) ? max : ((x < min) ? min : x);
+}
+
+/**
+ * Assume a maximum cap with a center at zero. So, abs(x) < abs(max) and likewise for y. Some examples:
+ *   cap_scale<int,double>(0,120,100) results in: (x,y)=(15,100). So you see the value 120 lifted x a bit up to 15
+ *   cap_scale<int,double>(-20,120,100) becomes: (0,100). The values exceeded their boundaries (0 and 100) equally.
+ *   cap_scale<int,double>(50,120,100) becomes: (50,100). The value 50 is the center, it won't move.
+ * @template T               type of parameters and max
+ * @template F               floating type to be used for the scaling
+ * @param x                  parameter x, will be adapted
+ * @param y                  parameter y, will be adapted
+ * @param max                maximum value (>= 0)
+ * @return                   void
+ */
+template<typename T, typename F>
+void cap_scale(T & x, T & y, T max) {
+	assert (max >= 0);
+	if (max == 0) {
+		x = y = max;
+		return;
+	}
+	if (abs(x) > max || abs(y) > max) {
+		F scale = max / F(abs((abs(x) > abs(y)) ? x : y));
+		x = x * scale;
+		y = y * scale;
+	}
+}
+
+/**
+ * Caps values at max and if one of them comes above this cap, they are both scaled, such that the maximum value of each
+ * of these values is at most max. Some examples:
+ *   cap_scale<int,double>(50,-20,0,100) becomes: (50,0). If min=0, it is the same as cap_scale above.
+ *   cap_scale<int,double>(0,-200,-100,100) becomes: (0,-100). A symmetric domain is nice for signed values.
+ * This function can be used to scale commands to the wheels of a robot for example.
+ * @template T               type of parameters and max
+ * @template F               floating type to be used for the scaling
+ * @param x                  parameter x, will be adapted
+ * @param y                  parameter y, will be adapted
+ * @param min                minimum value
+ * @param max                maximum value (>= min), can be smaller than 0 if min is smaller than 0
+ */
+template<typename T, typename F>
+void cap_scale(T & x, T & y, T min, T max) {
+	assert (max >= min);
+	// weird case
+	if (max == min) {
+		x = y = min;
+		return;
+	}
+	// naturally maximum should be larger than minimum
+	assert (max > min);
+    // change coordinates from [min,max] with a shift equal to the center, [min+max]/2
+	T shift = -(min + max) / 2;
+	T sx = x + shift;
+	T sy = y + shift;
+	// now it is centered around 0, so scale properly with max value
+	cap_scale<T,F>(sx, sy, max+shift);
+	// now shift back
+	x = sx - shift;
+	y = sy - shift;
+}
+
 /***********************************************************************************************************************
  * Square, inverse, etc. of individual elements
  **********************************************************************************************************************/
@@ -191,23 +270,46 @@ T inverse(T x) { return T(1)/x; }
 template<typename T>
 T absolute(T x) { return std::abs(x); }
 
+/**
+ * Product of an element with the log of itself.
+ */
+template<typename T>
+T logprod(T x) { return std::log(x) * x; }
+
+/***********************************************************************************************************************
+ * Unary functions
+ **********************************************************************************************************************/
+
+/**
+ * Returns a power
+ */
+template<typename T>
+class fixed_power: std::unary_function<T,T> {
+	T a;
+public:
+	fixed_power(T a): a(a) {}
+	T operator()(T x) const {
+		return std::pow(x,a);
+	}
+};
+
 /***********************************************************************************************************************
  * Vector multiplication with a scalar
  **********************************************************************************************************************/
 
 /**
- * Create a template function which moves container x from or towards y with a learning rate "mu". A positive mu will
- * move "x" away, while a negative mu will move "x" towards "y". This is used in for example incremental learning
- * vector quantization.
+ * Create a template function which moves container x from or towards y with a factor "a". A positive "a" will move "x"
+ * away, while a negative "a" will move "x" towards "y". This is used in for example incremental learning vector
+ * quantization.
  */
 template<typename T>
 class op_adjust: std::binary_function<T,T,T> {
-	T mu_;
+	T a;
 public:
-	op_adjust(T mu): mu_(mu) {}
+	op_adjust(T a): a(a) {}
 	T operator()(T x, T y) const {
-		//fancy: std::multiplies<T>( std::minus<T>(x,y), mu_);
-		T result = x + (x-y)*mu_;
+		//fancy: std::multiplies<T>( std::minus<T>(x,y), a); (in case + and * are not defined)
+		T result = x + (x-y)*a;
 		return result;
 	}
 };
@@ -241,12 +343,16 @@ inline T accumulate(InputIterator first, InputIterator last, T init,
 
 /**
  *  @brief  Return the maximum element in a range given one additional operation that is performed on it beforehand.
- *  For example if @ a unary_op is std::abs<T> it returns the location of the element with the maximum absolute value.
+ *
+ *  This is a slight change with respect to the standard STL max_element procedure. To illustrate the use of this
+ *  function, consider for example a unary_op abs<T> which returns the location of the element with the maximum absolute
+ *  value.
+ *
  *  @ingroup sorting_algorithms
- *  @param  first  			start of range
- *  @param  last   			end of range
- *  @param  unary_op			unary operation
- *  @return  Iterator referencing the first instance of the largest value.
+ *  @param first             Start of range
+ *  @param last              The end of the range to iterate over
+ *  @param unary_op          A unary operation
+ *  @return                  Iterator referencing the first instance of the largest value.
  */
 template<typename ForwardIterator, typename UnaryOperation>
 ForwardIterator
@@ -425,6 +531,87 @@ T distance(InputIterator1 first1, InputIterator1 last1, InputIterator2 first2, I
 		std::cerr << "Unknown distance metric" << std::endl;
 		return T(-1);
 	}
+}
+
+/***********************************************************************************************************************
+ * Entropies
+ **********************************************************************************************************************/
+
+/**
+ * Shannon entropy
+ *
+ *  H(p)=\sum_i p(i) log p(i)
+ *
+ * @template T               probability type (i.e. float, double)
+ * @template InputIterator   container iterator type
+ * @param first              start of container
+ * @param last               end of container
+ * @return                   Shannon entropy value
+ */
+template<typename T, typename InputIterator>
+T shannon_entropy(InputIterator first, InputIterator last) {
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator>);
+	__glibcxx_requires_valid_range(first, last);
+	typedef typename std::iterator_traits<InputIterator>::difference_type DistanceType1;
+
+	DistanceType1 dist = std::distance(first, last);
+	if (!dist) return T(0);
+
+	return accumulate(first, last, T(0), std::plus<T>(), logprod<T>);
+}
+
+/**
+ * Renyi entropy
+ *
+ *  H_q(p) = 1/(1-q) * log ( sum_i p_i^q)
+ *
+ * @template T               probability type (i.e. float, double)
+ * @template InputIterator   container iterator type
+ * @param first              start of container
+ * @param last               end of container
+ * @param q                  parameter q as defined for this entropy
+ * @return                   Rényi entropy value
+ */
+template<typename T, typename InputIterator>
+T renyi_entropy(InputIterator first, InputIterator last, T q) {
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator>);
+	__glibcxx_requires_valid_range(first, last);
+	typedef typename std::iterator_traits<InputIterator>::difference_type DistanceType1;
+
+	DistanceType1 dist = std::distance(first, last);
+	if (!dist) return T(0);
+
+	// in the limit q->1 it should be equal to Shannon entropy
+	if (q == 1) return shannon_entropy(first, last);
+
+	return (T(1)/(1-q)) * std::log( accumulate(first, last, T(0), std::plus<T>(), fixed_power<T>(q)) );
+}
+
+/**
+ * Tsallis entropy
+ *
+ *  H_q(p) = 1/(1-q) * (1 - sum_i p_i^q)
+ *
+ * @template T               probability type (i.e. float, double)
+ * @template InputIterator   container iterator type
+ * @param first              start of container
+ * @param last               end of container
+ * @param q                  parameter q as defined for this entropy
+ * @return                   Tsallis entropy value
+ */
+template<typename T, typename InputIterator>
+T tsallis_entropy(InputIterator first, InputIterator last, T q) {
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator>);
+	__glibcxx_requires_valid_range(first, last);
+	typedef typename std::iterator_traits<InputIterator>::difference_type DistanceType1;
+
+	DistanceType1 dist = std::distance(first, last);
+	if (!dist) return T(0);
+
+	// in the limit q->1 it should be equal to Shannon entropy
+	if (q == 1) return shannon_entropy(first, last);
+
+	return (T(1)/(1-q)) * (1 - accumulate(first, last, T(0), std::plus<T>(), fixed_power<T>(q)) );
 }
 
 /***********************************************************************************************************************

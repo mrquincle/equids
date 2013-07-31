@@ -36,23 +36,33 @@
 
 #include <CMultiHistogram.h>
 
+enum LedType { LT_REFLECTIVE, LT_AMBIENT, LT_NORMAL, LT_ENUM_SIZE };
+
 class CInfrared {
 public:
 	CInfrared(RobotBase *robot_base, RobotBase::RobotType robot_type);
 
 	~CInfrared();
 
+	void init();
+
 	void calibrate(bool turn_around = true);
 
-	int reflective(int i);
+	void get_calibration();
 
-	int ambient(int i);
+	int reflective(int i, bool offset=true);
+
+	int ambient(int i, bool offset=true);
 
 	//! Get distance measurement
 	int distance(int i);
 
 	//! Get preferred direction
 	void direction(float & angle);
+
+	void power_all(LedType led_type, bool on=true);
+
+	inline int get_window_size() { return window_size; }
 private:
 	CMotors *motors;
 
@@ -72,7 +82,11 @@ private:
 
 	CMultiHistogram<int32_t, int32_t> hist_ambient;
 
+	int window_size;
+
 	Worldfile optionfile;
+
+	std::string optionfile_name;
 };
 
 

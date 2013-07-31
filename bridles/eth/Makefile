@@ -8,11 +8,12 @@
 
 # By default grab only all .cpp files to compile
 OBJS=$(patsubst %.cpp,%.o,$(wildcard *.cpp))
+OBJCC=$(patsubst %.cc,%.o,$(wildcard *.cc))
 
 # The directories that this "bridle" depends on
 CXXINCLUDE+=-I./ 
 
-all: check-env $(OBJS) 
+all: check-env $(OBJS) $(OBJCC)
 
 check-env:
 ifndef EQUID_PATH
@@ -22,8 +23,11 @@ endif
 .cpp.o:
 	$(CXX)  $(CXXFLAGS) $(CXXDEFINE) -c  $(CXXINCLUDE) $< 
 
+.cc.o:
+	$(CXX)  $(CXXFLAGS) $(CXXDEFINE) -c  $(CXXINCLUDE) $< 
+
 .c.o:
 	$(CXX)  $(FLAGS) $(CXXDEFINE) -c  $(CXXFLAGS) $(CXXINCLUDE) $< 
 
 clean:
-	$(RM) $(OBJS) *.moc $(UI_HEAD) $(UI_CPP)
+	$(RM) $(OBJS) $(OBJCC) *.moc $(UI_HEAD) $(UI_CPP)

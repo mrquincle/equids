@@ -7,7 +7,9 @@
 #ifndef __CMESSAGE_H__
 #define __CMESSAGE_H__
 
-#define MESSAGE_LENGTH 10 
+#include "ethlolmsg.h"
+
+#define MESSAGE_LENGTH  
 
 typedef enum
 {
@@ -16,6 +18,8 @@ typedef enum
 	MSG_STOP,
 	MSG_RESET,
 	MSG_QUIT,
+   MSG_ACKNOWLEDGE,
+   MSG_INIT,
 	MSG_SPEED,
 	MSG_HINGE,
 	MSG_POS,
@@ -27,11 +31,14 @@ class CMessage
 	public:
 		CMessage();
 		~CMessage();
-		unsigned char buf[MESSAGE_LENGTH+1];
+		unsigned char buf[];
 		void pack();
 		void unpack();
+        void set(const ELolMessage*msg);
 		const char* getStrType();
 		TMessageType type;
+        int len;
+      const uint8_t *data;
 		int value1;
 		int value2;
 		int value3;

@@ -18,6 +18,7 @@
 #include <netdb.h>
 
 #include "CMessage.h"
+#include "ipc.hh"
 #include <semaphore.h>
 #include <pthread.h>
 
@@ -29,35 +30,44 @@ typedef struct
 	int time;
 	int socket;
 	sem_t* sem;
-}SClientInfo;
+} SClientInfo;
 
 void* serverLoop(void* serv);
 
 class CMessageServer{
+
+        IPC::IPC  jockey_IPC;
+   
 	public:
 
 		CMessageServer();
 		~CMessageServer();
 		int initServer(const char* port);
-		void update(double odo[],bool buttons[],int rotation[],int irr[]);
+		//void update(double odo[],bool buttons[],int rotation[],int irr[]);
 		CMessage getMessage();
+      void sendMessage(CMessage &msg) {
+         jockey_IPC.SendData(msg.type, (uint8_t*)msg.data, msg.len);
+      }
+      void sendMessage(int type, void *data, int len) {
+         jockey_IPC.SendData(type, (uint8_t*)data, len);
+      }
 
-		bool getClientInfo(int socket,bool data[]);
-		CMessage checkForMessage(int socket);
-		int sendPosition(int socket,double buffer[]);
-		int sendDoubles(int socket,double buffer[],int len);
-		int sendInts(int socket,int buffer[],int len);
-		int sendBools(int socket,bool buffer[],int len);
-		int closeConnection(int socket);
+		//bool getClientInfo(int socket,bool data[]);
+		//CMessage checkForMessage();
+		//int sendPosition(int socket,double buffer[]);
+		//int sendDoubles(int socket,double buffer[],int len);
+		//int sendInts(int socket,int buffer[],int len);
+		//int sendBools(int socket,bool buffer[],int len);
+		int closeConnection();
 		int connected;
-		int serverSocket;
-		int mySocket;
+		//int serverSocket;
+		//int mySocket;
 		sem_t dataSem,connectSem;
 		CMessage message;
-		double odometry[10];
-		bool buttons[10];
-		int rotation[1];
-		int ir[4];
+		//double odometry[10];
+		//bool buttons[10];
+		//int rotation[1];
+		//int ir[4];
 		int messageRead;
 };
 

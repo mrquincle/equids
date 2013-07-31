@@ -32,7 +32,9 @@
 template <typename T, typename R>
 class CMultiHistogram {
 public:
-	CMultiHistogram() {}
+	CMultiHistogram() {
+		window_size = -1;
+	}
 
 	~CMultiHistogram() {
 		histograms.erase(histograms.begin(), histograms.end());
@@ -44,11 +46,16 @@ public:
 			histograms.push_back(new CHistogram<T,R>());
 	}
 
+	//! Set size of sliding window (-1 is no sliding window at all, risking overflow)
 	void set_sliding_window(int window_size) {
+		this->window_size = window_size;
 		for (int i = 0; i < histograms.size(); ++i) {
 			histograms[i]->set_sliding_window(window_size);
 		}
 	}
+
+	//! Gets size of sliding window
+	inline int get_sliding_window() { return window_size; }
 
 	void push(int i, T item) {
 		histograms[i]->push(item);
@@ -61,8 +68,8 @@ public:
 	//! If you provide a STL container, previously allocated to proper size with resize(), averages can be written to it
 	template<typename OutputIterator>
 	OutputIterator average(OutputIterator result) {
-		for (int i = 0; i < histograms.size(); ++i) {
-			*++result = histograms[i]->average();
+		for (int i = 0; i < histograms.size(); ++i, ++result) {
+			*result = histograms[i]->average();
 		}
 		return result;
 	}
@@ -74,6 +81,8 @@ public:
 
 private:
 	std::vector<CHistogram<T,R>* > histograms;
+
+	int window_size;
 };
 
 #endif /* CMULTIHISTOGRAM_H_ */

@@ -33,6 +33,9 @@
 
 #include <dim1algebra.hpp>
 
+/**
+ * Histogram
+ */
 template <typename T, typename R>
 class CHistogram {
 public:
@@ -48,7 +51,6 @@ public:
 			data.erase(data.begin(), data.end() - remainder);
 		}
 		this->window_size = window_size;
-
 	}
 
 	void push(T item) {
@@ -65,8 +67,8 @@ public:
 	}
 
 	T sum() {
-		T sum = 0;
-		std::accumulate(data.begin(), data.end(), sum);
+		T sum = T(0);
+		sum = std::accumulate(data.begin(), data.end(), sum);
 		return sum;
 	}
 
@@ -77,12 +79,26 @@ public:
 	void clear() {
 		data.erase(data.begin(), data.end());
 	}
+
+	void print() {
+		std::cout << "histogram [" << data.size() << "]: ";
+		for (int i = 0; i < data.size(); ++i) {
+			std::cout << data[i] << ' ';
+		}
+		std::cout << std::endl;
+	}
 private:
 	std::vector<T> data;
 
 	int window_size;
 };
 
+/**
+ * A kind of "virtual" histogram, because the actual values are not maintained. Only a sum of all the previous ones.
+ * Hence, this cannot be used as a sliding average, forgetting values that are too much into the past.
+ *
+ * @todo Make obvious when the sum is above the total size available.
+ */
 template <typename T, typename R>
 class CVirtualHistogram {
 public:
@@ -98,7 +114,7 @@ public:
 	}
 
 	inline R average() {
-		if (empty) return (R)0;
+		if (empty()) return (R)0;
 		return sum() / (R)count;
 	}
 

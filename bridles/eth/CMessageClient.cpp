@@ -18,11 +18,11 @@ int CMessageClient::sendMessage(CMessage* message)
   message->pack();
   fprintf(stdout,"Message %s: %i,%i [%i,%i,%i,%i]\n",message->getStrType(),message->value1,message->value2,\
 		  message->buf[0],message->buf[1],message->buf[2],message->buf[3]);
-  if (send(mySocket,message->buf,MESSAGE_LENGTH,MSG_NOSIGNAL) == MESSAGE_LENGTH) return 0; else
+/*  if (send(mySocket,message->buf,MESSAGE_LENGTH,MSG_NOSIGNAL) == MESSAGE_LENGTH) return 0; else
   {
     fprintf(stdout,"Network error\r\n");
     return -1;
-  }
+  }*/
 }
 
 int CMessageClient::init(const char *ip,const char* port,bool requirements[])

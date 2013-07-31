@@ -59,108 +59,134 @@
 std::string NAME = "BackAndForth";
 
 #define DEBUG \
-	NAME << '[' << getpid() << "] " << __func__ << "(): "
+NAME << '[' << getpid() << "] " << __func__ << "(): "
 
 /**
  * If the user presses Ctrl+C, this can be used to do memory deallocation or a last communication with the MSPs.
  */
 void interrupt_signal_handler(int signal) {
-	if (signal == SIGINT) {
-		//RobotBase::MSPReset();
-		exit(0);
-	}
+   if (signal == SIGINT) {
+      //RobotBase::MSPReset();
+      exit(0);
+   }
 }
 
 /**
  * Basically only turns on and off the laser for a couple of times.
  */
 int main(int argc, char **argv) {
-	struct sigaction a;
-	a.sa_handler = &interrupt_signal_handler;
-	sigaction(SIGINT, &a, NULL);
+   int speed;
+   std::string port;
+   struct sigaction a;
+   
 
-	RobotBase* robot = RobotBase::Instance();
-	RobotBase::RobotType robot_type = RobotBase::Initialize(NAME);
+   std::cout << DEBUG << "Started with params " << argv[1] << ", " << argv[2] << std::endl;
+   
+   a.sa_handler = &interrupt_signal_handler;
+   sigaction(SIGINT, &a, NULL);
+   
+   RobotBase* robot = RobotBase::Instance();
+   RobotBase::RobotType robot_type = RobotBase::Initialize(NAME);
 
-	for (int i = 0; i < 4; ++i)
-		robot->SetPrintEnabled(i, false);
+   for (int i = 0; i < 4; ++i)
+      robot->SetPrintEnabled(i, false);
+   
+   if (argc > 2) {
+      port = std::string(argv[1]);
+      if (sscanf(argv[2], "%i", &speed)!=1) {
+          speed = 50;
+          std::cout << DEBUG << "Second parametr must be speed. Used standard speed 50 against" << argv[2] << std::endl;
+      }
+      std::cout << DEBUG << "Started with OK params " << argv[1] << ", " << argv[2] << std::endl;
+   } else {
+      std::cout << DEBUG << "Usage: port_number speed" << std::endl;
+      return 1;
+   }
+   
+   //	IRobotFactory factory;
+   //	RobotBase* robot = factory.GetRobot();
+   //	RobotBase::RobotType robot_type = factory.GetType();
+   
+   switch(robot_type) {
+      case RobotBase::UNKNOWN: std::cout << "Detected unknown robot" << std::endl; break;
+      case RobotBase::KABOT: std::cout << "Detected Karlsruhe robot" << std::endl; break;
+      case RobotBase::ACTIVEWHEEL: std::cout << "Detected Active Wheel robot" << std::endl; break;
+      case RobotBase::SCOUTBOT: std::cout << "Detected Scout robot" << std::endl; break;
+      default:
+         std::cout << DEBUG << "No known type (even not unknown). Did initialization go well?" << std::endl;
+   }
+   
+   
+   std::cout << "Create motor object" << std::endl;
+   CMotors motors(robot, robot_type);
 
-	std::string port = "50004";
-	if (argc > 1) {
-		port = std::string(argv[1]);
-	} else {
-		std::cout << DEBUG << "Standard port " << port << " will be used, make sure the other binary uses another" << std::endl;
-	}
-//	IRobotFactory factory;
-//	RobotBase* robot = factory.GetRobot();
-//	RobotBase::RobotType robot_type = factory.GetType();
-
-	switch(robot_type) {
-	case RobotBase::UNKNOWN: std::cout << "Detected unknown robot" << std::endl; break;
-	case RobotBase::KABOT: std::cout << "Detected Karlsruhe robot" << std::endl; break;
-	case RobotBase::ACTIVEWHEEL: std::cout << "Detected Active Wheel robot" << std::endl; break;
-	case RobotBase::SCOUTBOT: std::cout << "Detected Scout robot" << std::endl; break;
-	default:
-		std::cout << DEBUG << "No known type (even not unknown). Did initialization go well?" << std::endl;
-	}
-
-	std::cout << "Create (receiving) message server on port " << port << std::endl;
-	CMessageServer *server;
-	server = new CMessageServer();
-	server->initServer(port.c_str());
-
-	std::cout << "Create motor object" << std::endl;
-	CMotors motors(robot, robot_type);
-
-	bool stopRobot = false;
-	CMessage message;
-	message.type = MSG_NONE;
-	while (!stopRobot){
-		message = server->getMessage();
-
-		if (message.type != MSG_NONE)
-			std::cout << DEBUG << "Command: " << message.getStrType() << ' ' << message.value1 << ',' \
-			<< message.value2 << std::endl;
-
-		switch (message.type){
-		case MSG_START: {
-			robot->pauseSPI(false);
-			std::cout << DEBUG "Start SPI communication for controller on port " << port << std::endl;
-			break;
-		}
-		case MSG_STOP: {
-			robot->pauseSPI(true);
-			while (!robot->isSPIPaused());
-			std::cout << DEBUG << "Paused SPI communication for controller on port " << port << std::endl;
-			break;
-		}
-		case MSG_SPEED: {
-			std::cout << DEBUG << "Set speed " << message.value1 << ',' << message.value2 << \
-					" for controller on port " << port << std::endl;
-			motors.setSpeeds(message.value1, message.value2);
-			break;
-		}
-		case MSG_QUIT: {
-			motors.setSpeeds(0,0);
-			robot->pauseSPI(true);
-			stopRobot = true;
-			break;
-		}
-		case MSG_NONE: {
-			break;
-		}
-		default: {
-			std::cerr << DEBUG << "Did not understand message " << message.type << std::endl;
-			break;
-		}
-		}
-
-		message.type = MSG_NONE;
-		usleep(200000); // check every 0.2 second
-	}
-
-	std::cout << DEBUG << "Stopping" << std::endl;
-	return 0;
+   std::cout << "Create (receiving) message server on port " << port << std::endl;
+   CMessageServer *server;
+   server = new CMessageServer();
+   server->initServer(port.c_str());
+   
+   bool stopRobot = false;
+   CMessage message;
+   message.type = MSG_NONE;
+   while (!stopRobot){
+      message = server->getMessage();
+      
+      if (message.type != MSG_NONE)
+         std::cout << "Command: " << message.getStrType() << ' ' << message.value1 << ',' \
+         << message.value2 << std::endl;
+      
+      switch (message.type){
+         case MSG_INIT:
+            // you can initialize your controller
+            usleep(10000);
+            server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
+            break;
+         case MSG_START: {
+            robot->pauseSPI(false);
+            while (robot->isSPIPaused()) {
+               usleep(10000);
+            }
+            std::cout << argv[2] << "Started SPI communication for controller on IPC" << std::endl;
+            motors.setSpeeds(speed, -speed);
+            server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
+            break;
+         }
+         case MSG_STOP: {
+            motors.setSpeeds(0,0);
+            usleep(10000);
+            robot->pauseSPI(true);
+            while (!robot->isSPIPaused()){
+               usleep(10000);
+            }
+            std::cout << argv[2] << "Paused SPI communication for controller on IPC" << std::endl;
+            server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
+            break;
+         }
+         case MSG_QUIT: {
+            std::cout << "QUIT controller" << std::endl;
+            motors.setSpeeds(0,0);
+            usleep(10000);
+            robot->pauseSPI(true);
+            stopRobot = true;
+            break;
+         }
+         case MSG_NONE: {
+            break;
+         }
+         default: {
+            std::cerr << DEBUG << "Did not understand message " << message.type << std::endl;
+            break;
+         }
+      }
+      
+      if (message.type == MSG_NONE) {
+         usleep(20000); // check every 0.02 second or do something usefull
+      }
+      message.type = MSG_NONE;
+   }
+   
+   std::cout << "Stopping" << std::endl;
+   return 0;
 }
 
 

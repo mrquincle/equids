@@ -34,6 +34,7 @@
 #include <string.h>
 #include <math.h>
 #include <signal.h>
+#include <iomanip>
 
 /***********************************************************************************************************************
  * Middleware includes
@@ -65,25 +66,50 @@ void interrupt_signal_handler(int signal) {
 	}
 }
 
+void graceful_end(CMotors & motors) {
+	motors.setSpeeds(0, 0);
+	usleep(1000);
+	motors.halt();
+	usleep(1000);
+
+	std::cout << "Avoidance controller quits" << std::endl;
+	exit(EXIT_SUCCESS);
+}
+
 /**
  * Basically only turns on and off the laser for a couple of times.
  */
 int main(int argc, char **argv) {
 	int nof_switches = 2;
+	bool calibrate = false;
+	bool print = false;
+	int timespan = 100;
 
 	struct sigaction a;
 	a.sa_handler = &interrupt_signal_handler;
 	sigaction(SIGINT, &a, NULL);
 
-	RobotBase* robot = RobotBase::Instance();
+	std::cout << "Run " << NAME << " compiled at time " << __TIME__ << std::endl;
+
+	if (argc > 1) {
+		std::string arg1 = std::string(argv[1]);
+		if (arg1.find("calibrate") != std::string::npos) {
+			calibrate = true;
+		}
+	}
+
 	RobotBase::RobotType robot_type = RobotBase::Initialize(NAME);
-
-//	IRobotFactory factory;
-//	RobotBase* robot = factory.GetRobot();
-//	RobotBase::RobotType robot_type = factory.GetType();
-
+	RobotBase* robot = RobotBase::Instance();
 	for (int i = 0; i < 4; ++i)
 		robot->SetPrintEnabled(i, false);
+
+	//	std::cout << "Reset robot manually" << std::endl;
+	//	RobotBase::MSPReset();
+
+	std::cout << "Initialised robot of type " << RobotTypeStr[robot_type] << std::endl;
+	//	IRobotFactory factory;
+	//	RobotBase* robot = factory.GetRobot();
+	//	RobotBase::RobotType robot_type = factory.GetType();
 
 	// we need to initialize the motors before calibrate infrared (which turns the robot around)
 	CMotors motors(robot, robot_type);
@@ -91,27 +117,46 @@ int main(int argc, char **argv) {
 
 	std::cout << "Setup infrared functionality" << std::endl;
 	CInfrared infrared(robot, robot_type);
-	infrared.calibrate();
+	infrared.init();
 
-	infrared.distance(0);
+	if (calibrate) {
+		std::cout << "Calibrate!" << std::endl;
+		infrared.calibrate();
+		std::cout << "Calibration done" << std::endl;
+		graceful_end(motors);
+	} else {
+		std::cout << "Get calibration values" << std::endl;
+		infrared.get_calibration();
+	}
 
-	motors.setSpeeds(100, 0);
-	sleep(2);
+	if (print) {
+		for (int t = 0; t < timespan; ++t)  {
+			std::cout << '[' << std::setw(4) << std::setfill('0') << t << "]: ";
+			for (int i = 0; i < 8; ++i)
+				std::cout << infrared.distance(i) << ' ';
+			std::cout << std::endl;
+			usleep(100000);
+		}
+		graceful_end(motors);
+	}
 
-	motors.setSpeeds(-100, 0);
-	sleep(2);
+	std::cout << "Sliding window size used of " << infrared.get_window_size() << std::endl;
 
-	motors.setSpeeds(0, 100);
-	sleep(2);
+	for (int t = 0; t < timespan; ++t)  {
+		float angle = 0;
+		infrared.direction(angle);
+		for (int s = 0; s < infrared.get_window_size(); ++s)  {
+			for (int i = 0; i < 8; ++i) infrared.distance(i);
+			usleep(1000); // 1000 * 100 is every 0.1seconds
+		}
+		std::cout << "Go in the direction: " << angle << std::endl;
+		motors.setSpeeds(40, angle);
+		//usleep(1000000);
+		//sleep(2);
+	}
 
-	motors.setSpeeds(0, -100);
-	sleep(2);
-
-	motors.setSpeeds(0, 0);
-	motors.halt();
-
-	fprintf(stdout,"Stopping avoidance.");
-	return 0;
+	graceful_end(motors);
+	return EXIT_SUCCESS;
 }
 
 
