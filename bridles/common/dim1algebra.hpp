@@ -56,8 +56,14 @@
  * by the STL methods themselves. It is also easy to see that it is impossible for the function to check if v2 is
  * actually of the same size (or larger) than v1.
  *
- * Todo:
- *  - add some entropies
+ * An other important function does not return a vector of elements, but just a scalar. The one that operates on a
+ * single container is called std::accumulator, the one that operates on two containers is std::inner_product, here e.g.
+ * used to calculate an Euclidean distance:
+ *   std::sqrt(std::inner_product(first1, last1, first2, T(0), std::plus<T>(), euclidean<T>));
+ *
+ * Just keep these in mind, because you will not always need to create dedicate functions, but might be well off by
+ * applying the standard STL ones.
+ *
  */
 
 /***********************************************************************************************************************
@@ -127,22 +133,32 @@ struct max : public std::binary_function<_Tp, _Tp, _Tp> {
  **********************************************************************************************************************/
 
 /**
+ * The discrete metric returns 1 accept when x==y (which has distance 0). This is sometimes called the p=0 "norm". It is
+ * rather important in sparse representations and compressed sensing.
+ */
+template<typename T>
+T discrete(T x, T y) {
+	return ((x == y) ? 0 : 1);
+}
+
+/**
+ * The p=1 norm, can be used for the Manhattan distance (but also the Chebyshev distance). This norm is a lot "less
+ * smooth" than the Euclidean norm. If used for example for regression outliers do have a much higher weight compared
+ * to the Euclidean norm (compared to the inliers). It is not symmetric, so not considered a real metric, at times it
+ * is called a quasi-metric.
+ */
+template<typename T>
+T taxicab(const T & x, const T & y) {
+	return std::abs(x-y);
+}
+
+/**
  * The p=2 norm, element-wise squaring the difference. This norm is also called the Euclidean norm and is the most known
  * of all.
  */
 template<typename T>
 T euclidean(T x, T y) {
 	return (x-y)*(x-y);
-}
-
-/**
- * The p=1 norm, can be used for the Manhattan distance (but also the Chebyshev distance). This norm is a lot "less
- * smooth" than the Euclidean norm. If used for example for regression outliers do have a much higher weight compared
- * to the Euclidean norm (compared to the inliers).
- */
-template<typename T>
-T taxicab(const T & x, const T & y) {
-	return std::abs(x-y);
 }
 
 /**
@@ -176,6 +192,30 @@ T hyperbolic(const T & x, const T & y) {
 }
 
 /**
+ * The non-symmetric "distance" that takes a log of the ratio of x/y times the element itself plays a major role in
+ * entropies.
+ */
+template<typename T>
+T log_likelihood_ratio(const T & x, const T & y) {
+	if (y == 0) return 0;
+	return std::log(x/y) * x;
+}
+
+/**
+ * Complicate way to multiply to entities, but convenient for, in the end, Jensen-Shannon divergence.
+ */
+template<typename T>
+T log_likelihood_ratio_averaged(const T & x, const T & y) {
+	T avg = (x + y) / T(2);
+	if (avg == 0) return 0;
+	return std::log(x/avg) * x;
+}
+
+/***********************************************************************************************************************
+ * Truncate / cap values
+ **********************************************************************************************************************/
+
+/**
  * Cap a value if it is beyond a certain range given by minimum and maximum.
  * @param x                  value to be capped
  * @param min                minimum value
@@ -183,8 +223,8 @@ T hyperbolic(const T & x, const T & y) {
  * @return                   value or its minimum or maximum
  */
 template<typename T>
-T cap_range(T x, T min, T max) {
-	return (x > max) ? max : ((x < min) ? min : x);
+void cap_range(T & x, T min, T max) {
+	x = (x > max) ? max : ((x < min) ? min : x);
 }
 
 /**
@@ -294,7 +334,7 @@ public:
 };
 
 /***********************************************************************************************************************
- * Vector multiplication with a scalar
+ * Binary functions, such as vector multiplication with a scalar
  **********************************************************************************************************************/
 
 /**
@@ -309,10 +349,26 @@ public:
 	op_adjust(T a): a(a) {}
 	T operator()(T x, T y) const {
 		//fancy: std::multiplies<T>( std::minus<T>(x,y), a); (in case + and * are not defined)
-		T result = x + (x-y)*a;
-		return result;
+		return x + (x-y)*a;
 	}
 };
+
+/**
+ * Mixing of the two elements by using an exponent "a", result becomes x^a * y^(1-a).
+ */
+template<typename T>
+class mixed_exponent: std::binary_function<T,T,T> {
+	T a;
+public:
+	mixed_exponent(T a): a(a) {}
+	T operator()(T x, T y) const {
+		return std::pow(x,a) * std::pow(y,1-a);
+	}
+};
+
+/***********************************************************************************************************************
+ * Slightly adapted accumulators and max element search
+ **********************************************************************************************************************/
 
 /**
  *  @brief Accumulate values in a range with one operation for the accumulation and one operation that has to be
@@ -537,8 +593,32 @@ T distance(InputIterator1 first1, InputIterator1 last1, InputIterator2 first2, I
  * Entropies
  **********************************************************************************************************************/
 
+
 /**
- * Shannon entropy
+ * Hartley entropy is a bit silly, it just is the log of the cardinality of the random variable
+ *
+ *  H(X)=log |X|
+ *
+ * @template T               probability type (i.e. float, double)
+ * @template InputIterator   container iterator type
+ * @param first              start of container
+ * @param last               end of container
+ * @return                   Hartley entropy value
+ */
+template<typename T, typename InputIterator>
+T hartley_entropy(InputIterator first, InputIterator last) {
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator>);
+	__glibcxx_requires_valid_range(first, last);
+	typedef typename std::iterator_traits<InputIterator>::difference_type DistanceType1;
+
+	DistanceType1 dist = std::distance(first, last);
+	return std::log(dist);
+}
+
+/**
+ * Shannon entropy. If you know all the conditional probabilities between say x and y, you can also use as input vector
+ * p(x|y). In that case H will naturally turn out to be \sum_j p(x|y) log p(x|y). Note that the sum is over all p(x|y)
+ * without summing in specific over either element. The latter would require a 2-dimensional input namely.
  *
  *  H(p)=\sum_i p(i) log p(i)
  *
@@ -587,6 +667,12 @@ T renyi_entropy(InputIterator first, InputIterator last, T q) {
 	return (T(1)/(1-q)) * std::log( accumulate(first, last, T(0), std::plus<T>(), fixed_power<T>(q)) );
 }
 
+//! Collision entropy is just Rényi with q=2.
+template<typename T, typename InputIterator>
+T collision_entropy(InputIterator first, InputIterator last) {
+	return renyi_entropy(first, last, T(2));
+}
+
 /**
  * Tsallis entropy
  *
@@ -614,8 +700,153 @@ T tsallis_entropy(InputIterator first, InputIterator last, T q) {
 	return (T(1)/(1-q)) * (1 - accumulate(first, last, T(0), std::plus<T>(), fixed_power<T>(q)) );
 }
 
+/**
+ * See Tsallis entropy, but shifted by q=1-q'. This shifted entropy is proposed by Nelson and Umarov. The new q value
+ * leads to distributions with compact support for q>0, to Shannon for q=0, and heavy-tail q-Gaussians for -2<q<0.
+ * Verbose, negative values of q are associated with anti-correlation or decoupling and increased decay (rather than
+ * exponential as with Shannon it is superexponential and goes to 0 in a finite time). Positive values of q are
+ * associated with correlation and coupling, and decrease decay. The solution shows slower than exponential rate, and
+ * has a heavy tail.
+ */
+template<typename T, typename InputIterator>
+T coupled_entropy(InputIterator first, InputIterator last, T q) {
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator>);
+	__glibcxx_requires_valid_range(first, last);
+	typedef typename std::iterator_traits<InputIterator>::difference_type DistanceType1;
+
+	DistanceType1 dist = std::distance(first, last);
+	if (!dist) return T(0);
+
+	// in the limit q->1 it should be equal to Shannon entropy
+	if (q == 0) return shannon_entropy(first, last);
+
+	return T(1)/q * (-1 + accumulate(first, last, T(0), std::plus<T>(), fixed_power<T>(1-q)) );
+}
+
 /***********************************************************************************************************************
- * Point convenience helpers
+ * Divergences, fancy name for statistical distances.
+ *
+ * Kullback-Leibler is simple enough to describe in a 1-dimensional fashion. Others, e.g. Fisher information requires
+ * even in discrete form marginal calculate over conditional probabilities. They are inherently two dimensional and can
+ * better be represented by a matrix library.
+ *
+ **********************************************************************************************************************/
+
+/**
+ * Kullback-Leibler divergence also known as relative entropy, information gain, and information divergence. It belongs
+ * to the class of f-divergences, just as the Hellinger distance.
+ *
+ *  D(p||q)=\sum_i log (p(i)/q(i)) p(i)
+ *
+ * @template T               probability type (i.e. float, double)
+ * @template InputIterator1  container iterator type
+ * @template InputIterator2  container iterator type
+ * @param first1             start of container
+ * @param last1              end of container
+ * @param first2             start of second container
+ * @return                   Kullback-Leibler divergence
+ */
+template<typename T, typename InputIterator1, typename InputIterator2>
+T kullback_leibler_divergence(InputIterator1 first1, InputIterator1 last1, InputIterator2 first2){
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator1>);
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator2>);
+	__glibcxx_requires_valid_range(first1, last1);
+	typedef typename std::iterator_traits<InputIterator1>::difference_type DistanceType1;
+
+	DistanceType1 dist = std::distance(first1, last1);
+	if (!dist) return T(0);
+
+	return std::inner_product(first1, last1, first2, T(0), std::plus<T>(), log_likelihood_ratio<T>);
+}
+
+/**
+ * See taxicab distance, but now with probabilities in the input containers. It also is defined without the division by
+ * two, which would make it totally the same as the Manhattan distance function.
+ */
+template<typename T, typename InputIterator1, typename InputIterator2>
+T total_variation_distance(InputIterator1 first1, InputIterator1 last1, InputIterator2 first2){
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator1>);
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator2>);
+	__glibcxx_requires_valid_range(first1, last1);
+	typedef typename std::iterator_traits<InputIterator1>::difference_type DistanceType1;
+
+	DistanceType1 dist = std::distance(first1, last1);
+	if (!dist) return T(0);
+
+	return 1/T(2) * std::inner_product(first1, last1, first2, T(0), std::plus<T>(), taxicab<T>);
+}
+
+/**
+ * Renyi divergence.
+ *
+ *  D(p||q)= 1/(a-1) log \sum_i p(i^a) q(i^(1-a))
+ *
+ * @todo Check if (a-1) is indeed different from (1-a) in Renyi entropy.
+ *
+ * @template T               probability type (i.e. float, double)
+ * @template InputIterator1  container iterator type
+ * @template InputIterator2  container iterator type
+ * @template OutputIterator  container iterator type
+ * @param first1             start of container
+ * @param last1              end of container
+ * @param first2             start of second container
+ * @return                   Kullback-Leibler divergence
+ */
+template<typename T, typename InputIterator1, typename InputIterator2>
+T renyi_divergence(InputIterator1 first1, InputIterator1 last1, InputIterator2 first2, T a){
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator1>);
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator2>);
+	__glibcxx_requires_valid_range(first1, last1);
+	typedef typename std::iterator_traits<InputIterator1>::difference_type DistanceType1;
+
+	DistanceType1 dist = std::distance(first1, last1);
+	if (!dist) return T(0);
+
+	// there are more shortcuts, for q==0, q==1/2, q==2, etc. but they will not result in DIV/0, so this one is enough
+	if (a == 1) return kullback_leibler_divergence(first1, last1, first2);
+
+	return T(1)/(1-a) *
+			std::log ( std::inner_product(first1, last1, first2, T(0), std::plus<T>(), mixed_exponent<T>(a)) );
+}
+
+/**
+ * Jensen-Shannon divergence.
+ *
+ * This uses a mixture distribution: m=1/2(p+q),
+ *
+ *  D(p||q)=1/2 D_KL(p||m) + 1/2 D_KL(q||m)
+ *
+ * with D_KL kullback-leibler.
+ *
+ * @template T               probability type (i.e. float, double)
+ * @template InputIterator1  container iterator type
+ * @template InputIterator2  container iterator type
+ * @param first1             start of container
+ * @param last1              end of container
+ * @param first2             start of second container
+ * @return                   Jensen-Shannon divergence
+ */
+template<typename T, typename InputIterator1, typename InputIterator2>
+T jensen_shannon_divergence(InputIterator1 first1, InputIterator1 last1, InputIterator2 first2){
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator1>);
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator2>);
+	__glibcxx_requires_valid_range(first1, last1);
+	typedef typename std::iterator_traits<InputIterator1>::difference_type DistanceType1;
+
+	DistanceType1 dist = std::distance(first1, last1);
+	if (!dist) return T(0);
+
+	T result = T(0);
+	result += std::inner_product(first1, last1, first2, T(0), std::plus<T>(), log_likelihood_ratio_averaged<T>);
+	result += std::inner_product(first2, first2+dist, first1, T(0), std::plus<T>(), log_likelihood_ratio_averaged<T>);
+	return result / 2;
+}
+
+
+/***********************************************************************************************************************
+ * Points and distances
+ *
+ * In the following section points are multi-dimensional entities denoted by a container with coordinate indices.
  **********************************************************************************************************************/
 
 /**

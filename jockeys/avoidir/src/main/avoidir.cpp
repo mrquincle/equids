@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
 	int nof_switches = 2;
 	bool calibrate = false;
 	bool print = false;
-	int timespan = 100;
+	int timespan = 1000;
 
 	struct sigaction a;
 	a.sa_handler = &interrupt_signal_handler;
@@ -142,15 +142,17 @@ int main(int argc, char **argv) {
 
 	std::cout << "Sliding window size used of " << infrared.get_window_size() << std::endl;
 
+
 	for (int t = 0; t < timespan; ++t)  {
-		float angle = 0;
-		infrared.direction(angle);
+		int speed = 40;
+		int radius = 0;
+		infrared.direction(speed, radius);
 		for (int s = 0; s < infrared.get_window_size(); ++s)  {
 			for (int i = 0; i < 8; ++i) infrared.distance(i);
 			usleep(1000); // 1000 * 100 is every 0.1seconds
 		}
-		std::cout << "Go in the direction: " << angle << std::endl;
-		motors.setSpeeds(40, angle);
+		std::cout << "Send wheel commands [" << speed << ',' << radius << ']' << std::endl;
+		motors.setSpeeds(speed, radius);
 		//usleep(1000000);
 		//sleep(2);
 	}

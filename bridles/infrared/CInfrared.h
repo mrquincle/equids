@@ -57,8 +57,8 @@ public:
 	//! Get distance measurement
 	int distance(int i);
 
-	//! Get preferred direction
-	void direction(float & angle);
+	//! Get control to drive in direction of no collisions
+	void direction(int & sign_speed, int & radius);
 
 	void power_all(LedType led_type, bool on=true);
 

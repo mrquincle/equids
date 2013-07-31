@@ -268,10 +268,13 @@ int CInfrared::distance(int i) {
 }
 
 /**
- * Returns a preferred angle between 0 and 360 degrees. This uses only the (smoothed average) values from the reflective
- * IR LEDs (not the ambient ones). An angle of 0 corresponds to driving straight forwards. There are 8 LEDS, so they
- * differ with 360/8=45 degrees. The LED at 0, is half that distance rotated from forwards, so at -22.5 degrees, LED 1
- * is at +22.5 degrees, LED 2 at 67.5 degrees etc.
+ * Returns a sign for the speed and returns the radius so that the robot drives away from closest point.
+ * @param sign_speed         given(!) a speed, this function adds a sign
+ * @param radius             radius will be returned
+ *
+ * Internal to this function this uses the IR LEDs (not the ambient ones). An angle of 0 corresponds to driving
+ * straightforward. There are 8 LEDS, so they differ with 360/8=45 degrees. The LED at 0, is half that distance rotated
+ * from forwards, so at -22.5 degrees, LED 1 is at +22.5 degrees, LED 2 at 67.5 degrees etc.
  *
  *       forward
  *     __1_____0__
@@ -286,7 +289,7 @@ int CInfrared::distance(int i) {
  * rolls out corresponds with the angle with the largest "vote". The robot will always go in a direction the opposite
  * of the highest value (which is assumed to be the most spacious direction).
  */
-void CInfrared::direction(float & angle) {
+void CInfrared::direction(int & sign_speed, int & radius) {
 	for (int i=0; i < irled_count; i++) {
 		hist_ambient.push(i, ambient(i));
 		hist_reflective.push(i, reflective(i));
@@ -308,13 +311,13 @@ void CInfrared::direction(float & angle) {
 	// not every LED is as important, weight the ones in the front more than the ones at the rear
 	std::vector<float> weights;
 	weights.resize(irled_count, 0);
-	weights[0] = 1.3;
-	weights[1] = 1.3;
-	weights[2] = 1.2;
+	weights[0] = 1.7;
+	weights[1] = 1.7;
+	weights[2] = 1.4;
 	weights[3] = 1.2;
 	weights[4] = 1;
 	weights[5] = 1;
-	weights[6] = 1.2;
+	weights[6] = 1.4;
 	weights[7] = 1.2;
 
 	std::transform(avg_values.begin(), avg_values.end(), weights.begin(), avg_values.begin(),
@@ -339,11 +342,52 @@ void CInfrared::direction(float & angle) {
 	// highest value is most dangerous, so pick the opposite side
 	angle_index = (angle_index + 4) % 8;
 
+	sign_speed = abs(sign_speed);
+
+	switch (angle_index) {
+	case 0: {
+		sign_speed = -sign_speed;
+		radius = 10000; // very high
+		break;
+	}
+	case 1: {
+		sign_speed = -sign_speed;
+		radius = -10000; // very high
+		break;
+	}
+	case 2: {
+		sign_speed = -sign_speed;
+		radius = -200;
+		break;
+	}
+	case 7: {
+		sign_speed = -sign_speed;
+		radius = 200;
+		break;
+	}
+	case 3: {
+		//sign_speed = +sign_speed;
+		radius = -200;
+		break;
+	}
+	case 6: {
+		radius = 200;
+		break;
+	}
+	case 4: {
+		radius = -10000;
+		break;
+	}
+	case 5: {
+		radius = 10000;
+		break;
+	}
+
+	}
 	// make 4 directions is good enough
-	angle_index /= 2;
+//	angle_index /= 2;
 
 	// get from index to angle
-	angle = beta * 2 * angle_index; // + start
-
+//	angle = beta * 2 * angle_index; // + start
 
 }
