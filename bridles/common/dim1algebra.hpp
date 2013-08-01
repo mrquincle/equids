@@ -285,7 +285,7 @@ void cap_scale(T & x, T & y, T min, T max) {
 	}
 	// naturally maximum should be larger than minimum
 	assert (max > min);
-    // change coordinates from [min,max] with a shift equal to the center, [min+max]/2
+	// change coordinates from [min,max] with a shift equal to the center, [min+max]/2
 	T shift = -(min + max) / 2;
 	T sx = x + shift;
 	T sy = y + shift;
@@ -425,8 +425,8 @@ max_element(ForwardIterator first, ForwardIterator last, UnaryOperation unary_op
 {
 	// concept requirements
 	__glibcxx_function_requires(_ForwardIteratorConcept<ForwardIterator>);
-//		__glibcxx_function_requires(LessThanComparableConcept<
-//				typename iterator_traits<ForwardIterator>::value_type>);
+	//		__glibcxx_function_requires(LessThanComparableConcept<
+	//				typename iterator_traits<ForwardIterator>::value_type>);
 	__glibcxx_requires_valid_range(first, last);
 
 	if (first == last)
@@ -438,6 +438,24 @@ max_element(ForwardIterator first, ForwardIterator last, UnaryOperation unary_op
 	return result;
 }
 
+/**
+ * The default std::inner_product comes either without any operators, or two at once. The most common way I use the
+ * inner product is with default data types, so no need to construct a zero object, and with a binary operator for
+ * the way stuff combines from the two vectors, not for how these are constructed to one thing in the end, which is
+ * almmost always by summation.
+ */
+template<typename T, typename InputIterator1, typename InputIterator2, typename BinaryOperation>
+inline T
+inner_product(InputIterator1 first1, InputIterator1 last1, InputIterator2 first2, BinaryOperation binary_op)
+{
+	// concept requirements
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator1>);
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator2>);
+	__glibcxx_requires_valid_range(first1,last1);;
+
+	T init = T(0); // constructor...
+	return std::inner_product(first1, last1, first2, init, std::plus<T>(), binary_op);
+}
 
 /**
  * This function tells something about the "size" or "length" of a container, mathematically called "norm".
@@ -782,7 +800,7 @@ T cross_entropy(InputIterator1 first1, InputIterator1 last1, InputIterator2 firs
 	DistanceType1 dist = std::distance(first1, last1);
 	if (!dist) return T(0);
 
-	return std::inner_product(first1, last1, first2, T(0), std::plus<T>(), xlogy<T>);
+	return inner_product(first1, last1, first2, xlogy<T>);
 }
 
 
@@ -821,7 +839,7 @@ T kullback_leibler_divergence(InputIterator1 first1, InputIterator1 last1, Input
 	DistanceType1 dist = std::distance(first1, last1);
 	if (!dist) return T(0);
 
-	return std::inner_product(first1, last1, first2, T(0), std::plus<T>(), xlogx_over_y<T>);
+	return inner_product(first1, last1, first2, xlogx_over_y<T>);
 }
 
 /**
@@ -838,7 +856,7 @@ T total_variation_distance(InputIterator1 first1, InputIterator1 last1, InputIte
 	DistanceType1 dist = std::distance(first1, last1);
 	if (!dist) return T(0);
 
-	return 1/T(2) * std::inner_product(first1, last1, first2, T(0), std::plus<T>(), taxicab<T>);
+	return 1/T(2) * inner_product(first1, last1, first2, taxicab<T>);
 }
 
 /**
