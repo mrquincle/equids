@@ -1,7 +1,7 @@
 /**
  * 456789------------------------------------------------------------------------------------------------------------120
  *
- * @brief User infrared to avoid all collisions
+ * @brief User leds to avoid all collisions
  * @file avoidall.cpp
  *
  * This file is created at Almende B.V. and Distributed Organisms B.V. It is open-source software and belongs to a
@@ -47,14 +47,14 @@
  **********************************************************************************************************************/
 
 #include <CMotors.h>
-#include <CInfrared.h>
+#include <CLeds.h>
 
 /***********************************************************************************************************************
  * Implementation
  **********************************************************************************************************************/
 
 //! The name of the controller can be used for controller selection
-std::string NAME = "AvoidInfraRed";
+std::string NAME = "Avoidleds";
 
 /**
  * If the user presses Ctrl+C, this can be used to do memory deallocation or a last communication with the MSPs.
@@ -64,6 +64,15 @@ void interrupt_signal_handler(int signal) {
 		//RobotBase::MSPReset();
 		exit(0);
 	}
+}
+
+/**
+ * Show the controller ended properly.
+ */
+void signal_end(CLeds &leds) {
+	leds.color(LC_ORANGE);
+	sleep(1);
+	leds.color(LC_GREEN);
 }
 
 void graceful_end(CMotors & motors) {
@@ -76,6 +85,7 @@ void graceful_end(CMotors & motors) {
 	exit(EXIT_SUCCESS);
 }
 
+
 /**
  * Basically only turns on and off the laser for a couple of times.
  */
@@ -84,6 +94,7 @@ int main(int argc, char **argv) {
 	bool calibrate = false;
 	bool print = false;
 	int timespan = 1000;
+	bool forever = true;
 
 	struct sigaction a;
 	a.sa_handler = &interrupt_signal_handler;
@@ -111,54 +122,54 @@ int main(int argc, char **argv) {
 	//	RobotBase* robot = factory.GetRobot();
 	//	RobotBase::RobotType robot_type = factory.GetType();
 
-	// we need to initialize the motors before calibrate infrared (which turns the robot around)
+	// we need to initialize the motors before calibrate leds (which turns the robot around)
 	CMotors motors(robot, robot_type);
 	motors.init();
 
-	std::cout << "Setup infrared functionality" << std::endl;
-	CInfrared infrared(robot, robot_type);
-	infrared.init();
+	std::cout << "Setup leds functionality" << std::endl;
+	CLeds leds(robot, robot_type);
+	leds.init();
 
 	if (calibrate) {
 		std::cout << "Calibrate!" << std::endl;
-		infrared.calibrate();
+		leds.calibrate();
 		std::cout << "Calibration done" << std::endl;
 		graceful_end(motors);
 	} else {
 		std::cout << "Get calibration values" << std::endl;
-		infrared.get_calibration();
+		leds.get_calibration();
 	}
 
 	if (print) {
-		for (int t = 0; t < timespan; ++t)  {
+		int t = 0;
+		do {
 			std::cout << '[' << std::setw(4) << std::setfill('0') << t << "]: ";
 			for (int i = 0; i < 8; ++i)
-				std::cout << infrared.distance(i) << ' ';
+				std::cout << leds.distance(i) << ' ';
 			std::cout << std::endl;
 			usleep(100000);
-		}
+		} while (forever || (++t != timespan));
 		graceful_end(motors);
 	}
 
-	std::cout << "Sliding window size used of " << infrared.get_window_size() << std::endl;
+	std::cout << "Sliding window size used of " << leds.get_window_size() << std::endl;
 
-
-	for (int t = 0; t < timespan; ++t)  {
+	int t = 0;
+	do {
 		int speed = 40;
 		int radius = 0;
-		infrared.direction(speed, radius);
-		for (int s = 0; s < infrared.get_window_size(); ++s)  {
-			for (int i = 0; i < 8; ++i) infrared.distance(i);
+		leds.direction(speed, radius);
+		for (int s = 0; s < leds.get_window_size(); ++s)  {
+			for (int i = 0; i < 8; ++i) leds.distance(i);
 			usleep(1000); // 1000 * 100 is every 0.1seconds
 		}
 		std::cout << "Send wheel commands [" << speed << ',' << radius << ']' << std::endl;
 		motors.setSpeeds(speed, radius);
 		//usleep(1000000);
 		//sleep(2);
-	}
+	} while (forever || (++t != timespan));
 
+	signal_end(leds);
 	graceful_end(motors);
 	return EXIT_SUCCESS;
 }
-
-

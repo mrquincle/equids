@@ -26,7 +26,7 @@ SUBDIRS+=main
 SUBDIRS+=motor
 SUBDIRS+=common
 SUBDIRS+=filesystem
-SUBDIRS+=infrared
+SUBDIRS+=leds
 
 ####################################################################################
 # Name of the final binary

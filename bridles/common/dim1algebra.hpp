@@ -64,6 +64,10 @@
  * Just keep these in mind, because you will not always need to create dedicate functions, but might be well off by
  * applying the standard STL ones.
  *
+ * Todo:
+ *   - perhaps conform to STL standard in two ways:
+ *      - have T as final template parameter rather than the first
+ *      - use T init so no construction T(0) is needed
  */
 
 /***********************************************************************************************************************

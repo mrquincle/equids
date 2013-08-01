@@ -11,7 +11,7 @@ OBJS=$(patsubst %.cpp,%.o,$(wildcard *.cpp))
 OBJSC=$(patsubst %.c,%.o,$(wildcard *.c))
 
 # The directories that this "bridle" depends on
-CXXINCLUDE+=-I./ -I../common -I../motor -I../infrared -I../filesystem
+CXXINCLUDE+=-I./ -I../common -I../motor -I../leds -I../filesystem
 
 all: $(OBJS) $(OBJSC)
 
