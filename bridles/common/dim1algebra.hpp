@@ -192,11 +192,20 @@ T hyperbolic(const T & x, const T & y) {
 }
 
 /**
+ * Here x*log y is convenient for entropies etc.
+ */
+template<typename T>
+T xlogy(const T & x, const T & y) {
+	if (y == 0) return 0;
+	return std::log(y) * x;
+}
+
+/**
  * The non-symmetric "distance" that takes a log of the ratio of x/y times the element itself plays a major role in
  * entropies.
  */
 template<typename T>
-T log_likelihood_ratio(const T & x, const T & y) {
+T xlogx_over_y(const T & x, const T & y) {
 	if (y == 0) return 0;
 	return std::log(x/y) * x;
 }
@@ -205,7 +214,7 @@ T log_likelihood_ratio(const T & x, const T & y) {
  * Complicate way to multiply to entities, but convenient for, in the end, Jensen-Shannon divergence.
  */
 template<typename T>
-T log_likelihood_ratio_averaged(const T & x, const T & y) {
+T xlogx_avg_y(const T & x, const T & y) {
 	T avg = (x + y) / T(2);
 	if (avg == 0) return 0;
 	return std::log(x/avg) * x;
@@ -314,7 +323,7 @@ T absolute(T x) { return std::abs(x); }
  * Product of an element with the log of itself.
  */
 template<typename T>
-T logprod(T x) { return std::log(x) * x; }
+T xlogx(T x) { return std::log(x) * x; }
 
 /***********************************************************************************************************************
  * Unary functions
@@ -590,9 +599,32 @@ T distance(InputIterator1 first1, InputIterator1 last1, InputIterator2 first2, I
 }
 
 /***********************************************************************************************************************
- * Entropies
+ * Expected value
  **********************************************************************************************************************/
 
+/**
+ * Expected value is just a weighted average with weights of all probabilities summing up to one, so it is the default
+ * inner product.
+ *
+ *  E_p(x)= \sum_i p(i) x_i
+ *
+ * @template T               probability type (i.e. float, double)
+ * @template InputIterator1  container iterator type
+ * @template InputIterator2  container iterator type
+ * @param first1             start of container
+ * @param last1              end of container
+ * @param first2             start of second container
+ * @return                   expected value
+ */
+template<typename T, typename InputIterator1, typename InputIterator2>
+T expectation(InputIterator1 first1, InputIterator1 last1, InputIterator2 first2){
+	return std::inner_product(first1, last1, first2, T(0));
+}
+
+
+/***********************************************************************************************************************
+ * Entropies
+ **********************************************************************************************************************/
 
 /**
  * Hartley entropy is a bit silly, it just is the log of the cardinality of the random variable
@@ -637,7 +669,7 @@ T shannon_entropy(InputIterator first, InputIterator last) {
 	DistanceType1 dist = std::distance(first, last);
 	if (!dist) return T(0);
 
-	return accumulate(first, last, T(0), std::plus<T>(), logprod<T>);
+	return accumulate(first, last, T(0), std::plus<T>(), xlogx<T>);
 }
 
 /**
@@ -724,11 +756,44 @@ T coupled_entropy(InputIterator first, InputIterator last, T q) {
 }
 
 /***********************************************************************************************************************
+ * Cross entropy
+ **********************************************************************************************************************/
+
+/**
+ * Cross entropy
+ *
+ *  H(p,q)= - \sum_i p(i) log q(i)
+ *
+ * @template T               probability type (i.e. float, double)
+ * @template InputIterator1  container iterator type
+ * @template InputIterator2  container iterator type
+ * @param first1             start of container
+ * @param last1              end of container
+ * @param first2             start of second container
+ * @return                   Cross entropy
+ */
+template<typename T, typename InputIterator1, typename InputIterator2>
+T cross_entropy(InputIterator1 first1, InputIterator1 last1, InputIterator2 first2){
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator1>);
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator2>);
+	__glibcxx_requires_valid_range(first1, last1);
+	typedef typename std::iterator_traits<InputIterator1>::difference_type DistanceType1;
+
+	DistanceType1 dist = std::distance(first1, last1);
+	if (!dist) return T(0);
+
+	return std::inner_product(first1, last1, first2, T(0), std::plus<T>(), xlogy<T>);
+}
+
+
+/***********************************************************************************************************************
  * Divergences, fancy name for statistical distances.
  *
  * Kullback-Leibler is simple enough to describe in a 1-dimensional fashion. Others, e.g. Fisher information requires
  * even in discrete form marginal calculate over conditional probabilities. They are inherently two dimensional and can
  * better be represented by a matrix library.
+ *
+ * Fisher: F(v)=sum_x p(x|v) ( 1/dv dln p(x|v) )^2  where d is "delta", "v" is the discrete parameter
  *
  **********************************************************************************************************************/
 
@@ -756,7 +821,7 @@ T kullback_leibler_divergence(InputIterator1 first1, InputIterator1 last1, Input
 	DistanceType1 dist = std::distance(first1, last1);
 	if (!dist) return T(0);
 
-	return std::inner_product(first1, last1, first2, T(0), std::plus<T>(), log_likelihood_ratio<T>);
+	return std::inner_product(first1, last1, first2, T(0), std::plus<T>(), xlogx_over_y<T>);
 }
 
 /**
@@ -777,7 +842,7 @@ T total_variation_distance(InputIterator1 first1, InputIterator1 last1, InputIte
 }
 
 /**
- * Renyi divergence.
+ * Rényi divergence.
  *
  *  D(p||q)= 1/(a-1) log \sum_i p(i^a) q(i^(1-a))
  *
@@ -790,7 +855,7 @@ T total_variation_distance(InputIterator1 first1, InputIterator1 last1, InputIte
  * @param first1             start of container
  * @param last1              end of container
  * @param first2             start of second container
- * @return                   Kullback-Leibler divergence
+ * @return                   Rényi divergence
  */
 template<typename T, typename InputIterator1, typename InputIterator2>
 T renyi_divergence(InputIterator1 first1, InputIterator1 last1, InputIterator2 first2, T a){
@@ -816,7 +881,7 @@ T renyi_divergence(InputIterator1 first1, InputIterator1 last1, InputIterator2 f
  *
  *  D(p||q)=1/2 D_KL(p||m) + 1/2 D_KL(q||m)
  *
- * with D_KL kullback-leibler.
+ * with D_KL the Kullback-Leibler divergence (see above).
  *
  * @template T               probability type (i.e. float, double)
  * @template InputIterator1  container iterator type
@@ -837,8 +902,8 @@ T jensen_shannon_divergence(InputIterator1 first1, InputIterator1 last1, InputIt
 	if (!dist) return T(0);
 
 	T result = T(0);
-	result += std::inner_product(first1, last1, first2, T(0), std::plus<T>(), log_likelihood_ratio_averaged<T>);
-	result += std::inner_product(first2, first2+dist, first1, T(0), std::plus<T>(), log_likelihood_ratio_averaged<T>);
+	result += std::inner_product(first1, last1, first2, T(0), std::plus<T>(), xlogx_avg_y<T>);
+	result += std::inner_product(first2, first2+dist, first1, T(0), std::plus<T>(), xlogx_avg_y<T>);
 	return result / 2;
 }
 
