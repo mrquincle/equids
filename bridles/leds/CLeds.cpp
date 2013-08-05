@@ -353,42 +353,48 @@ void CLeds::direction(int & sign_speed, int & radius) {
 
 	sign_speed = abs(sign_speed);
 
+	// To turn quick you need a small radius
+	int turn_quick = 20;
+
+	// To turn slow (or go straight) you need a large radius
+	int turn_slow = 1000;
+
 	switch (angle_index) {
 	case 0: {
 		sign_speed = -sign_speed;
-		radius = 10000; // very high
+		radius = turn_slow;
 		break;
 	}
 	case 1: {
 		sign_speed = -sign_speed;
-		radius = -10000; // very high
+		radius = -turn_slow;
 		break;
 	}
 	case 2: {
 		sign_speed = -sign_speed;
-		radius = -200;
+		radius = -turn_quick;
 		break;
 	}
 	case 7: {
 		sign_speed = -sign_speed;
-		radius = 200;
+		radius = turn_quick;
 		break;
 	}
 	case 3: {
 		//sign_speed = +sign_speed;
-		radius = -200;
+		radius = -turn_quick;
 		break;
 	}
 	case 6: {
-		radius = 200;
+		radius = turn_quick;
 		break;
 	}
 	case 4: {
-		radius = -10000;
+		radius = -turn_slow;
 		break;
 	}
 	case 5: {
-		radius = 10000;
+		radius = turn_slow;
 		break;
 	}
 

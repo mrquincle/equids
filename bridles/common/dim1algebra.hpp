@@ -1290,7 +1290,7 @@ enum RotateDirection {
  * @param first   	   A forward iterator.
  * @param last    	   A forward iterator.
  * @param direction    Rotating right or left
- * @return             Nothing.
+ * @return             void: the underlying container is adjusted as a side-effect
  */
 template<typename InputIterator>
 void rotate(InputIterator first, InputIterator last, RotateDirection direction = RD_RIGHT) {
@@ -1309,6 +1309,14 @@ void rotate(InputIterator first, InputIterator last, RotateDirection direction =
 
 /**
  * @brief Rotate the elements of a sequence by N
+ *
+ * If you use std::valarray, this is the same as cshift (except that cshift on valarray is probably computationally
+ * more efficient).
+ *
+ * @param first   	   A forward iterator.
+ * @param last    	   A forward iterator.
+ * @param N            Number of elements to shift with
+ * @return             void: the underlying container is adjusted as a side-effect
  */
 template<typename InputIterator>
 void rotate_n(InputIterator first, InputIterator last, size_t N, RotateDirection direction = RD_RIGHT) {
@@ -1454,6 +1462,43 @@ argmin(ForwardIterator first, ForwardIterator last, UnaryOperation unary_op) {
 	while (++first != last)
 		if (unary_op(*first) < unary_op(*result))
 			result = first;
+	return result;
+}
+
+/***********************************************************************************************************************
+ * Subset manipulations
+ **********************************************************************************************************************/
+
+/**
+ * Subsample a standard container with given factor. It it the callee's responsibility to reserve an output container
+ * which is large enough. More or less "(last - first) / factor", but different if the container size is not an exact
+ * multiple of the factor. For convenience sake, see subsample_size function below, which does simple run the same
+ * loop (instead of calculating it at once).
+ */
+template<typename InputIterator, typename OutputIterator>
+OutputIterator
+subsample(InputIterator first, InputIterator last, OutputIterator result, int factor) {
+
+	if (first == last) return result;
+
+	while (first < last) {
+		*result = *first;
+		first += factor;
+		++result;
+	}
+	return ++result;
+}
+
+/**
+ * Calculate the size of the subsamples container in a loop. Slow but reliable.
+ */
+template<typename InputIterator>
+size_t subsample_size(InputIterator first, InputIterator last, int factor) {
+	size_t result = size_t(0);
+	while (first < last) {
+		first += factor;
+		result++;
+	}
 	return result;
 }
 

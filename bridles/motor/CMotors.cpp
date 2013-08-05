@@ -43,7 +43,7 @@ CMotors::CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 	max_speed = 100; // the maximum value we accept from the user
 
 	max_radius = 1000; // the maximum value
-	axle_track = 20;
+	axle_track = 10;
 	left_right_reversed = true;
 }
 
@@ -88,16 +88,23 @@ void CMotors::translate(int speed, int radius, int & left, int & right) {
 	int abs_radius = abs(radius);
 	int abs_speed = abs(speed);
 
-	// map absolute speed to velocity
-	int wheel_velocity = cmd_to_ctrl(abs_speed);
-	std::cout << "Wheel velocity is " << wheel_velocity << std::endl;
+	if (abs_radius < axle_track && !speed) {
+		// maybe something special for turning on the spot?
+		left = 0;
+		right = 0;
+	} else {
+		// map absolute speed to velocity
+		int wheel_velocity = cmd_to_ctrl(abs_speed);
+		std::cout << "Wheel velocity is " << wheel_velocity << std::endl;
 
-	left = (int) (wheel_velocity * (abs_radius + axle_track) / (abs_radius + axle_track / 2.0));
-	right = (int) (wheel_velocity * abs_radius / (abs_radius + axle_track / 2.0));
+		left = (int) (wheel_velocity * (abs_radius + axle_track) / (abs_radius + axle_track / 2.0));
+		right = (int) (wheel_velocity * abs_radius / (abs_radius + axle_track / 2.0));
 
-	// now we have a problem if we have both full forwards and full turn, we extend 100 for one of the wheels
-	// hence if one of them exceeds 100, we scale both by the most excessive value
-	dobots::cap_scale<int,double>(left, right, min_wheel_velocity, max_wheel_velocity);
+		// now we have a problem if we have both full forwards and full turn, we extend 100 for one of the wheels
+		// hence if one of them exceeds 100, we scale both by the most excessive value
+		dobots::cap_scale<int,double>(left, right, min_wheel_velocity, max_wheel_velocity);
+
+	}
 
 	// for the ScoutBot, the right "wheel" is inverted
 	if (left_right_reversed) left = -left;

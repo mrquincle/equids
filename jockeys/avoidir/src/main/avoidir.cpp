@@ -54,15 +54,19 @@
  **********************************************************************************************************************/
 
 //! The name of the controller can be used for controller selection
-std::string NAME = "Avoidleds";
+std::string NAME = "AvoidInfrared";
+
+//! Global stop condition
+bool gStop = false;
 
 /**
  * If the user presses Ctrl+C, this can be used to do memory deallocation or a last communication with the MSPs.
  */
-void interrupt_signal_handler(int signal) {
-	if (signal == SIGINT) {
-		//RobotBase::MSPReset();
-		exit(0);
+void sigproc(int) {
+	if (!gStop) {
+		gStop = true;
+		std::cout << "You used Ctrl+c to quit. We will gracefully end. User Ctrl+\\ if you want to end directly."
+				<< std::endl;
 	}
 }
 
@@ -75,16 +79,18 @@ void signal_end(CLeds &leds) {
 	leds.color(LC_GREEN);
 }
 
+/**
+ * Quit the controller indeed.
+ */
 void graceful_end(CMotors & motors) {
 	motors.setSpeeds(0, 0);
-	usleep(1000);
+	sleep(1);
 	motors.halt();
-	usleep(1000);
+	sleep(1);
 
 	std::cout << "Avoidance controller quits" << std::endl;
 	exit(EXIT_SUCCESS);
 }
-
 
 /**
  * Basically only turns on and off the laser for a couple of times.
@@ -96,9 +102,10 @@ int main(int argc, char **argv) {
 	int timespan = 1000;
 	bool forever = true;
 
-	struct sigaction a;
-	a.sa_handler = &interrupt_signal_handler;
-	sigaction(SIGINT, &a, NULL);
+	signal(SIGINT, sigproc);
+//	struct sigaction a;
+//	a.sa_handler = &interrupt_signal_handler;
+//	sigaction(SIGINT, &a, NULL);
 
 	std::cout << "Run " << NAME << " compiled at time " << __TIME__ << std::endl;
 
@@ -163,11 +170,11 @@ int main(int argc, char **argv) {
 			for (int i = 0; i < 8; ++i) leds.distance(i);
 			usleep(1000); // 1000 * 100 is every 0.1seconds
 		}
-		std::cout << "Send wheel commands [" << speed << ',' << radius << ']' << std::endl;
+		//std::cout << "Send wheel commands [" << speed << ',' << radius << ']' << std::endl;
 		motors.setSpeeds(speed, radius);
 		//usleep(1000000);
 		//sleep(2);
-	} while (forever || (++t != timespan));
+	} while (!gStop && (forever || (++t != timespan)));
 
 	signal_end(leds);
 	graceful_end(motors);
