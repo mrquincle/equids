@@ -12,8 +12,9 @@ include Mk/default.mk
 
 #JOCKEYS=jockeys/lasertest jockeys/laserscan jockeys/avoidall
 #JOCKEYS=jockeys/position
-JOCKEYS=jockeys/backandforth jockeys/actionselection
-#JOCKEYS=jockeys/laserscan
+#JOCKEYS=jockeys/backandforth jockeys/actionselection
+JOCKEYS=jockeys/laserscan
+JOCKEYS=jockeys/cameradetection
 
 CLEANJOCKEYS=$(addsuffix .clean,$(JOCKEYS))
 

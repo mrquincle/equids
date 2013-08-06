@@ -40,13 +40,13 @@ CLaser::CLaser(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 	if (robot_base == NULL) {
 		fprintf(stderr, "robot_base is null, error in instantiation!\n");
 	}
-	this->robot_base = robot_base;
+	this->robot = robot_base;
 	this->robot_type = robot_type;
 	status_on = false;
 }
 
 CLaser::~CLaser() {
-	robot_base = NULL;
+	robot = NULL;
 	status_on = false;
 	printf("Laser object deallocated\n");
 }
@@ -66,15 +66,15 @@ void CLaser::On() {
 	status_on = true;
 	switch (robot_type) {
 	case RobotBase::KABOT: {
-		KaBot *bot = (KaBot*)robot_base;
+		KaBot *bot = (KaBot*)robot;
 		bot->activateLaser(status_on);
 		break;
 	}
 	case RobotBase::SCOUTBOT: {
 //		printf("%s: For scout\n", __func__);
-		ScoutBot *bot = (ScoutBot*)robot_base;
+		ScoutBot *bot = (ScoutBot*)robot;
 		bot->activateLaser(status_on);
-		bot->SetLEDAll(3, LED_RED);
+		robot->SetLEDAll(bot->GetSide(RobotBase::FRONT), LED_RED);
 		break;
 	}
 	case RobotBase::ACTIVEWHEEL: default:
@@ -87,17 +87,15 @@ void CLaser::Off() {
 	status_on = false;
 	switch (robot_type) {
 	case RobotBase::KABOT: {
-		KaBot *bot = (KaBot*)robot_base;
+		KaBot *bot = (KaBot*)robot;
 		bot->activateLaser(status_on);
 		break;
 	}
 	case RobotBase::SCOUTBOT: {
 //		printf("%s: For scout\n", __func__);
-		ScoutBot *bot = (ScoutBot*)robot_base;
+		ScoutBot *bot = (ScoutBot*)robot;
 		bot->activateLaser(status_on);
-		bot->SetLEDAll(3, LED_WHITE);
-//		bot->sides[3]->led.all(LED_WHITE);
-//		bot->sides[3]->led.single((LEDPosition)(3), LED_WHITE);
+		robot->SetLEDAll(bot->GetSide(RobotBase::FRONT), LED_WHITE);
 		break;
 	}
 	case RobotBase::ACTIVEWHEEL: default:
@@ -110,13 +108,13 @@ void CLaser::Toggle() {
 	status_on = !status_on;
 	switch (robot_type) {
 	case RobotBase::KABOT: {
-		KaBot *bot = (KaBot*)robot_base;
+		KaBot *bot = (KaBot*)robot;
 		bot->activateLaser(status_on);
 		break;
 	}
 	case RobotBase::SCOUTBOT: {
 //		printf("%s: For scout\n", __func__);
-		ScoutBot *bot = (ScoutBot*)robot_base;
+		ScoutBot *bot = (ScoutBot*)robot;
 		bot->activateLaser(status_on);
 		break;
 	}

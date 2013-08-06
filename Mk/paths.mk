@@ -1,6 +1,6 @@
 #!/bin/make -f
 
-RUNTIME_PATH_ROOT=/data
+RUNTIME_PATH_ROOT=$(HOME)/mydata
 
 GENERAL_SOFTWARE_PATH=/opt
 

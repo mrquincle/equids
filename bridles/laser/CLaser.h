@@ -62,7 +62,7 @@ private:
 	bool status_on;
 
 	//! Reference to the robot class and type in the "irobot" library
-	RobotBase *robot_base;
+	RobotBase *robot;
 	RobotBase::RobotType robot_type;
 };
 

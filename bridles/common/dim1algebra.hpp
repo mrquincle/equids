@@ -39,6 +39,7 @@
 #include <iterator>
 
 #include <sstream>
+#include <limits>
 
 /***********************************************************************************************************************
  * General README for dim1algebra.hpp
@@ -1612,6 +1613,74 @@ size_t subsample_size(InputIterator first, InputIterator last, int factor) {
 	return result;
 }
 
+/**
+ * The compress function is slightly more sophisticated than just subsampling. It averages over a window the size of
+ * (last-first)/factor and returns these averages as the elements of the output container.
+ *
+ * @todo: Check when (last-first) is not a multiple of factor.
+ */
+template<typename T, typename InputIterator, typename OutputIterator>
+OutputIterator
+compress(InputIterator first, InputIterator last, OutputIterator result, T init, int factor) {
+	typedef typename std::iterator_traits<InputIterator>::value_type ValueType;
+	if (first == last) return result;
+
+	while (first < last) {
+		ValueType avg = init;
+		for (int i = 0; i < factor; ++i, ++first) {
+			avg += *first;
+		}
+		*result = avg / ValueType(factor);
+		++result;
+	}
+	return ++result;
+}
+
+/**
+ * Slightly adapted version of compress, which can use numeric_limits<ValueType>::quiet_Nan() for not taking every
+ * item into account.
+ */
+template<typename T, typename InputIterator, typename OutputIterator>
+OutputIterator
+compress_nan(InputIterator first, InputIterator last, OutputIterator result, T init, int factor) {
+	typedef typename std::iterator_traits<InputIterator>::value_type ValueType;
+	if (first == last) return result;
+
+	while (first < last) {
+		ValueType avg = init;
+		int count = 0;
+		for (int i = 0; i < factor; ++i, ++first) {
+			if (!isnan(*first)) {
+				avg += *first;
+				++count;
+			}
+		}
+		if (!count) {
+			*result = avg;
+		} else {
+			*result = avg / count;
+		}
+		++result;
+	}
+	return ++result;
+}
+
+/**
+ * Set all elements to not-a-number if they are equal to "value"
+ *
+ * @param first              Start of container (values will be changed in-place)
+ * @param last               End of container
+ * @param value              The value to be replaced by not-a-number
+ */
+template<typename T, typename InputIterator>
+void
+set_nan(InputIterator first, InputIterator last, T value) {
+	typedef typename std::iterator_traits<InputIterator>::value_type ValueType;
+	for (; first != last; ++first) {
+		if (*first == value)
+			*first = std::numeric_limits<ValueType>::quiet_Nan();
+	}
+}
 
 // end of namespace dobots
 

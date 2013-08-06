@@ -37,6 +37,18 @@ typedef enum
    DAEMON_MSG_DISASSEMBLY,
    DAEMON_MSG_STATE_REQ,
    DAEMON_MSG_STATE,
+   MSG_CAM_VIDEOSTREAM_STOP,
+   MSG_CAM_VIDEOSTREAM_START,
+   MSG_CAM_DETECT_DOCKING,
+   MSG_CAM_DETECT_MAPPING,
+   MSG_CAM_DETECT_STAIR,
+   MSG_CAM_DETECTED_BLOB,
+   MSG_CAM_DETECTED_BLOB_ARRAY,
+   MSG_CAM_DETECTED_STAIR,
+   MSG_MOTOR_CALIBRATION_RESULT,
+   MSG_UBISENCE_POSITION,
+   MSG_MAP_DATA,
+   MSG_MAP_COVARIANCE,
    MSG_NUMBER,
 } TMessageType;
 
@@ -50,11 +62,11 @@ class CMessage
 		unsigned char buf[];
 		void pack();
 		void unpack();
-        void set(const ELolMessage*msg);
+        	void set(const ELolMessage*msg);
 		const char* getStrType();
 		TMessageType type;
-        int len;
-      const uint8_t *data;
+		int len;
+		const uint8_t *data;
 		int value1;
 		int value2;
 		int value3;

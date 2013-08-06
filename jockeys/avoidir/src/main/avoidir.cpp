@@ -60,7 +60,8 @@ std::string NAME = "AvoidInfrared";
 bool gStop = false;
 
 /**
- * If the user presses Ctrl+C, this can be used to do memory deallocation or a last communication with the MSPs.
+ * If the user presses Ctrl+C, this can be used to do memory deallocation or a last communication with the MSPs. To
+ * really quit the user is explained he/she will need to press Ctrl+\.
  */
 void sigproc(int) {
 	if (!gStop) {
@@ -71,7 +72,7 @@ void sigproc(int) {
 }
 
 /**
- * Show the controller ended properly.
+ * Show that the controller ended properly by a LED show.
  */
 void signal_end(CLeds &leds) {
 	leds.color(LC_ORANGE);
@@ -80,7 +81,7 @@ void signal_end(CLeds &leds) {
 }
 
 /**
- * Quit the controller indeed.
+ * Quit the controller indeed. So, not only set the speed to zero, but also halt the motors (and turn them off).
  */
 void graceful_end(CMotors & motors) {
 	motors.setSpeeds(0, 0);
@@ -103,9 +104,6 @@ int main(int argc, char **argv) {
 	bool forever = true;
 
 	signal(SIGINT, sigproc);
-//	struct sigaction a;
-//	a.sa_handler = &interrupt_signal_handler;
-//	sigaction(SIGINT, &a, NULL);
 
 	std::cout << "Run " << NAME << " compiled at time " << __TIME__ << std::endl;
 

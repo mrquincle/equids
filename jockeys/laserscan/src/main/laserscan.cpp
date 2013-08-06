@@ -34,6 +34,7 @@
 #include <string.h>
 #include <math.h>
 #include <signal.h>
+#include <iostream> //flush
 
 /***********************************************************************************************************************
  * Middleware includes
@@ -67,7 +68,7 @@ void interrupt_signal_handler(int signal) {
 
 void safe_close() {
 	// flush, because deallocation can go wrong somewhere and we'd have a memory dump
-	std::cout << std::endl << flush;
+	std::cout << std::endl << std::flush;
 	printf("Robot object is automatically deleted by the factory.\n");
 }
 
@@ -81,9 +82,15 @@ int main(int argc, char **argv) {
 	a.sa_handler = &interrupt_signal_handler;
 	sigaction(SIGINT, &a, NULL);
 
-	IRobotFactory factory;
-	RobotBase* robot = factory.GetRobot();
-	RobotBase::RobotType robot_type = factory.GetType();
+//	IRobotFactory factory;
+//	RobotBase* robot = factory.GetRobot();
+//	RobotBase::RobotType robot_type = factory.GetType();
+
+// old irobot
+	RobotBase::RobotType robot_type = RobotBase::Initialize(NAME);
+	RobotBase* robot = RobotBase::Instance();
+	for (int i = 0; i < 4; ++i)
+		robot->SetPrintEnabled(i, false);
 
 	robot->SetLEDAll(0, LED_OFF);
 	robot->SetLEDAll(1, LED_RED);
@@ -97,7 +104,7 @@ int main(int argc, char **argv) {
 	for (int t = 0; t < ticks; ++t) {
 		int distance = 0;
 		scan.GetDistance(distance);
-		cout << "Distance: " << distance << " cm" << std::endl;
+		std::cout << "Distance: " << distance << " cm" << std::endl;
 	}
 
 	safe_close();

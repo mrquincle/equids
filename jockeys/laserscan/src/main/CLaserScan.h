@@ -86,7 +86,7 @@ protected:
 //	unsigned char* generateVector(CRawImage* diffImage, int & vec_size);
 
 	//! Scan outputs two float vectors from one vector of distances
-	void computeScan(int* vec,float* x,float* y);
+//	void computeScan(int* vec,float* x,float* y);
 
 	//! Return difference between two images
 	CRawImage* diff(CRawImage* laserImage, CRawImage* noLaserImage, bool plain);

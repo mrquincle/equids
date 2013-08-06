@@ -28,9 +28,10 @@
 #include <cstdlib>
 #include <cassert>
 
+//! Declare the following as unmangled C functions
 extern "C" {
-#include <libcam2.h>
 #include <grab.h>
+#include <libcam2.h>
 }
 
 #include <CCamera.h>
