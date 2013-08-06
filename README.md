@@ -31,7 +31,7 @@ If you run everything from the EQUIDS environment, you won't need to set this en
 
 Now, you can take a look at the file:
 
-    cat EQUID_PATH/Makefile
+    cat $EQUID_PATH/Makefile
 
 If you want to have other jockeys/controllers compiled, change the array "JOCKEYS" over there. Separate the jockeys by spaces.
 
