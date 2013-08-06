@@ -27,15 +27,24 @@ int CEquids::analyze(char *buf, FILE *fd) {
    while (tmp!=NULL && p<(MAX_JOCKEYS_PARAMS-1)) {
       if (p==0) {
          strncpy(j->name, tmp, MAX_NAME_LEN);
+         p++;
       } else if (p==1) {
          j->argv[0] = strdup(tmp);
          j->port_num = 50000+num_jockeys;
          sprintf(port_str,"%i",j->port_num);
          j->argv[1] = strdup(port_str);
+         p++;
       } else {
-         j->argv[p] =  strdup(tmp);
+         int ptr = strlen(tmp)-1;
+         while (ptr>0 && (tmp[ptr]=='\n' || tmp[ptr]=='\r')) {
+            ptr--;
+         }
+         if (ptr>0) {
+            tmp[ptr+1]=0;
+            j->argv[p] =  strdup(tmp);
+            p++;
+         }
       }
-      p++;
       tmp = strtok(NULL, " ,");
    }
    
@@ -135,6 +144,21 @@ void CEquids::sendMessage(int j, CMessage &m) {
       jockeys[j].SendMessage(m);
    }
 }
+
+void CEquids::sendMessage(int j, int type, void *data, int len) {
+   if (j>=0 && j<num_jockeys) {
+      jockeys[j].SendMessage(type, data, len);
+   }
+}
+
+CMessage *CEquids::getMessage(int j) {
+   if (j>=0 && j<num_jockeys) {
+      return jockeys[j].getMessage();
+   } else {
+      return NULL;
+   }
+}
+   
 
 int CEquids::find(const char *name) {
    int ret=-1;

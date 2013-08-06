@@ -25,6 +25,9 @@ public:
    void initJockey(int j);
    void switchToJockey(int j);
    void sendMessage(int j, CMessage &m);
+   void sendMessage(int j, int type, void *data, int len);
+   CMessage *getMessage(int j);
+   
    int  find(const char *name);
    void quit();
 };

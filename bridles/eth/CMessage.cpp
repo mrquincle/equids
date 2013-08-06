@@ -10,7 +10,21 @@ const char* StrMessage[] ={
    "Init",
    "Speed set",
    "Move hinge",
-   "Number"
+   "Number",
+   "Recruiting",
+   "Seeding",
+   "Docking",
+   "Neighbour's IP REQ",
+   "Neighbour's IP",
+   "Seed's IP REQ",
+   "Seed's IP",
+   "AllRobot's IP REQ",
+   "AllRobot's IP",
+   "Progress REQ",
+   "Progress",
+   "Disassembly",
+   "State REQ",
+   "State"
 };
 
 

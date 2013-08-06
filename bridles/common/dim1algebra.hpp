@@ -38,6 +38,8 @@
 #include <cmath>
 #include <iterator>
 
+#include <sstream>
+
 /***********************************************************************************************************************
  * General README for dim1algebra.hpp
  **********************************************************************************************************************/
@@ -240,6 +242,18 @@ void cap_range(T & x, T min, T max) {
 	x = (x > max) ? max : ((x < min) ? min : x);
 }
 
+//! Same function as a std::unary_function.
+template<typename T>
+class cap_range_function: std::unary_function<T,T> {
+	T min;
+	T max;
+public:
+	cap_range_function(T min, T max): min(min), max(max) {}
+	T operator()(T x) const {
+		return (x > max) ? max : ((x < min) ? min : x);
+	}
+};
+
 /**
  * Assume a maximum cap with a center at zero. So, abs(x) < abs(max) and likewise for y. Some examples:
  *   cap_scale<int,double>(0,120,100) results in: (x,y)=(15,100). So you see the value 120 lifted x a bit up to 15
@@ -300,6 +314,70 @@ void cap_scale(T & x, T & y, T min, T max) {
 	y = sy - shift;
 }
 
+template<typename InputIterator, typename T>
+void cap_range(InputIterator first, InputIterator last, T min, T max) {
+	std::transform(first, last, first, cap_range_function<T>(min,max));
+}
+
+/***********************************************************************************************************************
+ * Printing helpers
+ **********************************************************************************************************************/
+
+//! Print stuff with a delimiter
+template<typename T>
+class print_function: std::unary_function<T,T> {
+	std::string delimiter;
+public:
+	print_function(std::string delimiter): delimiter(delimiter) {}
+	void operator()(T x) const {
+		std::cout << x << delimiter;
+	}
+};
+
+template<typename InputIterator, typename T>
+void print(InputIterator first, InputIterator last, std::string delimiter) {
+	std::for_each(first, last, print_function<T>(delimiter));
+}
+
+/**
+ * More elaborate function to print to standard out. It will accept any container for which an iterator is defined. The
+ * default separator/delimiter is the comma plus a white space. The output is preceded by the length of the container in
+ * square brackets. The empty container is denoted by curly brackets. By default there will be an end of line.
+ *
+ * @param first              First item of the range to be printed
+ * @param last               Last item
+ * @param delim              Optional: a string of symbols separating the items (default ", ")
+ * @param empty              Optional: the string denoting an empty container (default {}"
+ * @param endl               Optional: print yes/no a new line at the end (default yes)
+ */
+template<typename InputIterator>
+void print(InputIterator first, InputIterator last, std::string delim=", ", std::string empty="{}", bool endl=true) {
+	// concept requirements
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator>);
+	__glibcxx_requires_valid_range(first, last);
+	typedef typename std::iterator_traits<InputIterator>::value_type ValueType;
+	typedef typename std::iterator_traits<InputIterator>::difference_type DistanceType;
+
+	DistanceType dist = std::distance(first, last);
+	std::cout << '[' << dist << "] ";
+	switch (dist) {
+	case 0:
+		std::cout << empty;
+		break;
+	case 1:
+		std::cout << *first;
+		break;
+	default:
+		std::ostringstream ss;
+		std::copy(first, last - 1, std::ostream_iterator< ValueType >(ss, delim.c_str()));
+		ss << *(last - 1);
+		std::cout << ss.str();
+		break;
+	}
+	if (endl) std::cout << std::endl;
+}
+
+
 /***********************************************************************************************************************
  * Square, inverse, etc. of individual elements
  **********************************************************************************************************************/
@@ -334,7 +412,7 @@ T xlogx(T x) { return std::log(x) * x; }
  **********************************************************************************************************************/
 
 /**
- * Returns a power
+ * Returns exponent x^a. Here "a" is considered to be the same type T as "x".
  */
 template<typename T>
 class fixed_power: std::unary_function<T,T> {
@@ -621,8 +699,22 @@ T distance(InputIterator1 first1, InputIterator1 last1, InputIterator2 first2, I
 }
 
 /***********************************************************************************************************************
- * Expected value
+ * Expected value, average, and other simple statistic functions
  **********************************************************************************************************************/
+
+/**
+ * Calculate the average over a series of elements in a standard container. Note that the container element type does
+ * not need to be the same as the type returned by the average, which can for example have a higher accuracy (say it
+ * concerns a vector of integers and the resulting value is a double).
+ */
+template<typename InputIterator, typename T>
+T average(InputIterator first, InputIterator last, T init) {
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator>);
+	__glibcxx_requires_valid_range(first, last);
+
+	if (first == last) return init;
+	return std::accumulate(first, last, init) / T(last-first);
+}
 
 /**
  * Expected value is just a weighted average with weights of all probabilities summing up to one, so it is the default
@@ -1462,6 +1554,24 @@ argmin(ForwardIterator first, ForwardIterator last, UnaryOperation unary_op) {
 	while (++first != last)
 		if (unary_op(*first) < unary_op(*result))
 			result = first;
+	return result;
+}
+
+/**
+ * Counts the number of elements in a given container that exceeds (is strict greater than) a certain threshold.
+ * @param first              start of container
+ * @param last               end of container
+ * @threshold                threshold to compare each element with
+ * @return                   number of items above threshold
+ */
+template<typename InputIterator, typename T>
+size_t exceeds(InputIterator first, InputIterator last, T threshold) {
+	size_t result = size_t(0);
+	while (first != last) {
+		result += std::greater<T>(first, threshold);
+		first++;
+		result++;
+	}
 	return result;
 }
 

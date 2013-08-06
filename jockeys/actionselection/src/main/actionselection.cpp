@@ -49,7 +49,7 @@
 
 #include "../eth/CEquids.h"
 #include "../eth/CMessage.h"
-
+#include "global.hh"
 /***********************************************************************************************************************
  * Implementation
  **********************************************************************************************************************/
@@ -61,6 +61,7 @@ typedef enum
 {
    S_FORTH = 0,
    S_BACK,
+   S_RECRUITING,
    S_QUIT
 } TState;
 
@@ -100,6 +101,7 @@ int main(int argc, char **argv) {
 
     int forth = equids.find("forth");
     int back = equids.find("back");
+    int wenguo = equids.find("wenguo");
 
     if (forth==-1) {
        std::cout << "Not deffined jockey forth" << std::endl;
@@ -115,6 +117,7 @@ int main(int argc, char **argv) {
     TState state = S_FORTH;
     int num=0;
     bool quit = false;
+    int cnt;
 
     equids.initJockey(forth);
     while (!quit) {
@@ -127,19 +130,53 @@ int main(int argc, char **argv) {
           case S_BACK:
              sleep(1);
              num++;
-             if (num>3) {
-                state = S_QUIT;
-                std::cout << "Quit system" <<std::endl;
+             if (num>2) {
+                if (wenguo==-1) {
+                  state = S_QUIT;
+                  std::cout << "Quit system" <<std::endl;
+                } else {
+                   uint8_t cmd_data[3];
+                   cmd_data[0] = 2; //recruiting side: 0 -- front, 1 -- left, 2 -- back, 3 -- right
+                   cmd_data[1] = 3; //recruited robot type: 1 -- KIT, 2 -- Scout, 3 -- ActiveWheel
+                   cmd_data[2] = 0; //recruited robot side: 0 -- front, 1 -- left, 2 -- back, 3 -- right
+                   equids.sendMessage(wenguo, DAEMON_MSG_RECRUITING, cmd_data, sizeof(cmd_data));
+                   equids.switchToJockey(wenguo);
+                   state = S_RECRUITING;
+                   equids.sendMessage(wenguo, DAEMON_MSG_STATE_REQ, NULL, 0);
+                   cnt = 0;
+                }
              } else {
                 equids.switchToJockey(forth);
                 state = S_FORTH;
+             }                
+             break;
+          case S_RECRUITING:
+             uint8_t st;
+             if (cnt<60) { // one minut wait for recruiting
+               if (equids.getMessage(wenguo)->type==DAEMON_MSG_STATE) {
+                  st = equids.getMessage(wenguo)->data[0];
+                  printf("Wnguo state is %i\n", st);
+                  if (st == INORGANISM) {
+                     printf("Quit Goal finished\n");
+                     state = S_QUIT;
+                  } else {
+                     sleep(1);
+                     cnt++;
+                     equids.getMessage(wenguo)->type==0;
+                     equids.sendMessage(wenguo, DAEMON_MSG_STATE_REQ, NULL, 0);
+                  }
+                  equids.getMessage(wenguo)->type==0;
+               }
+             } else {
+                printf("Quit TIME elapsed\n");
+                state = S_QUIT;
              }
              break;
           case S_QUIT:
              quit = true;
              break;
        }
-       usleep(50000);
+       usleep(100000);
     }
              
 	equids.quit();
