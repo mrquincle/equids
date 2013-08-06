@@ -26,6 +26,7 @@ One thing that is required for compilation is to set one environmental variable:
 
     cd "the path where you checked out this repository"
     export EQUID_PATH=`pwd`
+    echo "export EQUID_PATH=$EQUID_PATH" > ~/.bashrc
 
 If you run everything from the EQUIDS environment, you won't need to set this environmental variable, it will be automatically set in that Makefile.
 
