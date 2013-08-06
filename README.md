@@ -22,12 +22,27 @@ The server side utilities that for example show the camera images coming from th
 
 ## Compilation 
 
-The only thing that is required for compilation is to set one environmental variable:
+One thing that is required for compilation is to set one environmental variable:
 
     cd "the path where you checked out this repository"
     export EQUID_PATH=`pwd`
 
-If you run everything from the EQUIDS environment, you won't need to set this environmental variable, it will be automatically set in that Makefil.
+If you run everything from the EQUIDS environment, you won't need to set this environmental variable, it will be automatically set in that Makefile.
+
+Now, you can take a look at the file:
+
+    cat EQUID_PATH/Makefile
+
+If you want to have other jockeys/controllers compiled, change the array "JOCKEYS" over there. Separate the jockeys by spaces.
+
+### Dependencies
+
+Every jockey has its own dependencies. So, for example a jockey that uses the camera likely needs the libv4l2 library, or the jockey that does the blob detection requires the gsl library. If you are on Ubuntu and want to cross-compile these libraries yourself, the utility [apt-cross](https://github.com/mrquincle/apt-cross) is highly recommended. It uses apt-get to get the source code and has a few configuration options to cross-compile these libraries for the Blackfin microcontroller. Installation is a breeze like:
+
+    apt-cross v4l-utils blackfin
+    apt-cross libgsl blackfin
+
+There are no other dependencies known to me.
 
 ## Server-side
 
