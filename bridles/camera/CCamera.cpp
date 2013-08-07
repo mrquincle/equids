@@ -69,6 +69,10 @@ extern "C" {
 
 
 //-----------------------------------------------------------------------------
+
+/**
+ * Create a default camera device.
+ */
 CCamera::CCamera(): defaultImage(CRawImage(640,480,3))
 {
 	gain = exposition = 0;
@@ -90,6 +94,15 @@ CCamera::~CCamera() {
 	Stop();
 }
 
+/**
+ * Open the camera device.
+ *
+ * @param deviceName         v4l or v4l2 camera device, e.g. /dev/video0
+ * @param devfd              file descriptor of camera device
+ * @param width              resolution
+ * @param height             resolution
+ * @return                   success (0), failure (<0)
+ */
 int CCamera::Init(const char *deviceName, int &devfd, int width, int height)
 {
 	if (print_debug)
@@ -114,6 +127,13 @@ int CCamera::Init(const char *deviceName, int &devfd, int width, int height)
 	return 0;
 }
 
+/**
+ * Initialize the folder to get the dummy images from. It should have a bunch of images starting with "0000.bmp" and
+ * incrementing from there, "0001.bmp", etc.
+ *
+ * @param directoryName      directory from where to capture *.bmp files, expects first file "0000.bmp"
+ * @return                   success (0), failure (-1)
+ */
 int CCamera::dummyInit(const char *directoryName) {
 	dummy_mode = 1;
 	char fileName[1000];
@@ -128,6 +148,9 @@ int CCamera::dummyInit(const char *directoryName) {
 	return 0;
 }
 
+/**
+ * Closes the file descriptor to the camera.
+ */
 void CCamera::Stop() {
 	if (camdevfd >= 0) cam_closedev(camdevfd);
 	camdevfd = -1;
@@ -136,7 +159,18 @@ void CCamera::Stop() {
 }
 
 /**
- * Fill a previously allocated image with new data from the buffer in the v4l camera driver. This
+ * Fill a previously allocated image with new data from the buffer in the v4l camera driver. The data in the buffer is
+ * of a YUYV pattern. Originally, the sensor image has - of course - a Bayer pattern, for more information see the nice
+ * wikipedia article: https://en.wikipedia.org/wiki/Bayer_filter. This pattern has twice as many green pixels as red and
+ * blue ones, because of the sensitivity of the human eye for green.
+ *
+ * Anyway, the YUYV pattern has 4 values per in the end 2 RGB pixels. So, by asking the v4l or v4l2 drivers to return
+ * images in the YUYV (or YYUV, etc.) format, we get an image buffer of the size width*height*2. Now, we use these
+ * values twice to create in the end two RGB pixels. This is done in the yuv422_to_rgb function.
+ *
+ * @param image              the image to be returned
+ * @param convert            convert Bayer pattern to RGB, recommended!
+ * @return                   success (0), failure (<0)
  */
 int CCamera::renewImage(CRawImage* image, bool convert)
 {
@@ -171,7 +205,12 @@ int CCamera::renewImage(CRawImage* image, bool convert)
 }
 
 /**
- * Denoise image by capturing another one and averaging over the two.
+ * Denoise image by capturing another one and averaging over the two. This is of course a very blunt way with coping
+ * with noisy images. The most typical noise is a sudden "green" horizontal line. Getting rid of the images that have
+ * such lines will be most useful.
+ *
+ * @param image              image to be returned
+ * @return                   success (0), or failure (<0)
  */
 int CCamera::denoiseImageByCapturingAnother(CRawImage* image)
 {
@@ -194,7 +233,14 @@ int CCamera::denoiseImageByCapturingAnother(CRawImage* image)
 	return 0;
 }
 
-
+/**
+ * Not always is it useful to use the camera, for example when it is broken, or when you compile this code on the host.
+ * In that case, you can use this function to return a dummy image from a directory with images which simulates the
+ * proper stuff.
+ *
+ * @param image              next dummy image from the directory
+ * @return                   success (0), failure (<0)
+ */
 int CCamera::dummyImage(CRawImage* image)
 {
 	char fileName[1000];
@@ -222,10 +268,13 @@ int CCamera::dummyImage(CRawImage* image)
  * This means there should be the pixel format "V4L2_PIX_FMT_YUYV" used in the grab.cpp file. Hence, here we also use
  * it in that order: Y0 U Y1 V.
  *
- * There is no gamma correction in this function
+ * There is no gamma correction in this function, and no other sophisticated elaborations either. Take in mind that this
+ * is mainly meant for a robot, not for a human.
+ *
+ * @param output_ptr         start of the output buffer
+ * @param input_ptr          start of the input buffer
  */
-void CCamera::yuv422_to_rgb(unsigned char * output_ptr, unsigned char * input_ptr,
-		size_t width_times_height)
+void CCamera::yuv422_to_rgb(unsigned char * output_ptr, unsigned char * input_ptr, size_t width_times_height)
 {
 	if (print_debug)
 		printf("Convert yuv to rgb\n");

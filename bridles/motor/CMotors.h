@@ -28,6 +28,10 @@
 #define CMOTORS_H_
 
 #include <IRobot.h>
+#include <CTimer.h>
+
+//@todo: remove dependency of motors on this shared file with the "eth" bridle
+#include <messageDataType.h>
 
 /* *********************************************************************************************************************
  * Interface of CMotors
@@ -40,28 +44,59 @@
  */
 class CMotors {
 public:
-  CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type);
+	CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type);
 
-  ~CMotors();
+	~CMotors();
 
-  void init();
+	void init();
 
-  void setSpeeds(int forward, int turn);
+	void setRadianSpeeds(int forward, int radius);
 
-  void halt();
+	void setSpeeds(int forward, int turn);
 
-  void go();
+	void randomSpeeds();
 
-  //! Speed and radius are translated into commands for left and right
-  void translate(int speed, int radius, int & left, int & right);
+	void halt();
+
+	void go();
+
+	//! Speed and radius are translated into commands for left and right
+	void translate(int speed, int radius, int & left, int & right);
+
+	void setMotorPosition(float x,float y,float phi);
+	void setMotorSpeedsKB(int sFront,int sRear);
+	void setMotorSpeedsAW(int leftD,int rightD,int top);
+	void setMotorSpeedsS(int left,int right);
+	int actualspeed1;//screw front KB, track left Scout, leftDown AW
+	int actualspeed2;//screw rear, track right Scout, rightDown AW
+	int actualspeed3;// top AW
+	double odometry_koef1; //srew front KB , track left Scout, rightDown and leftDown AW
+	double odometry_koef2; //screw side KB , track right  Scout, top AW
+	double odometry_koef3; //scout track,
+	int calibratedSpeed;
+	double* getPosition();
+	bool isMoving();
+	void calibrate(MotorCalibResult calibrationResult);
+
 protected:
 
-  //! From speed command to value for wheel velocity
-  int cmd_to_ctrl(unsigned int speed);
+	//! From speed command to value for wheel velocity
+	int cmd_to_ctrl(unsigned int speed);
 private:
 	//! Reference to the robot class and type
 	RobotBase *robot_base;
 	RobotBase::RobotType robot_type;
+	CTimer* timer;
+	int lastTime;
+	double buf[10];
+	float posX;
+	float posY;
+	float posPhi;
+	float dx, dy, dphi;
+	void countOdometryTimeKB(int timediff);//count dead reckoning position change for KaBot
+	void countOdometryTimeAW(int timediff,double hinge);//count dead reckoning position change for ActiveWheel
+	void countOdometryTimeS(int timediff);//count dead reckoning position change for ScoutBot
+	void evaluatePosition();
 
 	int max_radius;
 	int min_wheel_velocity; // minimum value to the motors

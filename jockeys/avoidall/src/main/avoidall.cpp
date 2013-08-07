@@ -76,9 +76,13 @@ int main(int argc, char **argv) {
 	a.sa_handler = &interrupt_signal_handler;
 	sigaction(SIGINT, &a, NULL);
 
-	IRobotFactory factory;
-	RobotBase* robot = factory.GetRobot();
-	RobotBase::RobotType robot_type = factory.GetType();
+//	IRobotFactory factory;
+//	RobotBase* robot = factory.GetRobot();
+//	RobotBase::RobotType robot_type = factory.GetType();
+	RobotBase::RobotType robot_type = RobotBase::Initialize(NAME);
+	RobotBase* robot = RobotBase::Instance();
+	for (int i = 0; i < 4; ++i)
+		robot->SetPrintEnabled(i, false);
 
 	std::cout << "Setup laser functionality" << std::endl;
 	CLaser laser(robot, robot_type);

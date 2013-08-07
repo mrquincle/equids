@@ -10,11 +10,14 @@ include Mk/default.mk
 # errors in that way. Manually catching the error does not respect "make -k". 
 # Moreover, with a for-loop the make cannot be executed in parallel.
 
-#JOCKEYS=jockeys/lasertest jockeys/laserscan jockeys/avoidall
+JOCKEYS=
+#JOCKEYS=jockeys/lasertest jockeys/laserscan 
+JOCKEYS+=jockeys/avoidall
 #JOCKEYS=jockeys/position
-#JOCKEYS=jockeys/backandforth jockeys/actionselection
-JOCKEYS=jockeys/laserscan
-JOCKEYS=jockeys/cameradetection
+#JOCKEYS=jockeys/backandforth 
+#JOCKEYS+=jockeys/laserscan
+#JOCKEYS+=jockeys/cameradetection
+#JOCKEYS+=jockeys/actionselection
 
 CLEANJOCKEYS=$(addsuffix .clean,$(JOCKEYS))
 
