@@ -257,7 +257,6 @@ int CCamera::dummyImage(CRawImage* image)
 	return 0;
 }
 
-
 /**
  * According to: v4l2-ctl --list-formats on the robot itself:
     ioctl: VIDIOC_ENUM_FMT
@@ -344,7 +343,6 @@ void CCamera::yuyv_to_uyvy(unsigned char *data, size_t width, size_t height)
 		ptr+=4; // go to next byte
 	}
 }
-
 
 int CCamera::getGain()
 {

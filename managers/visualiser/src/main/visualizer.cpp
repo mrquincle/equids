@@ -51,13 +51,13 @@ int main(int argc,char* argv[])
 		a.sa_handler = &interrupt_signal_handler;
 		sigaction(SIGINT, &a, NULL);
 
-	if (argc < 2) {
-		fprintf(stderr, "Add ip address of image server as argument\n");
+	if (argc < 3) {
+		fprintf(stderr, "Add ip address of image server and port as argument\n");
 		return EXIT_FAILURE;
 	}
 	CImageClient* client = new CImageClient();
 //	client->connectServer("127.0.0.1","10000");
-	client->connectServer(argv[1],"10002");
+	client->connectServer(argv[1],argv[2]);
 	CTimer timer;
 	//message.type = MSG_GET_IMAGE;
 	image = new CRawImage();

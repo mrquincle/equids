@@ -64,6 +64,7 @@ typedef enum
 	S_BACK,
 	S_RECRUITING,
 	S_SINGLE_MESSAGE,
+	S_IDLE,
 	S_QUIT
 } TState;
 
@@ -187,8 +188,11 @@ int main(int argc, char **argv) {
 			sleep(1);
 			equids.switchToJockey(camera);
 			equids.sendMessage(camera, MSG_CAM_VIDEOSTREAM_START, NULL, 0);
+			state = S_IDLE; // just stay idle for the rest of the time
+			break;
+		case S_IDLE:
+			state = S_IDLE;
 			sleep(1);
-			state = S_QUIT;
 			break;
 		case S_QUIT:
 			quit = true;
@@ -197,6 +201,7 @@ int main(int argc, char **argv) {
 		usleep(100000);
 	}
 
+	std::cout << "Do quit controllers" << std::endl;
 	equids.quit();
 	return 0;
 }

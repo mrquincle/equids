@@ -11,6 +11,7 @@
 #include <stdio.h>
 #define MAX_JOCKEYS 20
 
+
 class CEquids
 {
    CJockey jockeys[MAX_JOCKEYS];
@@ -18,16 +19,20 @@ class CEquids
    bool start(void);
    int num_jockeys;
    int runningJockey;
+   int message;
 public:
    CEquids();
    ~CEquids();
+   CJockey* getRunningJockey(){return &this->jockeys[this->runningJockey];};
+   CJockey* getJockey(int jockeyNumber){return &this->jockeys[jockeyNumber];};
    bool init(const char *filename);
    void initJockey(int j);
    void switchToJockey(int j);
-   void sendMessage(int j, CMessage &m);
-   void sendMessage(int j, int type, void *data, int len);
+   void sendMessage(int jockey, CMessage &m);
+   void sendMessage(int jockey,int type, void *data, int len);
+   void sendMessageToALL(int type, void *data, int len);
    CMessage *getMessage(int j);
-   
+
    int  find(const char *name);
    void quit();
 };

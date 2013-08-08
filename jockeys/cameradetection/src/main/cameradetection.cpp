@@ -58,7 +58,7 @@ CImageServer* image_server;
 CCamera* camera;
 bool swapIMG = false;
 std::string portIS;
-bool stremVideo = false;
+bool streamVideo = false;
 
 //cicrcle detector for mapping
 CCircleDetect* circle_detector;
@@ -76,7 +76,7 @@ SSegment lastSegmentArray[MAX_DOCKING_PATTERNS];
 bool stop = false;
 void interrupt_signal_handler(int signal) {
 	if (signal == SIGINT) {
-//RobotBase::MSPReset();
+		//RobotBase::MSPReset();
 		exit(0);
 	}
 }
@@ -85,34 +85,34 @@ void switchActualTask(ActualCameraUsage newTask) {
 
 	//test if not switching to same
 	if(actualTask!=newTask){
-	/*
-	 * delete old allocation
-	 */
-	switch (actualTask) {
-	case DETECT_DOCKING: {
-		for (int i = 0; i < MAX_DOCKING_PATTERNS; i++) {
-			delete detectorArray[i];
+		/*
+		 * delete old allocation
+		 */
+		switch (actualTask) {
+		case DETECT_DOCKING: {
+			for (int i = 0; i < MAX_DOCKING_PATTERNS; i++) {
+				delete detectorArray[i];
+			}
+			delete circle_trans;
 		}
-		delete circle_trans;
-	}
 		break;
-	case DETECT_MAPPING: {
-		delete circle_detector;
-		delete circle_trans;
-	}
+		case DETECT_MAPPING: {
+			delete circle_detector;
+			delete circle_trans;
+		}
 		break;
-	case DETECT_STAIR: {
+		case DETECT_STAIR: {
 
-	}
+		}
 		break;
-	default:
-		break;
-	}
+		default:
+			break;
+		}
 
-	/*
-	 * alocate for new purposes
-	 */
-	switch (newTask) {
+		/*
+		 * alocate for new purposes
+		 */
+		switch (newTask) {
 		case DETECT_DOCKING:{
 			circle_trans = new CTransformation(IMAGE_WIDTH, IMAGE_HEIGHT,
 					TRACKED_CIRC_DIAMETER_DOCK, false);
@@ -121,21 +121,21 @@ void switchActualTask(ActualCameraUsage newTask) {
 				detectorArray[i] = new CCircleDetect(IMAGE_WIDTH, IMAGE_HEIGHT,
 						INNER_CIRC_DIAMETER_DOCK / TRACKED_CIRC_DIAMETER_DOCK);
 		};
-			break;
+		break;
 		case DETECT_MAPPING:{
 			circle_trans = new CTransformation(IMAGE_WIDTH, IMAGE_HEIGHT,
-								TRACKED_CIRC_DIAMETER_MAP, false);
+					TRACKED_CIRC_DIAMETER_MAP, false);
 			circle_detector = new CCircleDetect(IMAGE_WIDTH, IMAGE_HEIGHT,
-								INNER_CIRC_DIAMETER_MAP / TRACKED_CIRC_DIAMETER_MAP);
+					INNER_CIRC_DIAMETER_MAP / TRACKED_CIRC_DIAMETER_MAP);
 		};
-			break;
+		break;
 		case DETECT_STAIR:{
 			//need implementation
 		};
-			break;
+		break;
 		default:
 			break;
-	}
+		}
 
 	}
 
@@ -150,78 +150,82 @@ void switchActualTask(ActualCameraUsage newTask) {
  * function that handle with messages
  */
 void readMessages() {
-//	printf("getting message\n");
+	//	printf("getting message\n");
 	message = message_server->getMessage();
 	if (message.type != MSG_NONE) {
 		//	fprintf(stdout,"Command: %s %i %i %i %i\n",message.getStrType(),message.value1,message.value2,message.value3,message.value4);
 		switch (message.type) {
 		case MSG_INIT: {
-			printf("message init\n");
+			printf("Initialize %s\n", NAME);
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		}
-			;
-			break;
+		;
+		break;
 		case MSG_START: {
-			printf("message start\n");
+			printf("Start %s\n", NAME);
 			actualTask = DETECT_NO_TASK;
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		}
-			;
-			break;
+		;
+		break;
 		case MSG_STOP: {
-			printf("message stop\n");
+			printf("Stop %s\n", NAME);
 			switchActualTask(DETECT_NO_TASK);
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		}
-			;
-			break;
+		;
+		break;
 		case MSG_QUIT: {
-			printf("message quit\n");
+			printf("Quit %s\n", NAME);
 			switchActualTask(DETECT_NO_TASK);
 			stop = true;
 		}
-			;
-			break;
+		;
+		break;
 		case MSG_CAM_DETECT_DOCKING: {
 			printf("message MSG_CAM_DETECT_DOCKINGt\n");
 			switchActualTask(DETECT_DOCKING);
 			std::cout << "Initialize Docking" << std::endl;
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		}
-			;
-			break;
+		;
+		break;
 		case MSG_CAM_DETECT_MAPPING: {
 			printf("message MSG_CAM_DETECT_MAPPING\n");
 			switchActualTask(DETECT_MAPPING);
 			std::cout << "Initialize mapping" << std::endl;
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		}
-			;
-			break;
+		;
+		break;
 		case MSG_CAM_DETECT_STAIR: {
 			switchActualTask(DETECT_STAIR);
 			//need implementation
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		}
-			;
-			break;
+		;
+		break;
 
 		case MSG_CAM_VIDEOSTREAM_START: {
-			if (!stremVideo) {
+			printf("Start video stream on %s\n", NAME);
+			if (!streamVideo) {
+				streamVideo=true;
 				image_server->initServer(portIS.c_str());
 			}
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		}
-			;
-			break;
+		;
+		break;
 		case MSG_CAM_VIDEOSTREAM_STOP: {
-			if (stremVideo) {
+			printf("Stop video stream on %s\n", NAME);
+			if (streamVideo) {
+				streamVideo=false;
 				image_server->stopServer();
 			}
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		}
-			;
-			break;
+		;
+		break;
 		default:
 			break;
 		}
@@ -237,7 +241,7 @@ int main(int argc, char **argv) {
 	a.sa_handler = &interrupt_signal_handler;
 	sigaction(SIGINT, &a, NULL);
 	std::cout << DEBUG << "Started with params " << argv[1] << ", " << argv[2]
-			<< std::endl;
+	                                                                        << std::endl;
 
 	if (argc > 2) {
 		portMS = std::string(argv[1]);
@@ -262,6 +266,7 @@ int main(int argc, char **argv) {
 	camera->init(VIDEO_DEVICE, IMAGE_WIDTH, IMAGE_HEIGHT);
 	image = new CRawImage(IMAGE_WIDTH, IMAGE_HEIGHT);
 #endif
+	sem_init(&imageSem, 0, 1);
 
 	int cameraDeviceHandler;
 	int imgWidth = IMAGE_WIDTH;
@@ -276,8 +281,8 @@ int main(int argc, char **argv) {
 	std::cout << "Possible image server on port " << portIS << std::endl;
 
 	while (!stop) {
-		if(actualTask!=DETECT_NO_TASK || stremVideo){
-		camera.renewImage(image, true);
+		if(actualTask!=DETECT_NO_TASK || streamVideo){
+			camera.renewImage(image, true);
 		}
 		readMessages();
 		switch (actualTask) {
@@ -295,7 +300,7 @@ int main(int argc, char **argv) {
 						sizeof(DetectedBlobWSize));
 			}
 		}
-			break;
+		break;
 		case DETECT_DOCKING: {
 			DetectedBlob blobArray[MAX_DOCKING_PATTERNS];
 			int pocet = 0;
@@ -329,17 +334,17 @@ int main(int argc, char **argv) {
 						pocet * sizeof(DetectedBlob) + sizeof(uint8_t));
 			}
 		}
-			break;
+		break;
 		case DETECT_STAIR: {
 
 		}
-			break;
+		break;
 		default: {
 			//		printf("No actual Task\n");
 			usleep(100000);
 		}
-			;
-			break;
+		;
+		break;
 		}
 	}
 	std::cout << "Stopping camera detection jockey" << std::endl;

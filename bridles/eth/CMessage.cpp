@@ -24,7 +24,17 @@ const char* StrMessage[] ={
    "Progress",
    "Disassembly",
    "State REQ",
-   "State"
+   "State",
+   "Stop video Stream",
+   "Start video Stream",
+   "Start detect docking",
+   "Start detect mapping",
+   "Start detect stair",
+   	"Detected blob",
+   	"Detected blob array",
+   	"Detected stair",
+   	"Results of motor calibration",
+   	"Robot position from ubisence"
 };
 
 

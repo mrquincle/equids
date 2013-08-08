@@ -6,7 +6,7 @@ CImageServer::CImageServer(sem_t *imsem,CRawImage* im)
 {
 	dataSem = imsem;
 	image = im;
-	CISdebug = false;
+	CISdebug = true;
 	stop=false;
 	sem_init(&connectSem,0,1);	
 }
@@ -41,6 +41,7 @@ void* connectLoop(void *serv)
 
 int CImageServer::initServer(const char* port)
 {
+	if (CISdebug) fprintf(stdout,"Initialize server.\n");
 	int used_port = atoi(port);
 	stop = false;
 	struct sockaddr_in mySocketAddr;

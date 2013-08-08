@@ -10,7 +10,7 @@ CEquids::CEquids() {
 }
 
 CEquids::~CEquids() {
-   quit();
+//   quit();
 }
 
 int CEquids::analyze(char *buf, FILE *fd) {
@@ -76,7 +76,7 @@ bool CEquids::start() {
          }
          exit(1);
       } else if (pid>0) {
-         jockeys[i].init(pid);
+         jockeys[i].init(pid,this);
          jockeys[i].SendMessage(MSG_INIT, NULL, 0);
          while (jockeys[i].acknowledge==0) {
             usleep(10000);
@@ -120,6 +120,7 @@ void CEquids::initJockey(int j) {
       while (jockeys[j].acknowledge==0) {
          usleep(10000);
       }
+      jockeys[j].started = true;
    }
 }
 
@@ -129,6 +130,7 @@ void CEquids::switchToJockey(int j) {
       while (jockeys[runningJockey].acknowledge==0) {
          usleep(10000);
       }
+      jockeys[runningJockey].started = false;
    }
    if (j>=0 && j<num_jockeys) {
       runningJockey = j;
@@ -136,19 +138,20 @@ void CEquids::switchToJockey(int j) {
       while (jockeys[j].acknowledge==0) {
          usleep(10000);
       }
+      jockeys[runningJockey].started = true;
    }
 }
 
-void CEquids::sendMessage(int j, CMessage &m) {
-   if (j>=0 && j<num_jockeys) {
-      jockeys[j].SendMessage(m);
+void CEquids::sendMessage(int jockey, CMessage &m) {
+   if (jockey>=0 && jockey<num_jockeys) {
+      jockeys[jockey].SendMessage(m);
    }
 }
 
-void CEquids::sendMessage(int j, int type, void *data, int len) {
-   if (j>=0 && j<num_jockeys) {
-      jockeys[j].SendMessage(type, data, len);
-   }
+void CEquids::sendMessage(int jockey,int type, void *data, int len){
+	if (jockey>=0 && jockey<num_jockeys) {
+	      jockeys[jockey].SendMessage(type, data, len);
+	   }
 }
 
 CMessage *CEquids::getMessage(int j) {
@@ -158,6 +161,13 @@ CMessage *CEquids::getMessage(int j) {
       return NULL;
    }
 }
+
+void CEquids::sendMessageToALL(int type, void *data, int len){
+	for (int var = 0; var < num_jockeys; ++var) {
+		jockeys[var].SendMessage(type, data, len);
+	}
+}
+
    
 
 int CEquids::find(const char *name) {
@@ -170,7 +180,7 @@ int CEquids::find(const char *name) {
    }
    return ret;
 }
-  
+
 void CEquids::quit() {
    int ptr=0;
    int st=0;

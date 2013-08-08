@@ -27,9 +27,13 @@ static void addMessage(const ELolMessage *msg, void * connection, void * serv)
 
 int CMessageServer::initServer(const char* port)
 {
+
    jockey_IPC.SetCallback(addMessage, this);
+
    jockey_IPC.Name("jockey IPC");
+
    jockey_IPC.Start("localhost", atoi(port), true);
+
    return 0;
 }
 
@@ -37,10 +41,13 @@ int CMessageServer::initServer(const char* port)
 CMessage CMessageServer::getMessage()
 {
 	CMessage result;
+
 	sem_wait(&dataSem);
 	result = message;
+
 	messageRead++; 
 	message.type = MSG_NONE;
+
 	sem_post(&dataSem);
 	return result;
 }
