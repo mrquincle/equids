@@ -24,6 +24,7 @@ endif
 
 SUBDIRS+=main
 SUBDIRS+=eth
+SUBDIRS+=scenario
 
 ####################################################################################
 # Name of the final binary

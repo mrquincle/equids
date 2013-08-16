@@ -50,6 +50,7 @@ typedef enum
    MSG_UBISENCE_POSITION,
    MSG_MAP_DATA,
    MSG_MAP_COVARIANCE,
+   MSG_MAP_COMPLETE,
    MSG_NUMBER,
 } TMessageType;
 

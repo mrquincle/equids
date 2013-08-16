@@ -119,6 +119,7 @@ fi
 # user to subsequently run this command outside of this script.
 
 welcome() {
+	msg_info "We use $HOST as host IP address, make sure it corresponds with yours (check ifconfig)"
 	msg_info "Use rpc when available, this is a small bash script that does not need rpc on the robot"
 	msg_info "You will need to have the following installed: telnet, netcat, expect"
 	msg_info "Use standard \"sudo apt-get install expect\" to do so"

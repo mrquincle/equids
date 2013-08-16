@@ -10,7 +10,7 @@ include $(EQUID_PATH)/Mk/default.mk
 OBJS=$(patsubst %.cpp,%.o,$(wildcard *.cpp))
 
 # The directories that this "bridle" depends on
-CXXINCLUDE+=-I./ -I../eth -I../scenario
+CXXINCLUDE+=-I./ -I../eth
 
 all: $(OBJS) 
 
