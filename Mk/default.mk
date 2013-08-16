@@ -28,6 +28,7 @@ include $(SELF_DIR)/paths.mk
 # code to distinguish the robot use case from the one running on your laptop.
 #TARGET_PLATFORM=RASPBERRY, BLACKFIN, or HOST
 TARGET_PLATFORM=BLACKFIN
+#TARGET_PLATFORM=HOST
 
 # There are currently only two types of middleware targets supported, there is the
 # IROBOT middleware from Stuttgart and there is the HDMR middleware from Karlsruhe.
@@ -140,15 +141,24 @@ IROBOT_PATH=$(MIDDLEWARE_PATH_ROOT)/irobot
 #LIBCAM_PATH=$(MIDDLEWARE_PATH_ROOT)/irobot/libcam
 
 MIDDLEWARE_INCLUDES=-I$(IROBOT_PATH)/include #-I$(LIBCAM_PATH)/include 
-MIDDLEWARE_LIBS=-L$(IROBOT_PATH)/lib -ljpeg -lirobot
+MIDDLEWARE_LIBS=-L$(IROBOT_PATH)/lib -lirobot
 endif
 
 ####################################################################################
-# Additional options for your controllers
+# Additional options for all your controllers
 ####################################################################################
 
-CONTROLLER_LIBS=-lpthread -lv4l2 -lv4lconvert
+# Use a local jockey.mk in your controller, if you need a library only for that
+# controller
 
+CONTROLLER_LIBS=
+CONTROLLER_LIBS+=-lpthread
+#CONTROLLER_LIBS+=-lv4l2 -lv4lconvert
+#CONTROLLER_LIBS+=-ljpeg 
+
+#$(warning Information: We will use for your controller options: \
+#	"$(CONTROLLER_LIBS)". Add for example "-lv4l2 -lv4lconvert" or "-lWAPI" to \
+#	CONTROLLER_LIBS in default.mk if necessary for all controllers.)
 
 ####################################################################################
 # Compilation and assembler options, level of warnings, optimisation

@@ -8,6 +8,7 @@
 #define __CMESSAGE_H__
 
 #include "ethlolmsg.h"
+#include <string.h>
 
 #define MESSAGE_LENGTH  
 
@@ -59,14 +60,13 @@ class CMessage
 	public:
 		CMessage();
 		~CMessage();
-		unsigned char buf[];
-		void pack();
-		void unpack();
-        	void set(const ELolMessage*msg);
+        void set(const ELolMessage*msg);
+        void set(const CMessage *msg);
 		const char* getStrType();
 		TMessageType type;
 		int len;
-		const uint8_t *data;
+		bool valid;
+		uint8_t *data;
 		int value1;
 		int value2;
 		int value3;

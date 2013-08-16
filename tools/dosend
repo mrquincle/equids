@@ -1,0 +1,230 @@
+#!/bin/bash
+
+#######################################################################################################################
+# Color configuration
+#######################################################################################################################
+
+# Example usage:
+# echo -e ${RedF}This text will be red!${Reset}
+# echo -e ${BlueF}${BoldOn}This will be blue and bold!${BoldOff} - and this is just blue!${Reset}
+# echo -e ${RedB}${BlackF}This has a red background and black font!${Reset}and everything after the reset is normal text!
+colors() {
+	Escape="\033";
+	BlackF="${Escape}[30m"; RedF="${Escape}[31m";   GreenF="${Escape}[32m";
+	YellowF="${Escape}[33m";  BlueF="${Escape}[34m";    PurpleF="${Escape}[35m";
+	CyanF="${Escape}[36m";    WhiteF="${Escape}[37m";
+	BlackB="${Escape}[40m";     RedB="${Escape}[41m";     GreenB="${Escape}[42m";
+	YellowB="${Escape}[43m";    BlueB="${Escape}[44m";    PurpleB="${Escape}[45m";
+	CyanB="${Escape}[46m";      WhiteB="${Escape}[47m";
+	BoldOn="${Escape}[1m";      BoldOff="${Escape}[22m";
+	ItalicsOn="${Escape}[3m";   ItalicsOff="${Escape}[23m";
+	UnderlineOn="${Escape}[4m";     UnderlineOff="${Escape}[24m";
+	BlinkOn="${Escape}[5m";   BlinkOff="${Escape}[25m";
+	InvertOn="${Escape}[7m";  InvertOff="${Escape}[27m";
+	Reset="${Escape}[0m";
+}
+
+colors
+
+msg_error() {
+	echo -e ${RedF}"[#] $(date +"%x %R") - Error: $1"${Reset}
+}
+
+msg_warning() {
+	echo -e ${YellowF}"[#] $(date +"%x %R") - Warning: $1"${Reset}
+}
+
+msg_info() {
+	echo -e ${GreenF}"[#] $(date +"%x %R") - Info: $1"${Reset}
+}
+
+msg_debug() {
+	echo -e ${BlueF}"[#] $(date +"%x %R") - Debug: $1"${Reset}
+}
+
+#######################################################################################################################
+# Standard configuration
+#######################################################################################################################
+
+COMPILE_STD=/tmp/compile_std.log
+COMPILE_ERR=/tmp/compile_err.log
+
+#######################################################################################################################
+# Argument checking
+#######################################################################################################################
+
+if [[ "$1" == "" ]]
+then
+	msg_error "No args supplied! Run $0 -h for more info"
+	exit 1
+fi
+
+help() {
+	msg_info "Usage: $0 \"robot hostname\" \"program\""
+}
+
+if [[ "$1" == "-h" ]]
+then
+	help
+	exit 0
+fi
+
+if [[ "$#" != "2" ]]; then
+	msg_error "This program requires two arguments"
+	help
+	exit 0
+fi
+
+#######################################################################################################################
+# Configuration continued
+#######################################################################################################################
+
+#msg_debug "Remove previous log files"
+rm -f $COMPILE_STD
+rm -f $COMPILE_ERR
+
+# The program arguments
+ROBOT="$1"
+FILE="$2"
+HOST="192.168.52.200"
+
+FILE_PORT=10001
+PORT=23
+TARGETDIR=/flash
+
+# Computer hangs when ad-hoc network fails (could be telnet as well)
+#TERMINAL_PROGRAM=nc
+TERMINAL_PROGRAM=telnet
+MODEM=--zmodem
+
+cmd_send=/tmp/cmd_send
+cmd_recv=/tmp/cmd_recv
+cmd_goto=/tmp/cmd_goto
+cmd_size=/tmp/cmd_size
+
+#######################################################################################################################
+# File to send
+#######################################################################################################################
+
+if [[ ! -f "$FILE" ]]; then
+	msg_error "Error: \"$FILE\" does not exist (as regular file). Was it compiled without errors?"
+	exit 1
+fi
+
+#######################################################################################################################
+# Function definitions
+#######################################################################################################################
+
+# The functions write the exact command to a temporary file, e.g. $cmd_goto (default /tmp/cmd_goto). This allows the
+# user to subsequently run this command outside of this script.
+
+welcome() {
+	msg_info "Use rpc when available, this is a small bash script that does not need rpc on the robot"
+	msg_info "You will need to have the following installed: telnet, netcat, expect"
+	msg_info "Use standard \"sudo apt-get install expect\" to do so"
+	msg_info "You have to run this utility from the directory where the file resides"
+}
+
+get_ip_adress() {
+	msg_info "We will use \"$ROBOT\" to retrieve the IP address of the robot"
+	msg_debug "We assume there is an entry for \"$ROBOT\" in /etc/hosts"
+	IP_ADDRESS=$(cat /etc/hosts | grep -i $ROBOT | grep -v '#')
+	msg_info "Found ip address: \"$IP_ADDRESS\" (if empty, check /etc/hosts)"
+	if [ "$IP_ADDRESS" = "" ]; then
+		msg_warning "Cannot find hostname (and IP address) in /etc/hosts"
+		msg_info "We will use $ROBOT directly as IP_ADDRESS"
+		IP_ADDRESS=$ROBOT
+		msg_debug "This might fail"
+	else 
+		msg_info "Ping robot $ROBOT (at $IP_ADDRESS)"
+	fi
+}
+
+ping_robot() {
+	PING=`ping -a -W 2 -c 1 $ROBOT`
+	CONNECTION=`echo $PING | grep "1 received"`
+	if [ "$CONNECTION" != "" ]; then
+		msg_info "We can ping the robot. Let's connect!"
+	else
+		msg_error "Sorry, we can not ping the robot (exit)"
+		exit 23
+	fi
+}
+
+# This function is adapted to use "expect". The other functions should be rewritten likewise. With expect it is easy 
+# to wait for commands to be actually finished. In this case direct echoing of commands into a telnet session will 
+# cause files to be transferred only partly.
+receive_on_robot() {
+	msg_info "Receive file (using nc) in directory /flash"
+	echo "#!/usr/bin/expect -f" > $cmd_recv
+	echo "spawn $TERMINAL_PROGRAM $ROBOT $PORT" >> $cmd_recv
+	echo "expect login" >> $cmd_recv
+	echo "send \"root\\n\"" >> $cmd_recv
+	echo "send \"cd /flash\\n\"" >> $cmd_recv
+	echo "send \"rm $FILE\\n\"" >> $cmd_recv
+	echo "send \"nc -vv $HOST $FILE_PORT >$FILE\\n\"" >> $cmd_recv
+	echo "send \"chmod a+x $FILE\\n\"" >> $cmd_recv
+	echo "send \"exit\\n\"" >> $cmd_recv
+	echo "expect eof" >> $cmd_recv
+	chmod u+x $cmd_recv
+	$cmd_recv > /dev/null
+	sleep 1
+}
+
+# Get file size of the file on the robot side. And in the mean time, also set its chmod rwx access bits.
+getfilesize_on_robot() {
+	echo "Get file size in directory /flash"
+	echo "#!/usr/bin/expect -f" > $cmd_size
+	echo "spawn $TERMINAL_PROGRAM $ROBOT $PORT" >> $cmd_size
+	echo "expect login" >> $cmd_size
+	echo "send \"root\\n\"" >> $cmd_size
+	echo "send \"cd /flash\\n\"" >> $cmd_size
+	echo "send \"echo print file size on the robot:\\n\"" >> $cmd_size
+	echo "send \"ls -l | grep $FILE | tr -s ' ' | cut -f5 -d' ' \\n\"" >> $cmd_size
+	echo "send \"chmod a+x $FILE\\n\"" >> $cmd_size
+	echo "send \"exit\\n\"" >> $cmd_size
+	echo "expect eof" >> $cmd_size
+	chmod u+x $cmd_size
+	$cmd_size
+	msg_info "print file size on the host:"
+	du -b $FILE
+}
+
+# On the server-side a netcat process is started (in the background). Subsequently a corresponding receive nc process
+# should be started on the robot side.
+send_file() {
+	msg_info "Kill previous netcat processes"
+	ps acux | grep netcat > /dev/null && killall netcat
+	SECONDS=0
+	TYPE=$(file --brief "$FILE")
+	SIZE=$(ls -latrh "$FILE" | awk '{print $5}')
+	msg_info "Send file \"$FILE\" of type \"$TYPE\" and size \"$SIZE\""
+	echo "cat "$FILE" | netcat -l -p $FILE_PORT" > $cmd_send
+	chmod u+x $cmd_send
+	$cmd_send &
+	sleep 1
+	seconds=$SECONDS
+	hours=$((seconds / 3600))
+	seconds=$((seconds % 3600))
+	minutes=$((seconds / 60))
+	seconds=$((seconds % 60))
+
+	print_hours=$(printf %02d $hours)
+	print_minutes=$(printf %02d $minutes)
+	print_seconds=$(printf %02d $seconds)
+	msg_info "Sending took $print_hours:$print_minutes.$print_seconds (HH:MM.SS)"
+}
+
+#######################################################################################################################
+# Function execution
+#######################################################################################################################
+
+welcome
+get_ip_adress
+ping_robot
+send_file
+receive_on_robot
+
+#getfilesize_on_robot
+
+

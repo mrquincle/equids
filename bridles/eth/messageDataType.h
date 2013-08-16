@@ -4,12 +4,11 @@
 #define MAX_DOCKING_PATTERNS 2
 
 struct DetectedBlob {
-		float x;
-		float y;
-		float z;
-		float phi;
+	float x;
+	float y;
+	float z;
+	float phi;
 };
-
 
 struct DetectedBlobWSize {
 	uint8_t size;
@@ -21,11 +20,18 @@ struct DetectedBlobWSizeArray {
 	DetectedBlob detectedBlobArray[MAX_DOCKING_PATTERNS];
 };
 
-struct MotorCalibResult {//same meaning as for motors
+struct MotorCalibResult { //same meaning as for motors
 	double odometry_koef1;
 	double odometry_koef2;
 	double odometry_koef3;
 	int calibratedSpeed;
+};
+
+struct UbiPosition {
+	float x; //!< The x coordinate
+	float y; //!< The y coordinate
+	float z; //!< The y coordinate
+	uint32_t time_stamp; //!< The Ubisense coordinate time
 };
 
 #endif /* MESSAGEDATATYPE_H_ */

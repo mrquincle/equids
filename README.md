@@ -34,7 +34,7 @@ Now, you can take a look at the file:
 
     cat $EQUID_PATH/Makefile
 
-If you want to have other jockeys/controllers compiled, change the array "JOCKEYS" over there. Separate the jockeys by spaces.
+If you want to have other jockeys/controllers compiled, create a file called "enable_jockeys.mk" in the $EQUID_PATH and change the array "JOCKEYS" over there. 
 
 ### Dependencies
 

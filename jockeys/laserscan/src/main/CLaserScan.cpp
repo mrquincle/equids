@@ -33,30 +33,61 @@
 #include "CCamera.h"
 #include "CLaser.h"
 
+#include <CTextLog.h>
+
+bool LASER_VERBOSE = false;
+bool SAVE_IMAGES_TO_DISK = false; // does not work anyway, jpeg is disabled
+
+bool STREAM_RED_DIFF_IMAGES = true;
+bool STREAM_RGB_DIFF_IMAGES = true;
+
+bool SAVE_RED_DIFF_IMAGES_TO_DISK = false;
+bool SAVE_RGB_DIFF_IMAGES_TO_DISK = false;
+
+bool DUMMY_CAMERA = false;
+
 CLaserScan::CLaserScan(RobotBase *robot_base, RobotBase::RobotType robot_type,
 		int img_width = 640, int img_height = 480,
-		int laser_width = 640): printTime(false),
-		printLaser(false),
-		showDiff(false),
-		image1(new CRawImage(img_width, img_height, 3)),
-		image2(new CRawImage(img_width, img_height, 3)),
-		sfTimer(),
-		laser(robot_base, robot_type),
-		//		pix_buf(NULL),
-		laserVec(NULL),
-		laserSmallVec(NULL),
-		laserSmallVecSize(0),
-		//		laserX(NULL),
-		//		laserY(NULL),
-		imageWidth(img_width),
-		imageHeight(img_height),
-		laserResolution(laser_width),
-		colorSpace(CS_RGB),
-		topRowLimit(0),
-		bottomRowLimit(img_height-1), // has high value because index runs from top to bottom from low to high
-		threshold(20),
-		diff_threshold(20),
-		cameraDeviceHandler(-1) {
+		int laser_width = 640): printTime(LASER_VERBOSE),
+				printLaser(LASER_VERBOSE),
+				showDiffRed(SAVE_RED_DIFF_IMAGES_TO_DISK),
+				showDiffRGB(SAVE_RGB_DIFF_IMAGES_TO_DISK),
+				streamDiffRed(STREAM_RED_DIFF_IMAGES),
+				streamDiffRGB(STREAM_RGB_DIFF_IMAGES),
+				//				imageManip(CS_BGR),
+				imageManip(CS_RGB),
+				sfTimer(),
+				laser(robot_base, robot_type),
+				laserVec(NULL),
+				laserSmallVec(NULL),
+				image1(NULL),
+				image2(NULL),
+				image_red_diff(NULL),
+				image_rgb_diff(NULL),
+				laserSmallVecSize(0),
+				imageWidth(img_width),
+				imageHeight(img_height),
+				laserResolution(laser_width),
+				topRowLimit(0),
+				bottomRowLimit(img_height-1), // has high value because index runs from top to bottom from low to high
+				cameraDeviceHandler(-1),
+				coeff_a(20.0066),
+				coeff_b(-0.10189),
+				coeff_c(0.00063011) {
+	// the coefficients are obtained in an easy way
+	// x=[16,20,24,30,34] (cm) y=[98,156,197,231,249] (values) and p = polyfit(y,x,2) gives
+	//   6.3011e-04, -1.0189e-01, 2.0066e+01
+
+	assert(img_width > 0);
+	image1 = new CRawImage(img_width, img_height, 3);
+	image2 = new CRawImage(img_width, img_height, 3);
+	if (showDiffRed || streamDiffRed) {
+		image_red_diff = new CRawImage(img_width, img_height, 3);
+	}
+	if (showDiffRGB || streamDiffRGB) {
+		image_rgb_diff = new CRawImage(img_width, img_height, 3);
+	}
+
 }
 
 /**
@@ -67,6 +98,10 @@ CLaserScan::~CLaserScan() {
 	Stop();
 }
 
+/**
+ * Initialize camera. In case there is already a camera initialized, this will run havoc in the system. For the laser to
+ * be using the camera in that fashion it would need to request an image over shared memory or with another IPC method.
+ */
 int CLaserScan::InitCam(int imgWidth, int imgHeight, int laserResolution) {
 	imageWidth = imgWidth;
 	imageHeight = imgHeight;
@@ -74,27 +109,28 @@ int CLaserScan::InitCam(int imgWidth, int imgHeight, int laserResolution) {
 	laserSmallVecSize = laserResolution >> 5;
 
 	if (printLaser) {
-		printf("Laser resolution set to %i\n", laserResolution);
-		printf("Laser lower res set to %i\n", laserSmallVecSize);
+		printf("%s(): Laser resolution set to %i\n", __func__, laserResolution);
+		printf("%s(): Laser lower res set to %i\n", __func__, laserSmallVecSize);
 	}
-	//	pix_buf = new int[imgWidth * imgHeight * 3];
 	laserVec = new int[laserResolution];
 	laserSmallVec = new int[laserSmallVecSize];
-	//	laserX = new float[laserResolution];
-	//	laserY = new float[laserResolution];
 
-	int error;
-	error = 0;
+	int error = 0;
+
+	if (DUMMY_CAMERA) {
+		camera.dummyInit("/data/blackfin/test", "image");
+		return error;
+	}
 	camera.Init("/dev/video0", cameraDeviceHandler, imgWidth, imgHeight);
 	if (error < 0) fprintf (stderr, "Error initialising camera\n");
 	if (cameraDeviceHandler <= 0) {
-		fprintf(stdout, "Camera not properly initialized.\n");
-		fprintf(stdout, "Did you do \"modprobe blackfin-cam\"?\n");
+		fprintf(stderr, "Camera not properly initialized.\n");
+		fprintf(stderr, "Did you do \"modprobe blackfin-cam\"?\n");
 		error = -1;
 		return error;
 	}
 	if (printLaser)
-		fprintf(stdout,"Camera initialized\n");
+		fprintf(stdout,"%s(): Camera initialized in the laser\n", __func__);
 	return error;
 }
 
@@ -110,24 +146,23 @@ int CLaserScan::Init() {
 	sfTimer.setPeriod(2000);
 	error = InitCam(imageWidth, imageHeight, laserResolution);
 
-	// do not save the images to disk
-	//	camera.saveImages(true);
+	// save images to disk, or not
+	camera.saveImages(SAVE_IMAGES_TO_DISK);
 
 	return error;
 }
 
+/**
+ * Stop everything and deallocate all memory used to store the images and laserscans.
+ */
 void CLaserScan::Stop() {
 	if (printLaser)
 		printf("Deallocate image-related stuff in laser\n");
 	if (image1 != NULL) delete image1;
 	if (image2 != NULL) delete image2;
-	//	if (pix_buf != NULL) delete [] pix_buf;
 	if (laserVec != NULL) delete [] laserVec;
 	if (laserSmallVec != NULL) delete [] laserSmallVec;
-	//	if (laserX != NULL) delete [] laserX;
-	//	if (laserY != NULL) delete [] laserY;
 	laserVec = NULL; laserSmallVec = NULL;
-	//	laserX = NULL; laserY = NULL;
 	if (printLaser)
 		printf("All laser scan stuff deallocated\n");
 	camera.Stop();
@@ -151,6 +186,9 @@ int CLaserScan::generateVector(CRawImage* laserImage, CRawImage* noLaserImage, i
 	assert (laserImage->getwidth() == noLaserImage->getwidth());
 	assert (laserImage->getheight() == noLaserImage->getheight());
 
+	int threshold = 20;
+	int diff_threshold = 20;
+
 	int topRow = topRowLimit;
 	int bottomRow = bottomRowLimit;
 	int width = laserImage->getwidth();
@@ -166,19 +204,23 @@ int CLaserScan::generateVector(CRawImage* laserImage, CRawImage* noLaserImage, i
 	}
 
 	if (printLaser)
-		printf("%s: row %i-%i [width %i, height %i]\n", __func__, bottomRowLimit, topRowLimit, width, laserImage->getheight());
+		printf("%s(): row %i-%i [width %i, height %i]\n", __func__, bottomRowLimit, topRowLimit, width, laserImage->getheight());
 
 	// we first run over the width of the image
 	for (int i = 0; i<width; ++i) {
+
 		bool red = false;
 		int h;
 		// we now run over this column from the bottom row (high index) to the top row (low index)
 		// because close items are more important than items far away
 		for (h = bottomRow; h > topRow && !red; h--){
 			pos = 3*(h*width+i);
-			red = isMoreRed(*laserImage, *noLaserImage, pos);
+			// if we detect red as red enough, we set the flag
+			red = imageManip.isMoreRed(*laserImage, *noLaserImage, pos, threshold, diff_threshold);
 		}
+		// broken out of the loop, so either red detected, or h became topRow
 		vec[i] = laserImage->getheight()-1 - h;
+		// just set to 0 if no red detected
 		if (!red) {
 			vec[i] = 0; // distance=0 if nothing was red
 		}
@@ -186,157 +228,202 @@ int CLaserScan::generateVector(CRawImage* laserImage, CRawImage* noLaserImage, i
 	return 0;
 }
 
-/**
- * What defines red depends on the channel encoding. It seems to be the case that the OpenCV images coming from YARP on
- * the PC use channel 3 for red (BGR). The images on the Surveyor robot actually use RGB (channel 1).
- */
-inline bool CLaserScan::isMoreRed(CRawImage &img1, CRawImage &img2, int pos) {
-	int c_red, c_green, c_blue;
-	switch (colorSpace) {
-	case CS_RGB:
-		c_red   = abs((int)img1.data[pos]  -(int)img2.data[pos]);
-		c_green = abs((int)img1.data[pos+1]-(int)img2.data[pos+1]);
-		c_blue  = abs((int)img1.data[pos+2]-(int)img2.data[pos+2]);
-		break;
-	case CS_BGR:
-		c_blue  = abs((int)img1.data[pos]  -(int)img2.data[pos]);
-		c_green = abs((int)img1.data[pos+1]-(int)img2.data[pos+1]);
-		c_red   = abs((int)img1.data[pos+2]-(int)img2.data[pos+2]);
-		break;
-	default:
-		fprintf(stderr, "Unknown colorSpace, should be RGB or BGR\n");
-		return false;
+int CLaserScan::generateVector(CRawImage* laserImage, CRawImage* noLaserImage, std::vector<int> & vec) {
+	assert (laserImage->getwidth() == noLaserImage->getwidth());
+	assert (laserImage->getheight() == noLaserImage->getheight());
+	int threshold = 20;
+	int diff_threshold = 20;
+	for (int j = 0; j < laserImage->getheight(); j++) {
+		int p = 0;
+		for (int i = 0; i < laserImage->getwidth(); i++) {
+			int pos = 3*(j*laserImage->getwidth()+i);
+			bool red = imageManip.isMoreRed(*laserImage, *noLaserImage, pos, threshold, diff_threshold);
+			if (red) {
+				p = i;
+				break;
+			}
+		}
+		vec.push_back(p);
 	}
-	return ((c_red > threshold) &&
-			(abs(c_blue - c_red) > diff_threshold) && (abs(c_green - c_red) > diff_threshold));
+	if (printLaser) {
+		fprintf(stdout, "%s(): Laser array [%i]: \n", __func__, vec.size());
+		for (int i = 0; i < vec.size(); i++) {
+			fprintf(stdout, "%03i ", vec[i]);
+			if ((i % 32) == 31) {
+				fprintf(stdout,"\n");
+			}
+		}
+		fprintf(stdout, "\n");
+	}
+
+	return 0;
 }
 
 /**
- * Create a black-white difference image. The difference in the red channel should be above a certain threshold.
- * Moreover, the difference in the green and the blue channel should be small at the same time. If that wouldn't be
- * filtered out, intensity alone would be sufficient and for example the edge between floor and wall would also surpass
- * the red threshold together with the green and blue channels. Now, we are more specific searching for the red laser
- * line.
- *
- * @param plain              If true, use RGB channels, if false, use only red channel through "isMoreRed".
+ * Return the length of the detected red line. Assumes that this is one line only. And estimates the distance to that
+ * line. If the thing portrayed on is too close, it will not be seen by the camera and the red-line will be portrayed
+ * till the bottom of the visual field of the camera.
  */
-CRawImage* CLaserScan::diff(CRawImage* laserImage, CRawImage* noLaserImage, bool plain)
-{
-	int w = laserImage->getwidth();
-	int h = laserImage->getheight();
-	assert (w == noLaserImage->getwidth());
-	assert (h == noLaserImage->getheight());
+void CLaserScan::estimateParameters(std::vector<int> & vec, int & length, int & distance) {
+	// count the number of successive non-zeros for now (three zeros breaks the line)
+	length = 0;
+	distance = 0;
+#ifdef STRATEGY_CONSECUTIVE
+	int gap = 0;
+	for (int i = 0; i < vec.size() && gap < 4; i++) {
+		if (vec[i]) {
+			length++;
+			gap=0;
+		} else if (length) {
+			gap++;
+		}
+	}
+#elif STRATEGY_SIMPLE
+	for (int i = 0; i < vec.size(); i++) {
+		if (vec[i]) {
+			length++;
+		} else if (!length) {
+			distance++;
+		}
+	}
+#else
+	//
+	int avg = 0; int cnt = 0;
+	for (int i = 0; i < vec.size(); i++) {
+		if (vec[i]) {
+			avg += vec[i];
+			length++;
+		}
+	}
+	if (length)
+		distance = avg / length;
+#endif
+}
 
-	CRawImage *diff = new CRawImage(w, h, 3);
-	unsigned char* im_diff = diff->data;
-
-	if (plain && printLaser) printf("Will use entire diff, not only of red-channel\n");
-
-	// x over width, y over height
-	for (int y = 0; y < h; y++) {
-		for (int x = 0; x < w; x++) {
-			if (plain) {
-				int pos = 3*(y*w+x);
-				im_diff[pos+0] = abs(laserImage->data[pos+0] - noLaserImage->data[pos+0]);
-				im_diff[pos+1] = abs(laserImage->data[pos+1] - noLaserImage->data[pos+1]);
-				im_diff[pos+2] = abs(laserImage->data[pos+2] - noLaserImage->data[pos+2]);
-				continue;
-			}
-			bool d;
-			int pos = 3*(y*w+x);
-			d = isMoreRed(*laserImage, *noLaserImage, pos);
-
-			if (d) {
-				im_diff[pos] = 200;
-				im_diff[pos+1] = 200;
-				im_diff[pos+2] = 200;
-			} else {
-				im_diff[pos] = 0;
-				im_diff[pos+1] = 0;
-				im_diff[pos+2] = 0;
+/**
+ *
+ */
+void CLaserScan::getLine(CRawImage *image, double & alpha, double & d) {
+	std::vector<DecPoint*> points;
+	points.clear();
+	for (int i = 0; i < image->getwidth(); ++i) {
+		for (int j = 0; j < image->getheight(); ++j) {
+			Pixel p = image->getPixel(i,j);
+			if (p.r > 50) {
+				points.push_back(new DecPoint(i,j));
 			}
 		}
 	}
-	return diff;
+	std::cout << "Created a vector with " << points.size() << " points " << std::endl;
+
+	hough.addPoints(points);
+
+	std::cout << "Hough transform step ";
+	for (int t = 0; t < 40; t++) {
+		std::cout << t << ' ';
+		hough.doTransform();
+	}
+	std::cout << std::endl;
+
+	for (int i = 0; i < points.size(); i++) {
+		delete points[i];
+	}
+	points.erase(points.begin(), points.end());
+	//	hough.
 }
 
 /**
  * Gets the data for the laser and the camera.
  */
 void CLaserScan::GetData() {
+	if (printLaser) printf("%s(): Main function to get camera information with the laser turned off vs on\n", __func__);
 	char* imagePtr;
 
 	// Reset and start the timer (so it won't overrun)
 	sfTimer.reset();
 	sfTimer.start();
 
-	// Make a picture with the laser turned off
-	//	camera.renewImage(image1, false); // just for the sake of it, shoot one
-
 	laser.Off();
 
-	if (printTime) fprintf(stdout,"Start grabbing time: %i \n", sfTimer.getTime());
-	//	camera.renewImage(image1, false); // don't convert, just to get the most recent one
+	if (printTime) fprintf(stdout,"Start grabbing time: %ims\n", sfTimer.getTime());
 	camera.renewImage(image1, true);
-	camera.denoiseImageByCapturingAnother(image1);
+	//	camera.denoiseImageByCapturingAnother(image1);
+
+	assert (imageManip.CheckIntegrity(image1) );
 
 	// Turn the laser on
 	laser.On();
 
 	// Take the second picture
-	//	camera.renewImage(image2, false);
 	camera.renewImage(image2, true);
-	camera.denoiseImageByCapturingAnother(image2);
+	//	camera.denoiseImageByCapturingAnother(image2);
 
 	// Turn the laser off
 	laser.Off();
 
-	if (showDiff) {
-		CRawImage *diffimg = diff(image2,image1, false);
-		std::stringstream ss;
-		ss.clear(); ss.str("");
-		ss << "imagediff" << sfTimer.getTime() << ".bmp";
-		diffimg->saveBmp(ss.str().c_str());
+	int time = sfTimer.getTime(); // make sure, the time is from capturing... more or less, not from writing
+	//	time = 0; // for debugging purposes, or else the thing is called differently all the time
+	if (printTime) fprintf(stdout,"Finished grabbing at time: %ims\n", time);
 
-		// For debugging loop over entire image
-		int nonzeros = 0;
-		for (int i = 0; i < diffimg->getsize(); ++i) {
-			if (diffimg->data[i] != 0) nonzeros++;
+	if (showDiffRed || streamDiffRed) {
+		// save the image that only diffs the red channel
+		imageManip.diff_red(image2,image1,image_red_diff);
+		if (printTime) fprintf(stdout,"Done red-diffing image: %ims\n", sfTimer.getTime());
+
+		if (showDiffRed) {
+			imageManip.CheckIntegrity(image_red_diff);
+			std::stringstream ss; ss.clear(); ss.str("");
+			ss << "red_imagediff" << time << ".bmp";
+			image_red_diff->saveBmp(ss.str().c_str());
 		}
-		if (nonzeros < 10) {
-			fprintf(stderr, "There are only %i non-zero values in diff images, cannot be good\n", nonzeros);
+	}
+
+	if (showDiffRGB || streamDiffRGB) {
+		// save the image that diffs all channels
+		imageManip.diff_rgb(image2,image1,image_rgb_diff);
+		if (printTime) fprintf(stdout,"Done rgb-diffing image: %ims\n", sfTimer.getTime());
+
+		if (showDiffRGB) {
+			imageManip.CheckIntegrity(image_rgb_diff);
+			std::stringstream ss; ss.clear(); ss.str("");
+			ss << "rgb_imagediff" << time << ".bmp";
+			image_rgb_diff->saveBmp(ss.str().c_str());
 		}
-		delete diffimg;
+	}
 
-		diffimg = diff(image2,image1, true);
-		ss.clear(); ss.str("");
-		ss << "imagediff_rgb" << sfTimer.getTime() << ".bmp";
-		diffimg->saveBmp(ss.str().c_str());
-		delete diffimg;
+	if (showDiffRed || showDiffRGB) {
+		// also store the raw images themselves for comparison
+		std::stringstream ss; ss.clear(); ss.str("");
+		ss << "raw1_image" << time << ".bmp";
+		image1->saveBmp(ss.str().c_str());
 
+		// also store the raw images themselves for comparison
 		ss.clear(); ss.str("");
-		ss << "image2" << sfTimer.getTime() << ".bmp";
+		ss << "raw2_image" << time << ".bmp";
 		image2->saveBmp(ss.str().c_str());
 	}
 
-	// Compute the laser vector using the two images
-	generateVector(image2,image1,laserVec);
-	if (printTime) fprintf(stdout,"Laser scan detection time: %i \n",sfTimer.getTime());
-	//	computeScan(laserVec,laserX,laserY);
-	//	if (printTime) fprintf(stdout,"Laser scan computation time: %i \n",sfTimer.getTime());
+	// Compute the orientation of the line and its distance to the origin
+	//	double alpha, d;
+	//	getLine(image_red_diff,alpha,d);
 
-	// Print laser data
-	if (printLaser) {
-		fprintf(stdout,"%s - Laser [%i]: ", __func__, laserResolution);
-		for (int i = 0; (i < laserResolution) && printTime; i++) {
-			fprintf(stdout,"%03i ",laserVec[i]);
-			if ((i % 32) == 31) {
-				fprintf(stdout,"\n");
-				usleep(10000);
-			}
-		}
-		fprintf(stdout,"\n");
-	}
+	if (printTime) fprintf(stdout,"%s(): Laser scan detection time: %ims\n",__func__,sfTimer.getTime());
+
+	// Compute the laser vector using the two images
+	//generateVector(image2,image1,laserVec);
+//
+//	// Print laser data
+//	if (printLaser) {
+//		fprintf(stdout,"%s(): Laser [%i]: \n", __func__, laserResolution);
+//		for (int i = 0; (i < laserResolution) && printTime; i++) {
+//			fprintf(stdout,"%03i ",laserVec[i]);
+//			if ((i % 32) == 31) {
+//				fprintf(stdout,"\n");
+//				usleep(10000);
+//			}
+//		}
+//		fprintf(stdout,"\n");
+//	}
 }
 
 int avg(int *vector, int size) {
@@ -403,6 +490,8 @@ void subsample(int *vector_in, int size_in, int *vector_out, int size_out) {
  * account calculating the average for the outgoing values.
  */
 void CLaserScan::Fill(int *in, int in_size, int *out, int out_size) {
+	assert (in != NULL);
+	assert (out != NULL);
 	assert((in_size % out_size) == 0);
 	int div_factor = in_size / out_size;
 	if(printLaser) printf("%s(): From size %i to %i (factor of %i)\n", __func__, in_size, out_size, div_factor);
@@ -426,6 +515,8 @@ void CLaserScan::Fill(int *in, int in_size, int *out, int out_size) {
 /**
  * Uses the laser data to calculate the distance to an object or the wall. The value distance[i]=0 is used as not a
  * number to get rid of values that are too large.
+ *
+ * @param distance           distance to be set, will be set to 0 if there is no laser ray detected
  */
 void CLaserScan::GetDistance(int &distance) {
 	distance = 0;
@@ -434,9 +525,48 @@ void CLaserScan::GetDistance(int &distance) {
 
 	GetData();
 
+	laserVector.clear();
+	generateVector(image2,image1,laserVector);
+	int length = 0;
+	estimateParameters(laserVector, length, distance);
+//	if (printLaser) {
+		fprintf(stdout,"%s(): Line length: %i pixels\n", __func__, length);
+//		fprintf(stdout,"%s(): Distance to line: %i cm\n", __func__, distance);
+//	}
+
+		//		x=[7,10,13,16,19,22,25,28,31,34,37];
+		//		y=[151,204,234,250,265,276,281,287,292,298,300];
+		//		p = polyfit(y,x,2)
+		//
+		//		   1.9176e-03  -6.8800e-01   6.8157e+01
+	double coeff_a = 68.157;
+	double coeff_b = -0.688;
+	double coeff_c = 0.0019176;
+	distance = coeff_a + (double)distance * coeff_b + (double)distance*distance*coeff_c;
+
+	if (printTime) fprintf(stdout,"%s(): Laser calculations: %i \n", __func__, sfTimer.getTime());
+
+	printf("Laser detected ");
+	if (distance > 40) {
+		printf("nothing for now\n");
+	} else if (length > 220) {
+		printf("wall\n");
+		std::cout << wall << std::endl;
+	} else if (length < 100) {
+		printf("small step\n");
+		std::cout << small << std::endl << step << std::endl;
+	} else if (length < 200) {
+		printf("large step\n");
+		std::cout << large << std::endl << step << std::endl;
+	} else {
+		printf("something, but has to decide\n");
+	}
+
+
+#ifdef CALC_DISTANCE
 	Fill(laserVec, laserResolution, laserSmallVec, laserSmallVecSize);
 
-	if (!printLaser) {
+	if (printLaser) {
 		fprintf(stdout, "%s(): Smaller laser array [%i]: ", __func__, laserSmallVecSize);
 		for (int i = 0; i < (laserSmallVecSize); i++)
 			fprintf(stdout, "%03i ", laserSmallVec[i]);
@@ -447,13 +577,16 @@ void CLaserScan::GetDistance(int &distance) {
 	int min_dist = min(laserSmallVec, laserResolution >> div_factor);
 	if(printLaser) printf("%s(): minimum detected non-zero value = [%i]\n", __func__, min_dist);
 	assert(min_dist < imageHeight);
-	if (min_dist < 10) { // too close? then cannot be accurate, the camera would not even see the line that close
+	if (min_dist < 10) {
+		// too close? then cannot be accurate, the camera would not even see the line that close
 		distance = 0;
-	} else if (min_dist > (imageHeight-10)) {  // too far? that must be an error, camera cannot even see the laser there
+	} else if (min_dist > (imageHeight-10)) {
+		// too far? that must be an error, camera cannot even see the laser there
 		distance = 0;
 	} else {
 		// the following values are calculated from the laser scan on a wall at different distances
-		distance = (double)20.0066 + (double)min_dist * -0.10189 + (double)min_dist*min_dist*0.00063011; //(imageHeight - max_dist); // why >> 2 // invert the distance
+		distance = coeff_a + (double)min_dist * coeff_b + (double)min_dist*min_dist*coeff_c;
 	}
 	if(printLaser) printf("%s(): calculated distance = [%i]\n", __func__, distance);
+#endif
 }

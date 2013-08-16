@@ -2,19 +2,32 @@
 #include <cassert>
 #include <iostream>
 
-//static unsigned char header[] =  {66,77,54,16,14,0,0,0,0,0,54,0,0,0,40,0,0,0,128,2,0,0,224,1,0,0,1,0,24,0,0,0,0,0,0,16,14,0,18,11,0,0,18,11,0,0,0,0,0,0,0,0,0,0};
-
-#define RGB_HEADER_SIZE	54
-#define PALETTE_SIZE		(256*4)
-#define GRAY_HEADER_SIZE    (RGB_HEADER_SIZE+PALETTE_SIZE)
-#define BITMAP_SIZE		0
+#define RGB_HEADER_SIZE      54
+#define PALETTE_SIZE         (256*4)
+#define GRAY_HEADER_SIZE     (RGB_HEADER_SIZE+PALETTE_SIZE)
+#define BITMAP_SIZE          0
 
 int CRawImage::numSaved = 0;
+
+#define ASSERT(condition) { \
+		if(!(condition)){ \
+			std::cerr << "ASSERT FAILED: " << #condition << " @ " << __FILE__ << " (" << __LINE__ << ")" << std::endl; \
+			assert(condition); \
+		} \
+}
+
+#define ASSERT_EQUAL(x,y) \
+		if (x != y) { \
+			std::cerr << "ASSERT FAILED: " << #x << " != " << #y ", specifically: " << x << " != " << y << " @ "  \
+			<< __FILE__ << " (" << __LINE__ << ")" << std::endl; \
+			assert(x == y); \
+		}
+
 
 /**
  * Use just a raw header so we don't get packed structs etc. By default we will assume an RGB format.
  */
-static unsigned char header[] = {66,77, // magic word for BMP
+static VALUE_TYPE header[] = {66,77, // magic word for BMP
 		RGB_HEADER_SIZE,0,0,0, // size of the BMP file (no data is just the header)
 		0,0, // application specific
 		0,0, // application specific
@@ -43,34 +56,52 @@ static unsigned char header[] = {66,77, // magic word for BMP
  */
 CRawImage::CRawImage(int wi, int he, int bpp): width(wi), height(he), bpp(bpp)
 {
+	ASSERT(width > 0);
 	size = bpp*width*height;
-	data = (unsigned char*)calloc(size,sizeof(unsigned char));
+	data = (VALUE_TYPE*)calloc(size,sizeof(VALUE_TYPE));
 	updateHeader();
 }
 
 CRawImage::CRawImage(const CRawImage & other): width(other.width), height(other.height),
-	  size(other.size), bpp(other.bpp) {
-	  data = (unsigned char*)calloc(size,sizeof(unsigned char));
-	  memcpy (data, other.data, other.size);
-	  updateHeader();
+		size(other.size), bpp(other.bpp) {
+	data = (VALUE_TYPE*)calloc(size,sizeof(VALUE_TYPE));
+	memcpy (data, other.data, other.size);
+	updateHeader();
 }
 
 //! Average two images, write result to this image
 void CRawImage::average(const CRawImage & other) {
-	assert (size == other.size);
+	ASSERT_EQUAL(size, other.size);
 	assert (height == other.height);
 	for (int i = 0; i < size; ++i) {
 		data[i] = (data[i] + other.data[i]) / 2;
 	}
 }
 
+VALUE_TYPE CRawImage::getValue(int x, int y) {
+	assert (bpp == 1);
+	assert (x >= 0 && x < width);
+	assert (y >= 0 && y < height);
+	int index = (y*width+x);
+	return data[index];
+}
 
-#define ASSERT(condition) { \
-	if(!(condition)){ \
-		std::cerr << "ASSERT FAILED: " << #condition << " @ " << __FILE__ << " (" << __LINE__ << ")" << std::endl; \
-		assert(condition); \
-	} \
-	}
+void CRawImage::setValue(int x, int y, Patch & patch, VALUE_TYPE value) {
+	ASSERT(bpp == 1);
+	ASSERT(x >= 0 && x < patch.width);
+	ASSERT(y >= 0 && y < patch.height);
+	int base = (y*patch.width+x)*bpp;
+	patch.data[base] = value;
+}
+
+void CRawImage::setValue(int x, int y, VALUE_TYPE value) {
+	assert (bpp == 1);
+	assert (x >= 0 && x < width);
+	assert (y >= 0 && y < height);
+	int index = (y*width+x);
+	data[index] = value;
+}
+
 
 Pixel CRawImage::getPixel(int x, int y) {
 	assert (bpp == 3);
@@ -95,8 +126,11 @@ Pixel CRawImage::getPixel(int x, int y, Patch & patch) {
 	return pixel;
 }
 
+/**
+ * Set a pixel in the patch at position [x,y] in that patch.
+ */
 void CRawImage::setPixel(int x, int y, Patch & patch, Pixel pixel) {
-//	std::cout << "Set pixel " << x << "," << y << " for patch " << patch.width << "x" << patch.height << std::endl;
+	//	std::cout << "Set pixel " << x << "," << y << " for patch " << patch.width << "x" << patch.height << std::endl;
 	ASSERT(x >= 0 && x < patch.width);
 	ASSERT(y >= 0 && y < patch.height);
 	int base = (y*patch.width+x)*3;
@@ -105,17 +139,41 @@ void CRawImage::setPixel(int x, int y, Patch & patch, Pixel pixel) {
 	patch.data[base+2] = pixel.g;
 }
 
+void CRawImage::setPixel(int x, int y, Pixel pixel) {
+	int base = (y*width+x)*3;
+	data[base+0] = pixel.b;
+	data[base+1] = pixel.r;
+	data[base+2] = pixel.g;
+}
+
+void CRawImage::setPatch(int p_x, int p_y, Patch &patch) {
+	for (int i = 0; i < patch.width; i++) {
+		for (int j = 0; j < patch.height; j++) {
+			Pixel p = getPixel(i,j,patch);
+			setPixel(p_y*patch.width+i, p_x*patch.height+j, p);
+		}
+	}
+}
+
 /**
  * Get patch of size "patch.width * patch.length". This is more "bewerkelijk" than seems at first sight because the
  * array is stored in a linear fashion, to get a "square" of data out of it, you will need to jump all over the place.
  * That's why we now just check every individual element.
+ *
+ * @param x                  index of patch in x-direction
+ * @param y                  index of patch in y-direction
+ * @param patch.width        width of the patch
+ * @param patch.length       height/length of the patch
+ * @param bpp                global parameter should be 3
+ * @return                   side-effect, adjust patch by reference, and also allocate data in it!
  */
 void CRawImage::getPatch(int x, int y, Patch & patch) {
 	std::cout << "Get patch at " << x << ',' << y << std::endl;
 	assert (bpp == 3);
 	assert (x >= 0 && x < width);
 	assert (y >= 0 && y < height);
-	patch.data = (unsigned char*)calloc(patch.width*patch.height*bpp, sizeof(unsigned char));
+	if (patch.data == NULL)
+		patch.init(patch.width, patch.height);
 
 	for (int i = 0; i < patch.width; ++i) {
 		for (int j = 0; j < patch.height; ++j) {
@@ -137,38 +195,74 @@ CRawImage* CRawImage::patch2Img(Patch &patch) {
 
 
 void CRawImage::refresh() {
+	ASSERT(width > 0);
 	size = bpp*width*height;
 	if (data != NULL) free(data);
-	data = (unsigned char*)calloc(size,sizeof(unsigned char));
+	data = (VALUE_TYPE*)calloc(size,sizeof(VALUE_TYPE));
 	std::cout << "Set size to " << width << '*' << height << '*' << bpp << std::endl;
 	updateHeader();
 }
 
+/**
+ * Return a compressed image in the form of a Patch.
+ */
+void CRawImage::compress(Patch &patch) {
+	assert (patch.width == width / 2); // for now only accept an image that is 4-times smaller
+	assert (patch.height == height / 2);
+
+	for (int x = 0; x < width; x+=2) {
+		for (int y = 0; y < height; y+=2) {
+
+#ifdef AVERAGE
+			Pixel sum; // initialised as zeros
+			Pixel p[4];
+			p[0] = getPixel(x,y) / 4;
+			p[1] = getPixel(x+1,y) / 4;
+			p[2] = getPixel(x,y+1) / 4;
+			p[3] = getPixel(x+1,y+1) / 4;
+
+			for (int i = 0; i < 4; ++i) {
+				sum = sum + p[i];
+			}
+			setPixel(x/2,y/2,patch,sum);
+#else
+			// just subsample
+			setPixel(x/2,y/2,patch,getPixel(x,y));
+#endif
+		}
+	}
+}
+
+/**
+ * Update the standard BMP header, see above for the exact format. It will not contain any color palette, compression
+ * information, or other sophisticated information. It just has information about size, width, height, bits per pixel,
+ * and other basic info.
+ */
 void CRawImage::updateHeader() {
-	assert (width > 0);
+	ASSERT(width > 0);
 	int s;
 	if (bpp == 3)
 		s = height*width*bpp+RGB_HEADER_SIZE;
 	else
 		s = height*width*bpp+GRAY_HEADER_SIZE;
 
-	header[2] = (unsigned char)s;
-	header[3] = (unsigned char)(s >> 8);
-	header[4] = (unsigned char)(s >> 16);
+	header[2] = (VALUE_TYPE)s;
+	header[3] = (VALUE_TYPE)(s >> 8);
+	header[4] = (VALUE_TYPE)(s >> 16);
 
 	if (bpp == 3) {
-		header[10] = (unsigned char)RGB_HEADER_SIZE;
-		header[11] = (unsigned char)(RGB_HEADER_SIZE >> 8);
+		header[10] = (VALUE_TYPE)RGB_HEADER_SIZE;
+		header[11] = (VALUE_TYPE)(RGB_HEADER_SIZE >> 8);
 	} else {
 		// we make it plus 4*256 values for color pallete in grayscale case
-		header[10] = (unsigned char)GRAY_HEADER_SIZE;
-		header[11] = (unsigned char)(GRAY_HEADER_SIZE >> 8);
+		header[10] = (VALUE_TYPE)GRAY_HEADER_SIZE;
+		header[11] = (VALUE_TYPE)(GRAY_HEADER_SIZE >> 8);
 	}
 
 	header[18] = width%256;
 	header[19] = width/256;
-//		header[18] = 255;
-//		header[19] = 255;
+	//		header[18] = 255;
+	//		header[19] = 255;
 	// image height 22,23, 24, 25
 	header[22] = height%256;
 	header[23] = height/256;
@@ -184,8 +278,8 @@ void CRawImage::updateHeader() {
 	header[36] = s >> 16;
 	// horizontal resolution
 	if (bpp == 1) {
-//		header[38] = 18;
-//		header[42] = 18;
+		//		header[38] = 18;
+		//		header[42] = 18;
 		for (int i = 44; i < RGB_HEADER_SIZE; ++i) {
 			header[i] = 0;
 		}
@@ -209,20 +303,21 @@ int CRawImage::getSaveNumber()
 
 CRawImage::~CRawImage()
 {
-//	printf("Deallocate image of size %i\n", size);
+	printf("Deallocate image of size %i\n", size);
 	if (data != NULL) {
 		free(data);
 	}
+	data = NULL;
 }
 
 void CRawImage::makeMonochrome() {
 	assert (bpp == 3);
 	assert (data != NULL);
 	assert (width > 0);
-//	printf("%s(): Size is %i\n", __func__, size);
+	//	printf("%s(): Size is %i\n", __func__, size);
 	swap();
 
-	unsigned char* newData = (unsigned char*)calloc(width*height,sizeof(unsigned char));
+	VALUE_TYPE* newData = (VALUE_TYPE*)calloc(width*height,sizeof(VALUE_TYPE));
 	for (int i = 0; i < width*height; ++i) {
 		int temp = data[i*3]*30 + data[i*3+1]*59 + data[i*3+2]*11;
 		newData[i] = temp / (100);
@@ -253,7 +348,9 @@ void CRawImage::makeMonochrome(CRawImage *result) {
 }
 
 /**
- * Swap the first and third bytes of an YUV or RGB array
+ * Swap the first and third bytes of an YUV or RGB array. This is done in a very blunt manner, namely by making an
+ * entire copy of the image, copying the channels into the different positions, copying everything to the data array,
+ * and deallocating the temporary copy.
  */
 void CRawImage::swap()
 {
@@ -261,12 +358,13 @@ void CRawImage::swap()
 		return;
 	}
 	if (data == NULL) return;
-	unsigned char* newData = (unsigned char*)calloc(size,sizeof(unsigned char));
+	printf("%s(): performing a computationally expensive swap\n");
+	VALUE_TYPE* newData = (VALUE_TYPE*)calloc(size,sizeof(VALUE_TYPE));
 	int span = width*bpp;
 	for (int j = 0;j<height;j++){
 		memcpy(&newData[span*j],&data[span*(height-1-j)],span);
 		for (int i = 0;i<width;i++){
-			unsigned char a = newData[(width*j+i)*3];
+			VALUE_TYPE a = newData[(width*j+i)*3];
 			newData[(width*j+i)*3] = newData[(width*j+i)*3+2];
 			newData[(width*j+i)*3+2] = a;
 		}
@@ -277,14 +375,13 @@ void CRawImage::swap()
 
 void CRawImage::saveBmp(const char* inName)
 {
-	updateHeader();
-//	std::cout << __func__ << ": save" << std::endl;
+	ASSERT(size > 0);
+//	updateHeader();
 	FILE* file = fopen(inName, "wb");
-//	std::cout << __func__ << ": save2" << std::endl;
 	swap();
 	fwrite(header,54,1,file);
 	if (bpp == 1) {
-		unsigned char *temp_palette = (unsigned char*)calloc(PALETTE_SIZE, sizeof(unsigned char));
+		VALUE_TYPE *temp_palette = (VALUE_TYPE*)calloc(PALETTE_SIZE, sizeof(VALUE_TYPE));
 		// you'll need a color palette for grayscale images.
 		for (int i = 0; i < PALETTE_SIZE / 4; ++i) {
 			temp_palette[i*4] = temp_palette[i*4+1] = temp_palette[i*4+2] = i;
@@ -307,7 +404,10 @@ void CRawImage::saveNumberedBmp(const char *name, bool increment)
 	saveBmp(nameext);
 }
 
-
+/**
+ * A bitmap image is loaded from a file. The header file is not read, only the size of the image, which is assumed to be
+ * at byte position 54.
+ */
 bool CRawImage::loadBmp(const char* inName)
 {
 	printf("Open file %s\n", inName);
@@ -317,17 +417,23 @@ bool CRawImage::loadBmp(const char* inName)
 	if (bpp == 1) setbpp(3);
 
 	FILE* file = fopen(inName,"rb");
-	if (file!=NULL)
-	{
+	if (file!=NULL) {
 		size_t n = fread(data,54,1,file);
 		if (n == 0) {
+			fprintf(stderr, "Could read image header, but subsequent value indicates a size of 0 in %s\n", inName);
 			return false;
 		}
 		n = fread(data,size,1,file);
-		if (n == 0) return false;
+		if (n == 0) {
+			fprintf(stderr, "Attempted to read %i bytes, but get nothing in %s\n", size, inName);
+			return false;
+		}
 		fclose(file);
-//		swap();
+		swap();
+		fprintf(stdout, "Read %i bytes from %s\n", size, inName);
 		return true;
+	} else {
+		fprintf(stderr, "Could not load bitmap file %s\n", inName);
 	}
 	return false;
 }
@@ -335,7 +441,7 @@ bool CRawImage::loadBmp(const char* inName)
 void CRawImage::plotCenter()
 {
 	int centerWidth = 20;
-	unsigned char color[] = {255,150,150};
+	VALUE_TYPE color[] = {255,150,150};
 	for (int i = -centerWidth;i<centerWidth;i++){
 		for (int j =0;j<3;j++){
 			data[(width*(height/2+i)+width/2-centerWidth)*3+j] = color[j];
@@ -364,6 +470,32 @@ void CRawImage::plotLine(int x,int y) {
 		data[bidx+0] = 255;
 		data[bidx+1] = 255;
 		data[bidx+2] = 0;
+	}
+}
+
+// Plot line from [x0,y0] to [x1,y1]
+void CRawImage::plotLine(int x0, int y0, int x1, int y1) {
+	assert(bpp == 1); // for now
+	assert (x0 >= 0 && x0 < width);
+	assert (x1 >= 0 && x1 < width);
+	assert (y0 >= 0 && y0 < height);
+	assert (y1 >= 0 && y1 < height);
+	int xr = abs(x0-x1);
+	int yr = abs(y0-y1);
+	if (xr > yr) {
+		int xstep = x0 < x1 ? 1 : -1;
+		int ystep = y0 < y1 ? 1 : -1;
+		for (int i = x0; i != x1; i+=xstep) { // loop over slowest moving index
+			int j = y0 + xstep*ystep*((i-x0) * yr) / xr;
+			setValue(i,j,255);
+		}
+	} else {
+		int xstep = x0 < x1 ? 1 : -1;
+		int ystep = y0 < y1 ? 1 : -1;
+		for (int j = y0; j != y1; j+=ystep) { // loop over slowest moving index
+			int i = x0 + xstep*ystep*((j-y0) * xr) / yr;
+			setValue(i,j,255);
+		}
 	}
 }
 

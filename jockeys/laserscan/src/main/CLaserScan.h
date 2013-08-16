@@ -32,15 +32,17 @@
  **********************************************************************************************************************/
 
 #include "CRawImage.h"
+#include "CImageManip.h"
 #include "CTimer.h"
 #include "CLaser.h"
 #include "CCamera.h"
 
+#include <Hough.h>
+#include <DetectLineModuleExt.h>
+
 /***********************************************************************************************************************
  * Interface
  **********************************************************************************************************************/
-
-enum ColorSpace { CS_RGB, CS_BGR};
 
 /**
  * Uses data from laser and camera for e.g. distance information
@@ -69,8 +71,13 @@ public:
 	//! Setter for limits, top < bottom... (awkward, yes)
 	inline void setLimits(int top, int bottom) { topRowLimit = top; bottomRowLimit = bottom; }
 
-	//! Set color mask
-	inline void setColorSpace(ColorSpace cs) { colorSpace = cs; }
+	CRawImage *getRGBDiffImg() { return image_rgb_diff; }
+
+	CRawImage *getRedDiffImg() { return image_red_diff; }
+
+	CRawImage *getImg1() { return image1; }
+
+	CRawImage *getImg2() { return image2; }
 
 protected:
 	//! Get the laser scan
@@ -82,24 +89,31 @@ protected:
 	//! Generate laser vector using two cameras, one with laser on, one with laser off
 	int generateVector(CRawImage* laserImage, CRawImage* noLaserImage, int* vec);
 
-	//! Generate vector from difference image
-//	unsigned char* generateVector(CRawImage* diffImage, int & vec_size);
+	int generateVector(CRawImage* laserImage, CRawImage* noLaserImage, std::vector<int> & vec);
 
-	//! Scan outputs two float vectors from one vector of distances
-//	void computeScan(int* vec,float* x,float* y);
+	//! Get line from an image
+	void getLine(CRawImage *image, double & alpha, double & d);
 
-	//! Return difference between two images
-	CRawImage* diff(CRawImage* laserImage, CRawImage* noLaserImage, bool plain);
+//	int estimateLength(std::vector<int> & vec);
+	void estimateParameters(std::vector<int> & vec, int & length, int & distance);
 
-	bool isMoreRed(CRawImage &img1, CRawImage &img2, int pos);
 private:
+	//! The internal structure for the Hough transform
+	dobots::Hough<DecPoint> hough;
+
 	bool printTime;
 
 	bool printLaser;
 
-	bool showDiff;
+	bool showDiffRed;
 
-	CRawImage *image1,*image2;
+	bool showDiffRGB;
+
+	bool streamDiffRed;
+
+	bool streamDiffRGB;
+
+	CRawImage *image1,*image2,*image_red_diff,*image_rgb_diff;
 
 	CTimer sfTimer;
 
@@ -107,25 +121,28 @@ private:
 
 	CLaser laser;
 
-	ColorSpace colorSpace;
+	CImageManip imageManip;
 
 	int cameraDeviceHandler;
 
-//	char *pix_buf;
+	std::vector<int> laserVector;
+
 	int *laserVec;
 	int *laserSmallVec;
 	int laserSmallVecSize;
-//	float *laserX;
-//	float *laserY;
 
 	int imageWidth;
 	int imageHeight;
 	int laserResolution;
 
-	int threshold;
 	int topRowLimit;
 	int bottomRowLimit;
-	int diff_threshold;
+
+	//! Coefficients used to calculate from vertical line height to distance, this depends on the laser and camera
+	//! placement
+	double coeff_a;
+	double coeff_b;
+	double coeff_c;
 
 };
 

@@ -18,6 +18,9 @@ endif
 # Optional global makefile overriding (cross)compiler settings etc.
 -include /etc/robot/overwrite.mk
 
+# Optional local jockey file for specific options for this jockey
+-include jockey.mk
+
 ####################################################################################
 # List the directories you want to include from the "bridles" 
 ####################################################################################
@@ -26,6 +29,9 @@ SUBDIRS+=main
 SUBDIRS+=laser
 SUBDIRS+=camera
 SUBDIRS+=common
+SUBDIRS+=camserver
+SUBDIRS+=hough
+SUBDIRS+=eth
 
 ####################################################################################
 # Name of the final binary

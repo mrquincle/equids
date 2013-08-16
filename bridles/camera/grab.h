@@ -16,6 +16,13 @@ int cam_format(int fd, int width, int height, int format);
 //! Capture image from camera
 unsigned char* cam_capture(int fd, int width, int height);
 
+unsigned char* cam_stream(int fd);
+
+//! In case cam_stream is used, use this too, after cam_opendev
+void init_mmap(int fd, const char* dev_name);
+
+void start_capturing(int fd);
+
 #ifdef __cplusplus
 }
 #endif

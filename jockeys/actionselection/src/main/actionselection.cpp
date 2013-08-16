@@ -108,11 +108,12 @@ int main(int argc, char **argv) {
 	int wenguo = equids.find("wenguo");
 	int camera = equids.find("camera");
 
-	if (forth==-1) {
+	if (forth>=0) {
+		equids.initJockey(forth);
+	} else {
 		std::cerr << "Not defined jockey forth" << std::endl;
-//		equids.quit();
-//		return EXIT_FAILURE;
 	}
+
 	if (back==-1) {
 		std::cerr << "Not defined jockey back" << std::endl;
 //		equids.quit();
@@ -132,8 +133,14 @@ int main(int argc, char **argv) {
 		state = S_SINGLE_MESSAGE;
 	}
 
+	equids.initJockey(0);
+
 	while (!quit) {
 		switch(state) {
+//		case S_FORAGING:
+//			break;
+//		case S_3DLOCOMOTION:
+//			break;
 		case S_FORTH:
 			sleep(1);
 			equids.switchToJockey(back);

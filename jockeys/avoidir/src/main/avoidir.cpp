@@ -93,6 +93,14 @@ void graceful_end(CMotors & motors) {
 	exit(EXIT_SUCCESS);
 }
 
+RobotBase* start(RobotBase::RobotType &type) {
+	type = RobotBase::Initialize(NAME);
+	RobotBase *robot = RobotBase::Instance();
+	for (int i = 0; i < 4; ++i)
+		robot->SetPrintEnabled(i, false);
+	return robot;
+}
+
 /**
  * Basically only turns on and off the laser for a couple of times.
  */
@@ -114,10 +122,8 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	RobotBase::RobotType robot_type = RobotBase::Initialize(NAME);
-	RobotBase* robot = RobotBase::Instance();
-	for (int i = 0; i < 4; ++i)
-		robot->SetPrintEnabled(i, false);
+	RobotBase::RobotType robot_type;
+	RobotBase* robot = start(robot_type);
 
 	//	std::cout << "Reset robot manually" << std::endl;
 	//	RobotBase::MSPReset();

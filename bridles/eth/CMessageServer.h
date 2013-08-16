@@ -20,6 +20,7 @@
 #include "CMessage.h"
 #include "ipc.hh"
 #include <semaphore.h>
+#include <vector>
 #include <pthread.h>
 
 #define NUM_CONNECTIONS 100
@@ -37,6 +38,7 @@ void* serverLoop(void* serv);
 class CMessageServer{
 
         IPC::IPC  jockey_IPC;
+        CMessage mm;
    
 	public:
 
@@ -68,7 +70,8 @@ class CMessageServer{
 		//bool buttons[10];
 		//int rotation[1];
 		//int ir[4];
-		int messageRead;
+		int last_ptr;
+		std::vector<CMessage *> lastMessages;
 };
 
 #endif

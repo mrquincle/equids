@@ -19,14 +19,29 @@
 #include <string.h>
 
 /**
+ * We do not want to use C++ templates, but on the other hand we want to change type at once.
+ */
+typedef unsigned char VALUE_TYPE;
+
+/**
  * This is a very basic implementation of an image. It just uses three char's, one for each of the color channels.
  * Nothing fancy, no padding. Moreover, this struct is only used for communication with the user. The internal structure
  * is a (linear) array with RGB values or monochrome values.
  */
 struct Pixel {
-	char r;
-	char g;
-	char b;
+	VALUE_TYPE r;
+	VALUE_TYPE g;
+	VALUE_TYPE b;
+	Pixel(): r(0), g(0), b(0) {};
+	Pixel(VALUE_TYPE r, VALUE_TYPE g, VALUE_TYPE b): r(r), g(g), b(b) {};
+
+	Pixel operator+(const Pixel & other) {
+		return Pixel((r+other.r),(g+other.g),(b+other.b));
+	}
+
+	Pixel operator/(char factor) {
+		return Pixel(r/factor,g/factor,b/factor);
+	}
 };
 
 /**
@@ -36,9 +51,29 @@ struct Pixel {
  * compilation unit.
  */
 struct Patch {
-	unsigned char *data;
+	VALUE_TYPE *data;
 	int width;
 	int height;
+	Patch(): data(NULL), width(0), height(0) {};
+	Patch(int width, int height) {
+		data = NULL;
+		init(width, height);
+	}
+	void init(int width, int height, int bpp=3) {
+		printf("%s(): initialize patch of size %i\n", __func__, width*height*bpp);
+		this->width = width;
+		this->height = height;
+		printf("%s(): what is weird about new or calloc here?\n", __func__);
+		//data = (VALUE_TYPE*)calloc(width*height*bpp, sizeof(VALUE_TYPE));
+		data = new VALUE_TYPE[width*height*bpp];
+		printf("%s(): initialized patch of size %i\n", __func__, width*height*bpp);
+	}
+	~Patch() {
+		if (data != NULL) {
+			delete [] data;
+//			free(data);
+		}
+	}
 };
 
 /**
@@ -61,6 +96,15 @@ public:
 	//! Average two images, write result to this image
 	void average(const CRawImage & other);
 
+	//! Gets value at [x,y], only valid if bpp=1
+	VALUE_TYPE getValue(int x, int y);
+
+	//! Sets value at [x,y], only valid if bpp=1
+	void setValue(int x, int y, VALUE_TYPE value);
+
+	//! Set a value in a given patch at [x,y], only valid if bpp=1
+	void setValue(int x, int y, Patch & patch, VALUE_TYPE value);
+
 	//! Only valid if bpp=3, returns an rgb pixel
 	Pixel getPixel(int x, int y);
 
@@ -70,11 +114,20 @@ public:
 	//! Set a pixel in a given patch
 	void setPixel(int x, int y, Patch & patch, Pixel pixel);
 
+	//! Set a pixel in the picture
+	void setPixel(int x, int y, Pixel pixel);
+
+	//! Set the patch
+	void setPatch(int p_x, int p_y, Patch &patch);
+
 	//! Get the patch itself (requires a malloc op)
 	void getPatch(int x, int y, Patch & patch);
 
 	//! Add header information etc. required to make a full-fledged CRawImage from a Patch struct
 	CRawImage* patch2Img(Patch &patch);
+
+	//! Get a patch the size of the picture divided by some factor
+	void compress(Patch &patch);
 
 	//! Reallocate internal data structures if necessary
 	void refresh();
@@ -102,6 +155,8 @@ public:
 
 	//! Plot a vertical and/or horizontal line through x and y (not entirely trivial if bpp > 1)
 	void plotLine(int x,int y);
+	//! Plot line from [x0,y0] to [x1,y1], only working for bpp=1 for now
+	void plotLine(int x0, int y0, int x1, int y1);
 	//! Plot blob in center of image
 	void plotCenter();
 	//! Plot a cross of size "size" at given position
@@ -123,7 +178,7 @@ public:
 	double getOverallBrightness(bool upperHalf);
 
 	//! Just show the data to the user, if you screw up, it's your own responsibility
-	unsigned char* data;
+	VALUE_TYPE* data;
 
 	//! Reallocate the internal data structure on changing the number of bytes per pixel
 	void setbpp(int bpp) { this->bpp = bpp; refresh(); }

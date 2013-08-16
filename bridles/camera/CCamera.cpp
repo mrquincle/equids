@@ -28,6 +28,8 @@
 #include <cstdlib>
 #include <cassert>
 
+#include <iostream>
+
 //! Declare the following as unmangled C functions
 extern "C" {
 #include <grab.h>
@@ -35,6 +37,19 @@ extern "C" {
 }
 
 #include <CCamera.h>
+
+#define ASSERT(condition) { \
+	if(!(condition)){ \
+		std::cerr << "ASSERT FAILED: " << #condition << " @ " << __FILE__ << " (" << __LINE__ << ")" << std::endl; \
+		assert(condition); \
+	} \
+	}
+
+#define ASSERT_EQUAL(x,y) \
+	if (x != y) { \
+		std::cout << #x << " != " << #y ", specifically: " << x << " != " << y << std::endl; \
+		assert(x == y); \
+	}
 
 
 //-----------------------------------------------------------------------------
@@ -70,13 +85,20 @@ extern "C" {
 
 //-----------------------------------------------------------------------------
 
+#define DEFAULT_IMAGE_WIDTH  640
+#define DEFAULT_IMAGE_HEIGHT 480
+
+//! This is a crappy implementation from Sheffield that does grab one image at a time
+#define OLD
+// kernel panic, needs debugging: #undef OLD
+
 /**
  * Create a default camera device.
  */
-CCamera::CCamera(): defaultImage(CRawImage(640,480,3))
+CCamera::CCamera(): width(DEFAULT_IMAGE_WIDTH), height(DEFAULT_IMAGE_HEIGHT),
+		defaultImage(CRawImage(DEFAULT_IMAGE_WIDTH,DEFAULT_IMAGE_HEIGHT,3))
 {
 	gain = exposition = 0;
-	width = height = 0;
 	loadFileIndex = 0;
 	saveFileIndex = 0;
 	dummy_mode = 0;
@@ -87,7 +109,7 @@ CCamera::CCamera(): defaultImage(CRawImage(640,480,3))
 	camdevfd = -1;
 	pixel_format = V4L2_PIX_FMT_YUYV;
 	print_debug = false;
-	return;
+	ASSERT_EQUAL(defaultImage.getwidth(), width);
 }
 
 CCamera::~CCamera() {
@@ -119,11 +141,17 @@ int CCamera::Init(const char *deviceName, int &devfd, int width, int height)
 			printf("CCamera: Device %s opened\n", deviceName);
 	}
 	devfd = camdevfd;
+#ifndef OLD
+	init_mmap(devfd, deviceName);
+	start_capturing(devfd);
+#endif
 
 	// we will need to capture a few images to get rid of the greenish pictures in the beginning
+	printf("We capture 10 images to get rid of greenish pictures in the beginning\n");
 	for (int i = 0; i < 10; ++i) {
 		cam_capture(camdevfd, width, height);
 	}
+	printf("Finished capturing\n");
 	return 0;
 }
 
@@ -134,11 +162,12 @@ int CCamera::Init(const char *deviceName, int &devfd, int width, int height)
  * @param directoryName      directory from where to capture *.bmp files, expects first file "0000.bmp"
  * @return                   success (0), failure (-1)
  */
-int CCamera::dummyInit(const char *directoryName) {
+int CCamera::dummyInit(const char *directoryName, const char *prefixImage) {
 	dummy_mode = 1;
 	char fileName[1000];
-	strcpy(directory,directoryName);
-	sprintf(fileName,"%s/0000.bmp",directory);
+	strcpy(directory, directoryName);
+	strcpy(loadFilePrefix, prefixImage);
+	sprintf(fileName, "%s/%s0000.bmp", directory, loadFilePrefix, prefixImage);
 	fprintf(stderr,"Camera type: dummy camera\n");
 	FILE* file = fopen(fileName,"r");
 	if (file == NULL){
@@ -178,10 +207,15 @@ int CCamera::renewImage(CRawImage* image, bool convert)
 
 	size_t yuv_size = width*height*2;
 	if (print_debug)
-		printf("Size is %i\n", (int)yuv_size);
+		printf("Size of YUVY is %i\n", (int)yuv_size);
 	assert (yuv_size > 0);
 	unsigned char* buffer = NULL;
+
+#ifdef OLD
 	buffer = cam_capture(camdevfd, width, height);
+#else
+	buffer = cam_stream(camdevfd);
+#endif
 
 	if (print_debug)
 		printf("Grabbed frame, now copy to buffer in CRawImage\n");
@@ -198,7 +232,7 @@ int CCamera::renewImage(CRawImage* image, bool convert)
 	if (convert) {
 		yuv422_to_rgb(image->data, (unsigned char*)buffer, yuv_size);
 	} else {
-		fprintf(stderr, "Just realize that you copied the original Bayer pattern formatted data.\n");
+		fprintf(stderr, "Just realize that you copied the original YUV formatted data.\n");
 		memcpy(image->data,buffer,yuv_size);
 	}
 	return 0; 
@@ -244,16 +278,17 @@ int CCamera::denoiseImageByCapturingAnother(CRawImage* image)
 int CCamera::dummyImage(CRawImage* image)
 {
 	char fileName[1000];
-	sprintf(fileName,"%s/%04i.bmp",directory,loadFileIndex);
-	printf("Tries to load file %s\n", fileName);
+	sprintf(fileName,"%s/%s%04i.bmp",directory,loadFilePrefix,loadFileIndex);
+	printf("Tries to load file %s as a dummy image\n", fileName);
 	if (image->loadBmp(fileName)) {
 		loadFileIndex++;
 	} else {
 		loadFileIndex=0;
-		sprintf(fileName,"%s/%04i.bmp",directory,loadFileIndex);
+		sprintf(fileName,"%s/%s%04i.bmp",directory,loadFilePrefix,loadFileIndex);
 		image->loadBmp(fileName);
 	}
-	assert (image->getwidth() == width);
+
+	ASSERT_EQUAL(image->getwidth(),width);
 	return 0;
 }
 
@@ -277,6 +312,7 @@ void CCamera::yuv422_to_rgb(unsigned char * output_ptr, unsigned char * input_pt
 {
 	if (print_debug)
 		printf("Convert yuv to rgb\n");
+
 	unsigned int i, size;
 	unsigned char Y0, Y1, U, V;
 	unsigned char *buff = input_ptr;
@@ -309,6 +345,7 @@ void CCamera::yuv422_to_rgb(unsigned char * output_ptr, unsigned char * input_pt
 		*output_pt++ = YUV2G(Y1, U, V);
 		*output_pt++ = YUV2B(Y1, U, V);
 	}
+
 	if (print_debug)
 		printf("Compare %i with %i\n", (int)(output_pt - output_ptr), (int)(height*width*3));
 	assert((output_pt - output_ptr) == height*width*3);

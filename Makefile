@@ -10,20 +10,19 @@ include Mk/default.mk
 # errors in that way. Manually catching the error does not respect "make -k". 
 # Moreover, with a for-loop the make cannot be executed in parallel.
 
+# These are the default jockeys
 JOCKEYS=
-#JOCKEYS=jockeys/lasertest jockeys/laserscan 
-#JOCKEYS+=jockeys/avoidall
-#JOCKEYS=jockeys/position
-#JOCKEYS=jockeys/backandforth 
-#JOCKEYS+=jockeys/laserscan
-JOCKEYS+=jockeys/cameradetection
+JOCKEYS+=jockeys/ubiposition
 JOCKEYS+=jockeys/actionselection
+
+# Use the file enable_jockeys to disable/enable jockeys, do not commit that one to the SVN
+-include enable_jockeys.mk
 
 CLEANJOCKEYS=$(addsuffix .clean,$(JOCKEYS))
 
 jockeys: $(JOCKEYS)
 
-$(JOCKEYS):
+$(JOCKEYS):  
 	$(MAKE) -C $@
 
 all: check-env jockeys
@@ -34,6 +33,11 @@ $(CLEANJOCKEYS): %.clean:
 clean-jockeys: $(CLEANJOCKEYS)
 
 clean: check-env clean-jockeys
+
+#test:
+#	@echo "Certain tests, feel free to remove if they are unneccessary"
+#	@file $(IROBOT_PATH)/bin/robotest
+#	#$(warning Warning: irobot binary is 64-bit, seems not to be meant for robot)
 
 check-env:
 ifndef EQUID_PATH

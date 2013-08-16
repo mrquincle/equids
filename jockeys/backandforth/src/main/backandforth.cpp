@@ -138,6 +138,10 @@ int main(int argc, char **argv) {
       switch (message.type){
          case MSG_INIT:
             // you can initialize your controller
+            robot->pauseSPI(true);
+            while (!robot->isSPIPaused()){
+               usleep(10000);
+            }
             usleep(10000);
             server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
             break;
@@ -147,7 +151,7 @@ int main(int argc, char **argv) {
                usleep(10000);
             }
             std::cout << argv[2] << "Started SPI communication for controller on IPC" << std::endl;
-            motors.setSpeeds(speed, -speed);
+            motors.setSpeeds(speed, 0);
             server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
             break;
          }

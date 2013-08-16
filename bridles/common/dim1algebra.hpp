@@ -1684,6 +1684,101 @@ set_nan(InputIterator first, InputIterator last, T value) {
 
 // end of namespace dobots
 
+
+/**
+ * To a stl container filled with references to elements, fill another stl container with the dereferenced elements.
+ * This copies all elements.
+ *
+ * Do not forget to call something like result.resize(...) beforehand.
+ */
+template<typename InputIterator, typename OutputIterator>
+OutputIterator deref(InputIterator first, InputIterator last, OutputIterator result) {
+	typedef typename std::iterator_traits<InputIterator>::value_type ValueType;
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator>);
+	__glibcxx_function_requires(_OutputIteratorConcept<OutputIterator, ValueType>);
+	__glibcxx_requires_valid_range(first1, last1);
+	if (first == last) return result;
+
+	*result = *first;
+	while (++first != last) {
+		*++result = *first;
+	}
+	return result;
+}
+
+/**
+ * To a stl container filled with actual elements, fill another stl container with references to these elements.
+ * This does not copy the elements, but just creates a reference to them.
+ *
+ * Do not forget to call something like result.resize(...) beforehand.
+ */
+template<typename InputIterator, typename OutputIterator>
+OutputIterator ref(InputIterator first, InputIterator last, OutputIterator result) {
+	typedef typename std::iterator_traits<InputIterator>::value_type ValueType;
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator>);
+	__glibcxx_function_requires(_OutputIteratorConcept<OutputIterator, ValueType>);
+	__glibcxx_requires_valid_range(first1, last1);
+	if (first == last) return result;
+
+	*result = &*first;
+	while (++first != last) {
+		*++result = &*first;
+	}
+	return result;
+}
+
+/**
+ * Often you need to iterate over an array not simply once, as with for_each, but for each element paired with each
+ * other element in the sequence. The element does not need be paired or compared with itself, func(a,a), nor is it
+ * necessary to compare it associatively: func(a,b) is enough, func(b,a) is unnecessary.
+ *
+ * For that reason combine_pairwise calls a given function for each of these unique pairs. It performs an iteration
+ * over the "strict upper triangular matrix" (without the diagonal) if that makes things clearer.
+ *
+ * Origin: http://codereview.stackexchange.com/questions/23262/\
+ *    using-standard-library-to-simplify-pairwise-iteration-of-container-values
+ */
+template<typename Iter, typename Func>
+void combine_pairwise(Iter first, Iter last, Func func) {
+    for(; first != last; ++first) {
+        for(Iter next = first+1; next != last; ++next) //std::next(first) is c++11 only
+            func(*first, *next);
+    }
+}
+
+/**
+ * Helper function for below function of mem_fun_bind2.
+ * Origin: http://www.codeproject.com/Articles/7112/Pointers-to-Member-Functions-and-Functors
+ */
+template <typename C, typename Arg1, typename Arg2, typename Result>
+struct mem_fun_bind2_t : public std::binary_function<Arg1, Arg2, Result> {
+    Result (C::*pmf_ )( Arg1, Arg2 ) ;
+    C& rC_ ;
+
+    explicit mem_fun_bind2_t ( C& rC,
+      Result (C::*pmf)( Arg1, Arg2 )) : rC_ ( rC ), pmf_ ( pmf ) { }
+
+    Result operator () ( Arg1 a1, Arg2 a2 ) {
+        return (rC_.*pmf_) ( a1, a2 ) ;
+    }
+};
+
+/**
+ * A function to be used for for example combine_pairwise above, but can also be used for for example a sort function.
+ * It makes it easier to use member functions in these contexts. For newer compilers this might now be handled by
+ * std::bind, but with std=c99 and before, the functions std::bind1st and std::mem_fun can only take arguments with only
+ * one argument.
+ *
+ * @param    Result (C::*fn)( Arg1, Arg2 )		the member function with two arguments
+ * @param    C&c								the instance of the corresponding class
+ *
+ * Example: combine_pairwise(v.begin(), v.end(), mem_fun_bind2 ( &DetectLineModuleExt::findMatches, *this ) );
+ */
+template <typename C, typename Arg1, typename Arg2, typename Result>
+mem_fun_bind2_t<C, Arg1, Arg2, Result> mem_fun_bind2 ( Result (C::*fn)( Arg1, Arg2 ), C& c) {
+    return mem_fun_bind2_t <C, Arg1, Arg2, Result>( c, fn ) ;
+}
+
 }
 
 

@@ -20,10 +20,10 @@ ifndef EQUID_PATH
 endif
 
 .cpp.o:
-	$(CXX)  $(CXXFLAGS) $(CXXDEFINE) -c  $(CXXINCLUDE) $< 
+	$(CXX) $(CXXFLAGS) $(CXXDEFINE) -c  $(CXXINCLUDE) $< 
 
 .c.o:
-	$(CXX)  $(FLAGS) $(CXXDEFINE) -c  $(CXXFLAGS) $(CXXINCLUDE) $< 
+	$(CXX) $(FLAGS) $(CXXDEFINE) -c  $(CXXFLAGS) $(CXXINCLUDE) $< 
 
 clean:
 	$(RM) $(OBJS) *.moc $(UI_HEAD) $(UI_CPP)

@@ -74,7 +74,8 @@ void CLaser::On() {
 //		printf("%s: For scout\n", __func__);
 		ScoutBot *bot = (ScoutBot*)robot;
 		bot->activateLaser(status_on);
-		robot->SetLEDAll(bot->GetSide(RobotBase::FRONT), LED_RED);
+//		robot->SetLEDAll(bot->GetSide(RobotBase::FRONT), LED_RED);
+		robot->SetLEDAll(bot->GetSide(RobotBase::FRONT), LED_OFF);
 		break;
 	}
 	case RobotBase::ACTIVEWHEEL: default:
@@ -95,7 +96,7 @@ void CLaser::Off() {
 //		printf("%s: For scout\n", __func__);
 		ScoutBot *bot = (ScoutBot*)robot;
 		bot->activateLaser(status_on);
-		robot->SetLEDAll(bot->GetSide(RobotBase::FRONT), LED_WHITE);
+		robot->SetLEDAll(bot->GetSide(RobotBase::FRONT), LED_OFF);
 		break;
 	}
 	case RobotBase::ACTIVEWHEEL: default:

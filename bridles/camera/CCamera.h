@@ -34,7 +34,7 @@ public:
 	int Init(const char *deviceName, int &devfd, int width, int height);
 
 	//! If you want to load images from a directory use this "dummy" camera
-	int dummyInit(const char *directoryName);
+	int dummyInit(const char *directoryName, const char *prefixImage);
 
 	void Stop();
 
@@ -72,6 +72,7 @@ private:
 	int brightness;
 	int gain;
 	char directory[2000];
+	char loadFilePrefix[16];
 	int loadFileIndex;
 	int saveFileIndex;
 	struct vdIn *videoIn;

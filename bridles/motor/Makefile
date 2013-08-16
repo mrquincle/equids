@@ -10,7 +10,7 @@
 OBJS=$(patsubst %.cpp,%.o,$(wildcard *.cpp))
 
 # The directories that this "bridle" depends on
-CXXINCLUDE+=-I./ -I../common
+CXXINCLUDE+=-I./ -I../eth -I../common
 
 all: check-env $(OBJS) 
 
@@ -20,7 +20,7 @@ ifndef EQUID_PATH
 endif
 
 .cpp.o:
-	$(CXX)  $(CXXFLAGS) $(CXXDEFINE) -c  $(CXXINCLUDE) $< 
+	$(CXX)  $(CXXFLAGS) $(CXXDEFINE)  $(CXXINCLUDE) -c  $< 
 
 .c.o:
 	$(CXX)  $(FLAGS) $(CXXDEFINE) -c  $(CXXFLAGS) $(CXXINCLUDE) $< 

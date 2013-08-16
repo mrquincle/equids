@@ -27,18 +27,32 @@ struct buffer {
         size_t length;
 };
 
-static void xioctl(int fh, int request, void *arg)
+//static void xioctl(int fh, int request, void *arg)
+//{
+//        int r;
+//
+//        do {
+//                r = v4l2_ioctl(fh, request, arg);
+//        } while (r == -1 && ((errno == EINTR) || (errno == EAGAIN)));
+//
+//        if (r == -1) {
+//                fprintf(stderr, "error %d, %s\n", errno, strerror(errno));
+//                exit(EXIT_FAILURE);
+//        }
+//}
+
+static int xioctl(int fh, int request, void *arg)
 {
         int r;
 
         do {
-                r = v4l2_ioctl(fh, request, arg);
-        } while (r == -1 && ((errno == EINTR) || (errno == EAGAIN)));
+                r = ioctl(fh, request, arg);
+        } while (-1 == r && EINTR == errno);
 
         if (r == -1) {
-                fprintf(stderr, "error %d, %s\n", errno, strerror(errno));
-                exit(EXIT_FAILURE);
+        	fprintf(stderr, "error %d, %s\n", errno, strerror(errno));
         }
+        return r;
 }
 //static void xioctl(int fh, int request, void *arg);
 

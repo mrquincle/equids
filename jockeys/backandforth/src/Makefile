@@ -22,9 +22,11 @@ endif
 # List the directories you want to include from the "bridles" 
 ####################################################################################
 
+SUBDIRS+=common
 SUBDIRS+=main
 SUBDIRS+=eth
 SUBDIRS+=motor
+SUBDIRS+=common
 
 ####################################################################################
 # Name of the final binary

@@ -2,9 +2,12 @@
 
 bool CISdebug = false;
 
-CImageServer::CImageServer(sem_t *imsem,CRawImage* im)
+CImageServer::CImageServer(sem_t *imsem, CRawImage* im)
 {
+	connected = false;
+	serverSocket = mySocket = -1;
 	dataSem = imsem;
+	messageRead = 0;
 	image = im;
 	CISdebug = true;
 	stop=false;
