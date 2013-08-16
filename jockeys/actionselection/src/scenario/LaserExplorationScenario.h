@@ -1,8 +1,8 @@
 /**
  * 456789------------------------------------------------------------------------------------------------------------120
  *
- * @brief ...
- * @file GrandChallenge1Scenario.h
+ * @brief Scenario for exploration after the map has been build up. It uses laser to label objects in the environment.
+ * @file LaserExplorationScenario.h
  * 
  * This file is created at Almende B.V. and Distributed Organisms B.V. It is open-source software and belongs to a
  * larger suite of software that is meant for research on self-organization principles and multi-agent systems where
@@ -24,10 +24,22 @@
  * @case      Sensor fusion
  */
 
-#ifndef GRANDCHALLENGE1SCENARIO_H_
-#define GRANDCHALLENGE1SCENARIO_H_
+#ifndef LASEREXPLORATIONSCENARIO_H_
+#define LASEREXPLORATIONSCENARIO_H_
 
 #include <CScenario.h>
+
+/**
+ * After starting we perform random exploration. Later on we will need to replace this by going to position indicated
+ * as interesting by the mapping jockey.
+ */
+typedef enum
+{
+	S_START,
+	S_RANDOM_EXPLORATION,              // randomly explore, using infrared for collision avoidance
+	S_RECOGNITION,                     // recognize (height of) an object, small obstacle like a step, or a wall
+	S_QUIT
+} TState;
 
 /**
  * The scenario implements the overall Grand Challenge 1. It contains mapping, exploration (which puts on the map where
@@ -37,29 +49,13 @@
  * initiated. When the step is climbed the robot organism is disassembled from 5 robots to 3 robots. Now, this robot is
  * able to recognize the socket and dock to it by using vision. Then the scenario ends.
  */
-class GrandChallenge1Scenario: public CScenario {
+class LaserExplorationScenario: public CScenario {
 public:
-	/**
-	 * Define your own states, the below ones are examples for Grand Challenge 1.
-	 */
-	typedef enum
-	{
-		S_START,
-		S_MAPPING,
-		S_EXPLORATION,
-		S_RECRUITING,
-		S_ASSEMBLE,
-		S_MACROLOCOMOTION,
-		S_CLIMB_STEP,
-		S_DISASSEMBLE_5_TO_3,
-		S_QUIT
-	} TState;
-
 	//! Construct and get the CEquids object.
-	GrandChallenge1Scenario(CEquids * equids);
+	LaserExplorationScenario(CEquids * equids);
 
 	//! Deallocate (nothing)
-	~GrandChallenge1Scenario();
+	~LaserExplorationScenario();
 
 	//! Initializing all the jockeys and starting the first one
 	bool Init();
@@ -68,10 +64,9 @@ public:
 	void Run();
 
 	// Define the jockeys for this scenario
-	jockey_id J_MAPPING;
-	jockey_id J_LASER_EXPLORATION;
-	jockey_id J_VISUAL_EXPLORATION;
-	jockey_id J_WENGUO; // for self-assembly
+	jockey_id J_RANDOM_EXPLORATION;
+	jockey_id J_LASER_RECOGNITION;
+	jockey_id J_POSITION;
 
 private:
 	//! State for the state machine in Run()
@@ -82,4 +77,4 @@ private:
 };
 
 
-#endif /* GRANDCHALLENGE1SCENARIO_H_ */
+#endif /* LASEREXPLORATIONSCENARIO_H_ */

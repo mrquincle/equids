@@ -29,19 +29,19 @@
 
 #include <CScenario.h>
 
-typedef enum
-{
-	S_FORTH = 0,
-	S_BACK,
-	S_RECRUITING,
-	S_QUIT
-} TState;
-
 /**
  * A simple scenario to show the switching between jockeys
  */
 class BackandforthScenario: public CScenario {
 public:
+	typedef enum
+	{
+		S_FORTH = 0,
+		S_BACK,
+		S_RECRUITING,
+		S_QUIT
+	} TState;
+
 	BackandforthScenario(CEquids * equids);
 
 	~BackandforthScenario();

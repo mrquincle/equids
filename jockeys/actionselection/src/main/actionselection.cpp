@@ -51,6 +51,8 @@
 #include "CMessage.h"
 
 #include <BackandforthScenario.h>
+#include <LaserExplorationScenario.h>
+#include <GrandChallenge1Scenario.h>
 
 /***********************************************************************************************************************
  * Implementation
@@ -72,14 +74,17 @@ void interrupt_signal_handler(int signal) {
 /**
  * Add to this list of scenarios for your own. In the end we want to use the scenario S_GRAND_CHALLENGE1.
  */
-enum Scenario { SC_BACK_AND_FORTH_TEST, SC_STANDALONE_CAMERA, SC_GRAND_CHALLENGE1, SCENARIO_COUNT };
+enum Scenario { SC_BACK_AND_FORTH_TEST, SC_STANDALONE_CAMERA, SC_LASER_EXPLORATION, SC_GRAND_CHALLENGE1, SCENARIO_COUNT };
 
 /**
  * Cast Scenario to a string. Usage: ScenarioStr[scenario].
  */
 #define MACROSTR(k) #k
 static const std::string ScenarioStr[] = {
-		MACROSTR(SC_BACK_AND_FORTH_TEST), MACROSTR(SC_STANDALONE_CAMERA), MACROSTR(SC_GRAND_CHALLENGE1)
+		MACROSTR(SC_BACK_AND_FORTH_TEST),
+		MACROSTR(SC_STANDALONE_CAMERA),
+		MACROSTR(SC_LASER_EXPLORATION),
+		MACROSTR(SC_GRAND_CHALLENGE1)
 };
 #undef MACROSTR
 
@@ -89,7 +94,10 @@ static const std::string ScenarioStr[] = {
 int main(int argc, char **argv) {
 	std::cout << "Run " << NAME << " compiled at time " << __TIME__ << std::endl;
 
-	Scenario scenario = SC_GRAND_CHALLENGE1;
+	Scenario scenario;
+	//	scenario = SC_GRAND_CHALLENGE1;
+	scenario = SC_LASER_EXPLORATION;
+
 	std::cout << "We will use scenario " << ScenarioStr[scenario] << std::endl;
 
 	CEquids equids;
@@ -121,12 +129,28 @@ int main(int argc, char **argv) {
 		scenario.Run();
 		break;
 	}
-	case SC_GRAND_CHALLENGE1:
-		std::cerr << "Not implemented yet!" << std::endl;
+	case SC_GRAND_CHALLENGE1: {
+		GrandChallenge1Scenario scenario(&equids);
+		if (!scenario.Init()) {
+			std::cerr << "Error in initialization, break out" << std::endl;
+			break;
+		}
+		scenario.Run();
 		break;
-	case SC_STANDALONE_CAMERA:
-//		equids.initJockey(camera);
+	}
+	case SC_LASER_EXPLORATION: {
+		LaserExplorationScenario scenario(&equids);
+		if (!scenario.Init()) {
+			std::cerr << "Error in initialization, break out" << std::endl;
+			break;
+		}
+		scenario.Run();
 		break;
+	}
+	case SC_STANDALONE_CAMERA: {
+		std::cerr << "To be done" << std::endl;
+		break;
+	}
 	default:
 		std::cerr << "Unknown scenario" << std::endl;
 	}
