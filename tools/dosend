@@ -86,7 +86,10 @@ rm -f $COMPILE_ERR
 # The program arguments
 ROBOT="$1"
 FILE="$2"
-HOST="192.168.52.200"
+
+# Will be set in host_configure
+HOST=
+IFACE=
 
 FILE_PORT=10001
 PORT=23
@@ -111,6 +114,11 @@ if [[ ! -f "$FILE" ]]; then
 	exit 1
 fi
 
+FILEPATH=$(cd $(dirname $FILE); pwd)
+FILE=$(basename $FILE)
+
+cd $FILEPATH
+
 #######################################################################################################################
 # Function definitions
 #######################################################################################################################
@@ -119,37 +127,35 @@ fi
 # user to subsequently run this command outside of this script.
 
 welcome() {
-	msg_info "We use $HOST as host IP address, make sure it corresponds with yours (check ifconfig)"
-	msg_info "Use rpc when available, this is a small bash script that does not need rpc on the robot"
-	msg_info "You will need to have the following installed: telnet, netcat, expect"
-	msg_info "Use standard \"sudo apt-get install expect\" to do so"
-	msg_info "You have to run this utility from the directory where the file resides"
-}
-
-get_ip_adress() {
-	msg_info "We will use \"$ROBOT\" to retrieve the IP address of the robot"
-	msg_debug "We assume there is an entry for \"$ROBOT\" in /etc/hosts"
-	IP_ADDRESS=$(cat /etc/hosts | grep -i $ROBOT | grep -v '#')
-	msg_info "Found ip address: \"$IP_ADDRESS\" (if empty, check /etc/hosts)"
-	if [ "$IP_ADDRESS" = "" ]; then
-		msg_warning "Cannot find hostname (and IP address) in /etc/hosts"
-		msg_info "We will use $ROBOT directly as IP_ADDRESS"
-		IP_ADDRESS=$ROBOT
-		msg_debug "This might fail"
-	else 
-		msg_info "Ping robot $ROBOT (at $IP_ADDRESS)"
-	fi
+	msg_info "Welcome...!"
+	msg_info "Remark, use rpc when available, this is a small bash script that does not need rpc on the robot"
+	msg_info "However, you will need to install the following: telnet, netcat, expect"
+	msg_debug "Use e.g. standard \"sudo apt-get install expect\" to do so on Ubuntu"
 }
 
 ping_robot() {
-	PING=`ping -a -W 2 -c 1 $ROBOT`
-	CONNECTION=`echo $PING | grep "1 received"`
+	PING=$(ping -a -W 2 -c 1 $ROBOT)
+	CONNECTION=$(echo $PING | grep "1 received")
 	if [ "$CONNECTION" != "" ]; then
 		msg_info "We can ping the robot. Let's connect!"
+		IP_ADDRESS=$(ping -q -t 1 -c 1 $ROBOT | grep PING | sed -e "s/).*//" | sed -e "s/.*(//")
 	else
 		msg_error "Sorry, we can not ping the robot (exit)"
 		exit 23
 	fi
+}
+
+configure_host() {
+	msg_debug "ip route get $IP_ADDRESS"
+	IFACE=$(ip route get $IP_ADDRESS | grep -oP '(?<=dev )[a-zA-Z0-9]*')
+	HOST=$(ifconfig $IFACE| grep -oP '(?<=inet addr:)[0-9.]*')
+	msg_info "We will connect over interface $IFACE with host IP $HOST"
+}
+
+go_to_target() {
+	msg_info "Go to the robot, interactive"
+	echo "$TERMINAL_PROGRAM $ROBOT $PORT" > $cmd_goto
+	chmod u+x $cmd_goto
 }
 
 # This function is adapted to use "expect". The other functions should be rewritten likewise. With expect it is easy 
@@ -221,11 +227,11 @@ send_file() {
 #######################################################################################################################
 
 welcome
-get_ip_adress
 ping_robot
+configure_host
+#go_to_target
 send_file
 receive_on_robot
-
 #getfilesize_on_robot
 
 

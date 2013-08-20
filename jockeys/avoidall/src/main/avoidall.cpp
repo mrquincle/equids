@@ -67,7 +67,8 @@ void interrupt_signal_handler(int signal) {
 }
 
 /**
- * Basically only turns on and off the laser for a couple of times.
+ * This jockey is not finished at all! It is meant to be using camera, laser, and infrared together to perform optimal
+ * collision avoidance.
  */
 int main(int argc, char **argv) {
 	int nof_switches = 2;

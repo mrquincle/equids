@@ -59,6 +59,7 @@ ifndef EQUID_PATH
 endif
 
 # Upload target to robot, strips it and cats it over port 7878
+#	rcp ../bin/$@ root@192.168.0.205:/flash/
 upload: all obj
 	$(STRIP) ../bin/$(TARGET)
 	cat ../bin/$(TARGET) | netcat -l -p 7878 

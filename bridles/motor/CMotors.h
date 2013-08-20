@@ -63,6 +63,9 @@ public:
 	//! Speed and radius are translated into commands for left and right
 	void translate(int speed, int radius, int & left, int & right);
 
+	//! Rotate on the spot
+	void rotate(int degrees);
+
 	void setMotorPosition(float x,float y,float phi);
 	void setMotorSpeedsKB(int sFront,int sRear);
 	void setMotorSpeedsAW(int leftD,int rightD,int top);

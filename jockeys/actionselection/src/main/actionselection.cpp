@@ -59,7 +59,7 @@
  **********************************************************************************************************************/
 
 //! The name of the controller can be used for controller selection
-std::string NAME = "ActionSelection";
+static const std::string NAME = "ActionSelection";
 
 /**
  * If the user presses Ctrl+C, this can be used to do memory deallocation or a last communication with the MSPs.

@@ -19,8 +19,8 @@ endif
 -include /etc/robot/overwrite.mk
 
 # Extend for this jockey with gsl functionality
-LDFLAGS += -lgsl -lgslcblas -lm
-
+LDFLAGS += -L../../../libs/gsl -lgsl -lgslcblas -lm
+LDFLAGS += -L../../../libs/v4l2 -lv4l2 -lv4lconvert
 ####################################################################################
 # List the directories you want to include from the "bridles" 
 ####################################################################################

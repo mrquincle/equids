@@ -53,6 +53,7 @@ CMotors::CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 	max_radius = 1000; // the maximum value
 	axle_track = 10;
 	left_right_reversed = true;
+//	left_right_reversed = false;
 
 	printf("setting buf\n");
 	buf[0]=0;
@@ -167,7 +168,8 @@ void CMotors::translate(int speed, int radius, int & left, int & right) {
 	}
 
 	// for the ScoutBot, the right "wheel" is inverted
-	if (left_right_reversed) left = -left;
+	//if (left_right_reversed) left = -left;
+	if (left_right_reversed) right = -right;
 
 	// add back the sign of the speed
 	if (speed < 0) {
@@ -223,10 +225,42 @@ void CMotors::setRadianSpeeds(int forward, int radius) {
 		break;
 	}
 	default:
+		fprintf(stderr, "%s(): There is no way to drive a robot without knowing its layout\n", __func__);
+		break;
+	}
+}
+
+/**
+ * Rotate on the spot. Actually depends on the battery level etc.
+ */
+void CMotors::rotate(int degrees) {
+	switch (robot_type) {
+	case RobotBase::ACTIVEWHEEL: {
+		fprintf(stderr, "To be implemented\n");
+		ActiveWheel *bot = (ActiveWheel*)robot_base;
+		break;
+	}
+	case RobotBase::KABOT: {
+		fprintf(stderr, "To be implemented\n");
+		KaBot *bot = (KaBot*)robot_base;
+		break;
+	}
+	case RobotBase::SCOUTBOT: {
+		ScoutBot *bot = (ScoutBot*)robot_base;
+		int left = 40;
+		int right = left_right_reversed ? left : -left;
+		std::cout << "Send command to the wheels [left,right]=[" << left << ',' << right << ']' << std::endl;
+		bot->Move(left, right);
+		sleep(degrees / 60);
+		bot->Move(0,0);
+		break;
+	}
+	default:
 		fprintf(stderr, "There is no way to drive a robot without knowing its layout\n");
 		break;
 	}
 }
+
 
 /**
  * common function for all robots
@@ -327,6 +361,7 @@ void CMotors::setSpeeds(int forward, int turn) {
 		fprintf(stderr, "There is no way to drive a robot without knowing its layout\n");
 		break;
 	}
+	usleep(100000); // at least 0.1 second per command
 }
 
 /**

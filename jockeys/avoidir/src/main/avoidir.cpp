@@ -53,8 +53,7 @@
  * Implementation
  **********************************************************************************************************************/
 
-//! The name of the controller can be used for controller selection
-std::string NAME = "AvoidInfrared";
+#include <AvoidIRController.h>
 
 //! Global stop condition
 bool gStop = false;
@@ -72,115 +71,112 @@ void sigproc(int) {
 }
 
 /**
- * Show that the controller ended properly by a LED show.
- */
-void signal_end(CLeds &leds) {
-	leds.color(LC_ORANGE);
-	sleep(1);
-	leds.color(LC_GREEN);
-}
-
-/**
- * Quit the controller indeed. So, not only set the speed to zero, but also halt the motors (and turn them off).
- */
-void graceful_end(CMotors & motors) {
-	motors.setSpeeds(0, 0);
-	sleep(1);
-	motors.halt();
-	sleep(1);
-
-	std::cout << "Avoidance controller quits" << std::endl;
-	exit(EXIT_SUCCESS);
-}
-
-RobotBase* start(RobotBase::RobotType &type) {
-	type = RobotBase::Initialize(NAME);
-	RobotBase *robot = RobotBase::Instance();
-	for (int i = 0; i < 4; ++i)
-		robot->SetPrintEnabled(i, false);
-	return robot;
-}
-
-/**
- * Basically only turns on and off the laser for a couple of times.
+ * Main routine for a collision avoidance controller that does only use infrared to perform this simple task. It can be
+ * executed with "calibrate" as argument to perform calibration. During that phase it will rotate to find a smoothed
+ * average to correct the bias of the different infrared leds. If a robot has been calibrated once, it can use the
+ * calibration values because they are stored in a text file.
  */
 int main(int argc, char **argv) {
-	int nof_switches = 2;
 	bool calibrate = false;
-	bool print = false;
-	int timespan = 1000;
-	bool forever = true;
+	bool standalone = false;
 
 	signal(SIGINT, sigproc);
 
 	std::cout << "Run " << NAME << " compiled at time " << __TIME__ << std::endl;
 
-	if (argc > 1) {
-		std::string arg1 = std::string(argv[1]);
-		if (arg1.find("calibrate") != std::string::npos) {
+	AvoidIRController controller;
+	controller.parsePort(argc, argv);
+
+	if (argc == 3) {
+		std::string arg2 = std::string(argv[2]);
+		if (arg2.find("calibrate") != std::string::npos) {
 			calibrate = true;
+		} else if (arg2.find("standalone") != std::string::npos) {
+			standalone = true;
+		}
+	} else if ((argc > 3) || (argc <= 1)) {
+		std::cerr << DEBUG << " usage: " << argv[0] << " PORT [OPTION]" << std::endl << std::endl;
+		std::cerr << "OPTION: calibrate|standalone" << std::endl;
+		return EXIT_FAILURE;
+	}
+
+	if (standalone || calibrate) {
+		int timespan = 1000;
+		controller.initRobot();
+		controller.initRobotPeriphery();
+		controller.start();
+		if (calibrate) {
+			controller.calibrate();
+		} else {
+			controller.get_calibration();
+			for (int t = 0; t < timespan; ++t) {
+				controller.tick();
+			}
+		}
+		controller.signal_end();
+		controller.graceful_end();
+		return EXIT_SUCCESS;
+	}
+
+	controller.initServer();
+
+	CMessage message;
+	bool quitController = false;
+	bool runController = false;
+	while (!quitController){
+		message = controller.getMessage();
+
+		if (message.type != MSG_NONE)
+			std::cout << "Command: " << message.getStrType() << ' ' << message.value1 << ',' \
+			<< message.value2 << std::endl;
+
+		switch (message.type){
+		case MSG_INIT: {
+			controller.initRobot();
+			controller.initRobotPeriphery();
+			controller.pause();
+			controller.acknowledge();
+			break;
+		}
+		case MSG_START: {
+			runController = true;
+			controller.start();
+			controller.get_calibration();
+			controller.acknowledge();
+			break;
+		}
+		// do calibration - if you want to - after MSG_INIT or after MSG_STOP
+		case MSG_CALIBRATE: {
+			controller.start();
+			controller.calibrate();
+			controller.pause();
+			controller.acknowledge();
+			break;
+		}
+		case MSG_STOP: {
+			runController = false;
+			controller.pause();
+			controller.acknowledge();
+			break;
+		}
+		case MSG_NONE: {
+			if (runController) {
+				// do our thing
+				controller.tick();
+			}
+			break;
+		}
+		case MSG_QUIT: {
+			runController = true;
+			controller.pause();
+			controller.signal_end();
+			controller.graceful_end();
+			controller.acknowledge();
+			quitController = true;
+			break;
+		}
+
 		}
 	}
-
-	RobotBase::RobotType robot_type;
-	RobotBase* robot = start(robot_type);
-
-	//	std::cout << "Reset robot manually" << std::endl;
-	//	RobotBase::MSPReset();
-
-	std::cout << "Initialised robot of type " << RobotTypeStr[robot_type] << std::endl;
-	//	IRobotFactory factory;
-	//	RobotBase* robot = factory.GetRobot();
-	//	RobotBase::RobotType robot_type = factory.GetType();
-
-	// we need to initialize the motors before calibrate leds (which turns the robot around)
-	CMotors motors(robot, robot_type);
-	motors.init();
-
-	std::cout << "Setup leds functionality" << std::endl;
-	CLeds leds(robot, robot_type);
-	leds.init();
-
-	if (calibrate) {
-		std::cout << "Calibrate!" << std::endl;
-		leds.calibrate();
-		std::cout << "Calibration done" << std::endl;
-		graceful_end(motors);
-	} else {
-		std::cout << "Get calibration values" << std::endl;
-		leds.get_calibration();
-	}
-
-	if (print) {
-		int t = 0;
-		do {
-			std::cout << '[' << std::setw(4) << std::setfill('0') << t << "]: ";
-			for (int i = 0; i < 8; ++i)
-				std::cout << leds.distance(i) << ' ';
-			std::cout << std::endl;
-			usleep(100000);
-		} while (forever || (++t != timespan));
-		graceful_end(motors);
-	}
-
-	std::cout << "Sliding window size used of " << leds.get_window_size() << std::endl;
-
-	int t = 0;
-	do {
-		int speed = 40;
-		int radius = 0;
-		leds.direction(speed, radius);
-		for (int s = 0; s < leds.get_window_size(); ++s)  {
-			for (int i = 0; i < 8; ++i) leds.distance(i);
-			usleep(1000); // 1000 * 100 is every 0.1seconds
-		}
-		//std::cout << "Send wheel commands [" << speed << ',' << radius << ']' << std::endl;
-		motors.setSpeeds(speed, radius);
-		//usleep(1000000);
-		//sleep(2);
-	} while (!gStop && (forever || (++t != timespan)));
-
-	signal_end(leds);
-	graceful_end(motors);
 	return EXIT_SUCCESS;
 }

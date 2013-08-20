@@ -53,6 +53,19 @@ CLeds::CLeds(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 	else if(type == RobotBase::SCOUTBOT)
 		optionfile_name = "/flash/morph/scout_option.cfg";
 	optionfile.Load(optionfile_name);
+
+	// order in specific sequence to make it avoid collisions between the MSPs
+	ir_query_order.resize(irled_count, 0);
+	ir_query_order[0] = LL_FRONT_RIGHT;
+	ir_query_order[1] = LL_REAR_LEFT;
+	ir_query_order[2] = LL_LEFT_FRONT;
+	ir_query_order[3] = LL_RIGHT_REAR;
+	ir_query_order[4] = LL_FRONT_LEFT;
+	ir_query_order[5] = LL_REAR_RIGHT;
+	ir_query_order[6] = LL_RIGHT_FRONT;
+	ir_query_order[7] = LL_LEFT_REAR;
+
+
 }
 
 CLeds::~CLeds() {
@@ -65,6 +78,11 @@ void CLeds::init() {
 	std::cout << "Turn on the reflective IR LEDs" << std::endl;
 	power_all(LT_REFLECTIVE, true);
 
+	int board_count = 4;
+	board_running.resize(board_count, 0);
+	for (int i = 0; i < board_count; i++) {
+		board_running[i] = robot->IsBoardRunning(i);
+	}
 }
 
 //0 -- front right
@@ -76,27 +94,34 @@ void CLeds::init() {
 //6 -- right rear
 //7 -- right front
 int CLeds::reflective(int i, bool offset) {
+	int value = 0;
+	int side;
 	switch (i) {
 	case 0: case 1: {
-		IRValues ret = robot->GetIRValues(robot->GetSide(RobotBase::FRONT));
-		// pick sensor[0] or sensor[1] on this side
-		return ret.sensor[1-i%2].reflective - (offset ? offset_reflective[i] : 0);
+		side = robot->GetSide(RobotBase::FRONT);
+		break;
 	} case 2: case 3: {
-		IRValues ret = robot->GetIRValues(robot->GetSide(RobotBase::LEFT));
-		return ret.sensor[1-i%2].reflective - (offset ? offset_reflective[i] : 0);
+		side = robot->GetSide(RobotBase::LEFT);
+		break;
 	} case 4: case 5: {
-		IRValues ret = robot->GetIRValues(robot->GetSide(RobotBase::REAR));
-		return ret.sensor[1-i%2].reflective - (offset ? offset_reflective[i] : 0);
+		side = robot->GetSide(RobotBase::REAR);
+		break;
 	} case 6: case 7: {
-		IRValues ret = robot->GetIRValues(robot->GetSide(RobotBase::RIGHT));
-		return ret.sensor[1-i%2].reflective - (offset ? offset_reflective[i] : 0);
+		side = robot->GetSide(RobotBase::RIGHT);
+		break;
 	}
 	}
-	assert(false);
-	return -1;
+
+	if (board_running[side]) {
+		IRValues ret = robot->GetIRValues(side);
+		value = ret.sensor[1-i%2].reflective - (offset ? offset_reflective[i] : 0);
+	}
+//	std::cout << "Reflective value [" << i << "]: " << value << std::endl;
+	return value;
 }
 
 int CLeds::ambient(int i, bool offset) {
+	return 0;
 	switch (i) {
 	case 0: case 1: {
 		IRValues ret = robot->GetIRValues(robot->GetSide(RobotBase::FRONT));
@@ -139,6 +164,10 @@ void CLeds::power_all(LedType led_type, bool on) {
 			    robot->SetIRPulse(i, IRPULSE0|IRPULSE1|IRPULSE2|IRPULSE3|IRPULSE4|IRPULSE5);
 			    //  enable receiving LED (?)
 		        robot->SetIRRX(i, true);
+
+		        // calibrate IR
+		        robot->CalibrateIR(i);
+		        usleep(100000);
 			}
 		break;
 	case LT_AMBIENT:
@@ -188,19 +217,23 @@ void CLeds::calibrate(bool turn_around) {
 		motors->setSpeeds(0, 40);
 
 	static int32_t count = 100;
-	static int32_t sleep = 75 * 1000;
+	static int32_t between_sensors_sleep = 10 * 1000; // 0.01 sec * 2 = 0.02 sec * 8 = +/- 0.1 sec
+	static int32_t between_rounds_sleep = 1000;
+	static int32_t sleep = 2*between_sensors_sleep * irled_count + between_rounds_sleep;
 	// every time step should take a while, with count=100 and sleep=20000, this takes 2 seconds
-	assert((count * sleep) < 60000000); // make sure it stays under a minute
 	std::cout << "We will turn for " << (double)((count * sleep) / (double)1000000) << " seconds, " <<
 			"calibrating the infrared sensors" << std::endl;
+	assert((count * sleep) < 60000000); // make sure it stays under a minute
 
 	for (int t = 0; t < count; ++t) {
 		for(int i=0; i < irled_count ;i++)
 		{
 			offset_reflective[i] += reflective(i, false);
+			usleep(between_sensors_sleep);
 			offset_ambient[i] += ambient(i, false);
+			usleep(between_sensors_sleep);
 		}
-		usleep(sleep);
+		usleep(between_rounds_sleep);
 	}
 
 	for(int i=0;i<irled_count;i++) {
@@ -266,12 +299,34 @@ void CLeds::get_calibration() {
 }
 
 /**
+ * Returns in 2000 milliseconds times the number of IR leds, so 0.016 seconds.
+ */
+void CLeds::update() {
+	for (int i=0; i < irled_count; i++) {
+		int j = ir_query_order[i];
+//		hist_ambient.push(j, ambient(j));
+//		usleep(20000);
+		hist_reflective.push(j, reflective(j));
+		usleep(1000);
+	}
+	// verbose
+//	std::cout << "Avg[0]: " << hist_reflective.average(0) << std::endl;
+//	std::cout << "Avg[1]: " << hist_reflective.average(1) << std::endl;
+}
+
+void CLeds::update(int i) {
+	hist_ambient.push(i, ambient(i));
+	usleep(1000);
+	hist_reflective.push(i, reflective(i));
+	usleep(1000);
+}
+
+/**
  * The distance is calculated in the same way Wenguo does. By just averaging over a series of values and subtracting
  * the offset calculated in the calibration phase. We return the reflective LED values.
  */
 int CLeds::distance(int i) {
-	hist_ambient.push(i, ambient(i));
-	hist_reflective.push(i, reflective(i));
+	update(i);
 	//return hist_ambient.average(i);
 	return hist_reflective.average(i);
 }
@@ -299,10 +354,8 @@ int CLeds::distance(int i) {
  * of the highest value (which is assumed to be the most spacious direction).
  */
 void CLeds::direction(int & sign_speed, int & radius) {
-	for (int i=0; i < irled_count; i++) {
-		hist_ambient.push(i, ambient(i));
-		hist_reflective.push(i, reflective(i));
-	}
+	update();
+
 	float beta = 360 / irled_count; // = 360/8 is 45 degrees
 	float start = -beta/2.0;
 
@@ -311,7 +364,7 @@ void CLeds::direction(int & sign_speed, int & radius) {
 	avg_values.resize(irled_count, 0);
 	hist_reflective.average(avg_values.begin());
 
-	std::cout << "Avg: ";
+	std::cout << "Averages: ";
 	for (int i = 0; i < avg_values.size(); ++i) {
 		std::cout << avg_values[i] << ' ';
 	}
@@ -329,10 +382,10 @@ void CLeds::direction(int & sign_speed, int & radius) {
 	weights[6] = 1.4;
 	weights[7] = 1.2;
 
-	std::transform(avg_values.begin(), avg_values.end(), weights.begin(), avg_values.begin(),
-			std::multiplies<float>());
+	// multiply values with above weights
+	std::transform(avg_values.begin(), avg_values.end(), weights.begin(), avg_values.begin(), std::multiplies<float>());
 
-	std::cout << "Avg: ";
+	std::cout << "Weighted averages: ";
 	for (int i = 0; i < avg_values.size(); ++i) {
 		std::cout << avg_values[i] << ' ';
 	}
@@ -405,4 +458,25 @@ void CLeds::direction(int & sign_speed, int & radius) {
 	// get from index to angle
 //	angle = beta * 2 * angle_index; // + start
 
+}
+
+bool CLeds::collision() {
+	update(LL_FRONT_LEFT);
+	update(LL_FRONT_RIGHT);
+
+	int threshold = 50;
+
+	//return hist_ambient.average(i);
+	int collision = 0;
+	int avg_fl = hist_reflective.average((int)LL_FRONT_LEFT) ;
+	int avg_fr = hist_reflective.average((int)LL_FRONT_RIGHT) ;
+	std::cout << avg_fl << " and " << avg_fr << std::endl;
+	// values go up if there is something close
+	if (avg_fr > threshold) {
+			return true;
+		}
+//	if (avg_fl + avg_fr > threshold) {
+//		return true;
+//	}
+	return false;
 }

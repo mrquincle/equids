@@ -10,6 +10,11 @@ include Mk/default.mk
 # errors in that way. Manually catching the error does not respect "make -k". 
 # Moreover, with a for-loop the make cannot be executed in parallel.
 
+#added for possible autoupload function, just uncoment IP for automatic upload,
+#note that rcp from net-kit is needed
+#IP=192.168.0.205
+#IP=192.168.2.15
+
 # These are the default jockeys
 JOCKEYS=
 JOCKEYS+=jockeys/ubiposition
@@ -25,7 +30,7 @@ jockeys: $(JOCKEYS)
 $(JOCKEYS):  
 	$(MAKE) -C $@
 
-all: check-env jockeys
+all: check-env jockeys upload
 
 $(CLEANJOCKEYS): %.clean:
 	$(MAKE) -C $* clean	
@@ -38,6 +43,17 @@ clean: check-env clean-jockeys
 #	@echo "Certain tests, feel free to remove if they are unneccessary"
 #	@file $(IROBOT_PATH)/bin/robotest
 #	#$(warning Warning: irobot binary is 64-bit, seems not to be meant for robot)
+
+upload:
+ifdef IP
+	echo "upload"
+	rcp jockeys/actionselection/src/main/equids.cfg root@$(IP):/flash/
+	@for i in $(JOCKEYS) ;\
+	do \
+	echo "uploading /$$i..."; \
+	rcp $$i/bin/* root@$(IP):/flash/ ; \
+	done
+endif
 
 check-env:
 ifndef EQUID_PATH

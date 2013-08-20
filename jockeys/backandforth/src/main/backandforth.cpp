@@ -58,8 +58,7 @@
 //! The name of the controller can be used for controller selection
 std::string NAME = "BackAndForth";
 
-#define DEBUG \
-NAME << '[' << getpid() << "] " << __func__ << "(): "
+#define DEBUG NAME << '[' << getpid() << "] " << __func__ << "(): "
 
 /**
  * If the user presses Ctrl+C, this can be used to do memory deallocation or a last communication with the MSPs.
@@ -69,6 +68,26 @@ void interrupt_signal_handler(int signal) {
       //RobotBase::MSPReset();
       exit(0);
    }
+}
+
+//! First get the port of the jockey
+std::string getPort(int argc, char **argv) {
+	std::string port = "";
+	if (argc <= 1) {
+		std::cout << DEBUG << "First parameter must be the port the jockey can be reached on" << std::endl;
+		return port;
+	}
+	port = std::string(argv[1]);
+	return port;
+}
+
+//! Create server and start it
+CMessageServer *getServer(std::string port) {
+	std::cout << "Create (receiving) message server on port " << port << std::endl;
+	CMessageServer *server;
+	server = new CMessageServer();
+	server->initServer(port.c_str());
+	return server;
 }
 
 /**
@@ -120,14 +139,11 @@ int main(int argc, char **argv) {
    std::cout << "Create motor object" << std::endl;
    CMotors motors(robot, robot_type);
 
-   std::cout << "Create (receiving) message server on port " << port << std::endl;
-   CMessageServer *server;
-   server = new CMessageServer();
-   server->initServer(port.c_str());
-   
-   bool stopRobot = false;
+   CMessageServer *server = getServer(port);
    CMessage message;
    message.type = MSG_NONE;
+   
+   bool stopRobot = false;
    while (!stopRobot){
       message = server->getMessage();
       

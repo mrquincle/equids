@@ -64,7 +64,7 @@ int CMessageServer::initServer(const char* port) {
 	return 0;
 }
 
-CMessage CMessageServer::getMessage() {
+const CMessage & CMessageServer::getMessage() {
    int save_ptr;
 	
    sem_wait(&dataSem);

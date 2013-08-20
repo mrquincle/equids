@@ -11,7 +11,7 @@ OBJS=$(patsubst %.cpp,%.o,$(wildcard *.cpp))
 
 # The directories that this "bridle" depends on
 CXXINCLUDE+=-I./ 
-
+CXXFLAGS+= -std=c++0x 
 all: check-env $(OBJS) 
 
 check-env:

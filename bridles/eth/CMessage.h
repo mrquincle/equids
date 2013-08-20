@@ -51,6 +51,7 @@ typedef enum
    MSG_MAP_DATA,
    MSG_MAP_COVARIANCE,
    MSG_MAP_COMPLETE,
+   MSG_CALIBRATE,
    MSG_NUMBER,
 } TMessageType;
 

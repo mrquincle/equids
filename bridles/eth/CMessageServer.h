@@ -46,7 +46,9 @@ class CMessageServer{
 		~CMessageServer();
 		int initServer(const char* port);
 		//void update(double odo[],bool buttons[],int rotation[],int irr[]);
-		CMessage getMessage();
+//		CMessage getMessage();
+
+		const CMessage & getMessage();
       void sendMessage(CMessage &msg) {
          jockey_IPC.SendData(msg.type, (uint8_t*)msg.data, msg.len);
       }

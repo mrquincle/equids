@@ -23,6 +23,7 @@ endif
 ####################################################################################
 
 SUBDIRS+=main
+SUBDIRS+=eth
 SUBDIRS+=motor
 SUBDIRS+=common
 SUBDIRS+=filesystem

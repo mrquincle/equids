@@ -1,2 +1,6 @@
 *.o
 bin/
+libs/
+managers/visualiser/data
+jockeys/camera-actionselection
+enable_jockeys.mk
