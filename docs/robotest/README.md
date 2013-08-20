@@ -3,6 +3,7 @@
 It will be awesome if someone copies this into the binary itself. So, you can just type robotest and 
 will see this as a help message. 
 
+````
 -------------------------------------------------------------------------------------------------------
                ActiveWheel                           Scout                          KaBot
          robotest Robottesting IRobot     robotest Robottesting IRobot    robotest Robottesting IRobot
@@ -20,6 +21,7 @@ Hinge to angle        51          1
 RGBLed                52          4
 Docking calibration   53          0
 MotorEnable           57          3
+````
 
 ## Docking
 

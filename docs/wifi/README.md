@@ -25,10 +25,12 @@ Now, we can check if we can see the ActiveWheel popping up in our network:
 
 * sudo arp-scan -l -I wlan0 # on the remote computer, will give you something like this:
 
-    Interface: wlan0, datalink type: EN10MB (Ethernet)
-    Starting arp-scan 1.8.1 with 256 hosts (http://www.nta-monitor.com/tools/arp-scan/)
-    192.168.1.1      00:22:6b:7c:56:de    Cisco-Linksys, LLC
-    192.168.1.100    00:0b:6b:7e:cc:4b    Wistron Neweb Corp.
+````
+Interface: wlan0, datalink type: EN10MB (Ethernet)
+Starting arp-scan 1.8.1 with 256 hosts (http://www.nta-monitor.com/tools/arp-scan/)
+192.168.1.1      00:22:6b:7c:56:de    Cisco-Linksys, LLC
+192.168.1.100    00:0b:6b:7e:cc:4b    Wistron Neweb Corp.
+````
 
 * ping 192.168.1.100 # I added this, because it will NOT work. I know, don't email me about it :-), use arping instead
 

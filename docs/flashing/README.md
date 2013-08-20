@@ -16,10 +16,12 @@ There are currently no people who feel responsible for maintaining these reposit
 
 The robot contains four boards with MSPs besides the main board with the Blackfin (BF). Each of the boards communicates with the BF via SPI. The devices are listed in SPIStream.h in the irobot library:
 
+````
     {"SPI A HINGE",     "/dev/spidev0.2", 10, SPITYPE_MSP},
     {"SPI B FRONT",     "/dev/spidev0.3", 17, SPITYPE_MSP},
     {"SPI C SIDE",      "/dev/spidev0.4",  8, SPITYPE_MSP},
     {"SPI D POWER",     "/dev/spidev0.5",  9, SPITYPE_MSP},
+````
 
 The individual boards use a general pin to indicate that they have something to be read for the BF. For now, these pins seem to be floating which causes the speed of transmission to go down. Flow for incoming stuff: ISR_DMA -> ReadRXDMA -> TriggerEvent( EVENT_SPIMSG ) -> SPIMessageHandler -> processCommand with immediate response: ISR_DMA -> WriteTXDMA & ClearGPIO. And the other way for outgoing (microphone) data: ADC12_ISR -> MICSendStatus -> SPISend -> SPISendMessage -> SPIWriteBlocking -> SPIWrite -> BQPushBytes & WriteTXDMA & ClearGPIO. It is important to notice that SPISendMessage drops messages if the buffer is full. Take care if you use LEDs to indicate status of something send. LEDs are also SPI commands, so they interfer! As a user I can say that the MSPs seem to work quite reliably in the sense that they do not seem to be segfaulting when running for extended times. However, in the high througput case of microphone data on average 1 of every 2 packages get lost. So, take this in consideration if you rely on (sensor) data from the MSPs. 
 
@@ -74,24 +76,28 @@ For the rest to use minicom and kermit from uboot, use http://lists.denx.de/pipe
 
 Logs from minicom:
 
-    loadb
-    ## Ready for binary (kermit) download to 0x01000000 at 115200 bps...                                                             
-    ## Total Size      = 0x002df035 = 3010613 Bytes                                                                                  
-    ## Start Addr      = 0x01000000
+````
+loadb
+## Ready for binary (kermit) download to 0x01000000 at 115200 bps...                                                             
+## Total Size      = 0x002df035 = 3010613 Bytes                                                                                  
+## Start Addr      = 0x01000000
+````
 
 Store this number 0x002df035 somewhere, it is $(filesize) in the Blackfin User guide.
 
 You can check if the downloaded images is correct.
 
-    bfin> imi 1000000
-    ## Checking Image at 01000000 ...
-       Legacy image found
-       Image Name:   Linux Kernel and ext2
-       Image Type:   Blackfin Linux Kernel Image (gzip compressed)
-       Data Size:    3010549 Bytes =  2.9 MB
-       Load Address: 00100000
-       Entry Point:  00318aa8
-       Verifying Checksum ... OK
+````
+bfin> imi 1000000
+## Checking Image at 01000000 ...
+Legacy image found
+    Image Name:   Linux Kernel and ext2
+    Image Type:   Blackfin Linux Kernel Image (gzip compressed)
+    Data Size:    3010549 Bytes =  2.9 MB
+    Load Address: 00100000
+    Entry Point:  00318aa8
+    Verifying Checksum ... OK
+````
 
 Now copy it actually to the right flash section:
 
