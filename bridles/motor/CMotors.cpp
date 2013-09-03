@@ -53,7 +53,7 @@ CMotors::CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 	max_radius = 1000; // the maximum value
 	axle_track = 10;
 	left_right_reversed = true;
-//	left_right_reversed = false;
+	//	left_right_reversed = false;
 
 	printf("setting buf\n");
 	buf[0]=0;
@@ -82,8 +82,9 @@ CMotors::CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 		break;
 	}
 	case RobotBase::KABOT: {
-		odometry_koef1 = 0.000000089;
-		odometry_koef2 = 0.000000123;
+		odometry_koef1 = 0.000000152;
+		odometry_koef2 = 0.65;
+		odometry_koef3 = 0.3713;
 		break;
 	}
 	case RobotBase::SCOUTBOT: {
@@ -98,6 +99,7 @@ CMotors::CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 	}
 	fprintf(stdout, "time\n");
 	timer = new CTimer();
+	timer->start();
 	lastTime=timer->getTime();
 }
 
@@ -205,15 +207,15 @@ void CMotors::setRadianSpeeds(int forward, int radius) {
 	case RobotBase::ACTIVEWHEEL: {
 		fprintf(stderr, "To be implemented\n");
 		ActiveWheel *bot = (ActiveWheel*)robot_base;
-//		bot->moveForward(forward);
-//		bot->moveRight(turn);
+		//		bot->moveForward(forward);
+		//		bot->moveRight(turn);
 		break;
 	}
 	case RobotBase::KABOT: {
 		fprintf(stderr, "To be implemented\n");
 		KaBot *bot = (KaBot*)robot_base;
-//		bot->moveForward(forward);
-//		bot->moveRight(turn);
+		//		bot->moveForward(forward);
+		//		bot->moveRight(turn);
 		break;
 	}
 	case RobotBase::SCOUTBOT: {
@@ -352,17 +354,19 @@ void CMotors::setSpeeds(int forward, int turn) {
 			speedleft = turn;
 			speedright = -turn;
 		}
+
 		float leftfaster=odometry_koef1/odometry_koef2;
 		setMotorSpeedsS(speedleft/leftfaster,-speedright);
 
 		break;
+		usleep(100000); // at least 0.1 second per command
 	}
 	default:
 		fprintf(stderr, "There is no way to drive a robot without knowing its layout\n");
 		break;
 	}
-	usleep(100000); // at least 0.1 second per command
 }
+
 
 /**
  * use carefully!!
@@ -494,17 +498,16 @@ void CMotors::setMotorSpeedsS(int left,int right)
 
 void CMotors::countOdometryTimeKB(int timediff){
 
-	float diagonala = sqrt(odometry_koef1 *odometry_koef1 +odometry_koef2*odometry_koef2);
+	//float diagonala = sqrt(odometry_koef1 * odometry_koef1 + odometry_koef2 * odometry_koef2);
 
-	float dfront= timediff *diagonala* actualspeed1;
-	float drear= timediff *diagonala* actualspeed2;
+	float dfront = timediff * odometry_koef1 * actualspeed1;
+	float drear = timediff * odometry_koef1 * actualspeed2;
 
-
-	float delta = atan(odometry_koef2/odometry_koef1);//uhel mezi rychlosti do strany a dopredu, atan(b/a)=delta
-	float r= 0.3713;//polovicni vydalenost sroubu
-	dx =    dfront * cos(posPhi+delta) + drear * cos(posPhi-delta);
-	dy =    dfront * sin(posPhi+delta) + drear * sin(posPhi-delta);
-	dphi = (dfront * sin(posPhi+delta) - drear * sin(posPhi-delta))*(r);
+	float delta = atan(odometry_koef2 / odometry_koef1); //uhel mezi rychlosti do strany a dopredu, atan(b/a)=delta
+	float r = 0.3713;	//polovicni vydalenost sroubu
+	dx = dfront * cos(posPhi + odometry_koef2) + drear * cos(posPhi - odometry_koef2);
+	dy = dfront * sin(posPhi + odometry_koef2) + drear * sin(posPhi - odometry_koef2);
+	dphi = (dfront * sin(posPhi + odometry_koef2) - drear * sin(posPhi - odometry_koef2)) * (r);
 
 	posX += dx;
 	posY += dy;
@@ -596,6 +599,10 @@ void CMotors::setMotorPosition(float x,float y,float phi){
 	this->buf[0]=x;
 	this->buf[1]=y;
 	this->buf[2]=phi;
+	this->posX=x;
+	this->posY=y;
+	this->posPhi=phi;
+	printf("setting position %f %f %f\n",buf[0],buf[1],buf[2]);
 }
 
 double* CMotors::getPosition(){

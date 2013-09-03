@@ -1,7 +1,7 @@
 /**
  * 456789------------------------------------------------------------------------------------------------------------120
  *
- * @brief ...
+ * @brief Operator that work on a STL container, such as vector or list
  * @file dim1algebra.hpp
  * 
  * This file is created at Almende B.V. and Distributed Organisms B.V. It is open-source software and belongs to a
@@ -71,6 +71,8 @@
  *   - perhaps conform to STL standard in two ways:
  *      - have T as final template parameter rather than the first
  *      - use T init so no construction T(0) is needed
+ *
+ * There will not be a 2D version of this file, for that, please use something like Eigen.
  */
 
 /***********************************************************************************************************************
@@ -78,6 +80,57 @@
  **********************************************************************************************************************/
 
 namespace dobots {
+
+//! Helper function for printing asserts
+#define ASSERT(condition) { \
+	if(!(condition)){ \
+		std::cerr << "ASSERT FAILED: " << #condition << " @ " << __FILE__ << " (" << __LINE__ << ")" << std::endl; \
+		assert(condition); \
+	} \
+	}
+
+//! Helper function for printing asserts
+#define ASSERT_EQ(x,y) \
+	if (!(x == y)) { \
+		std::cerr << "ASSERT FAILED: " << #x << " == " << #y << " fails, specifically: " << x << " == " << y << \
+		" fails @ " << __FILE__ << " (" << __LINE__ << ")" << std::endl; \
+		assert(x == y); \
+	}
+
+#define ASSERT_NEQ(x,y) \
+	if (!(x != y)) { \
+		std::cerr << "ASSERT FAILED: " << #x << " != " << #y << " fails, specifically: " << x << " != " << y << \
+		" fails @ " << __FILE__ << " (" << __LINE__ << ")" << std::endl; \
+		assert(x != y); \
+	}
+
+#define ASSERT_LT(x,y) \
+	if (!(x < y)) { \
+		std::cerr << "ASSERT FAILED: " << #x << " < " << #y << " fails, specifically: " << x << " < " << y << \
+		" fails @ " << __FILE__ << " (" << __LINE__ << ")" << std::endl; \
+		assert(x < y); \
+	}
+
+#define ASSERT_LEQ(x,y) \
+	if (!(x <= y)) { \
+		std::cerr << "ASSERT FAILED: " << #x << " <= " << #y << " fails, specifically: " << x << " <= " << y << \
+		" fails @ " << __FILE__ << " (" << __LINE__ << ")" << std::endl; \
+		assert(x <= y); \
+	}
+
+#define ASSERT_GT(x,y) \
+	if (!(x > y)) { \
+		std::cerr << "ASSERT FAILED: " << #x << " > " << #y << " fails, specifically: " << x << " > " << y << \
+		" fails @ " << __FILE__ << " (" << __LINE__ << ")" << std::endl; \
+		assert(x > y); \
+	}
+
+#define ASSERT_GEQ(x,y) \
+	if (!(x >= y)) { \
+		std::cerr << "ASSERT FAILED: " << #x << " >= " << #y << " fails, specifically: " << x << " >= " << y << \
+		" fails @ " << __FILE__ << " (" << __LINE__ << ")" << std::endl; \
+		assert(x >= y); \
+	}
 
 /**
  * For an explanation of the different metrics, see the "distance" function below. This distance function does really
@@ -264,12 +317,12 @@ public:
  * @template F               floating type to be used for the scaling
  * @param x                  parameter x, will be adapted
  * @param y                  parameter y, will be adapted
- * @param max                maximum value (>= 0)
+ * @param max                maximum value (> 0)
  * @return                   void
  */
 template<typename T, typename F>
 void cap_scale(T & x, T & y, T max) {
-	assert (max >= 0);
+	assert (max > 0);
 	if (max == 0) {
 		x = y = max;
 		return;
@@ -292,11 +345,11 @@ void cap_scale(T & x, T & y, T max) {
  * @param x                  parameter x, will be adapted
  * @param y                  parameter y, will be adapted
  * @param min                minimum value
- * @param max                maximum value (>= min), can be smaller than 0 if min is smaller than 0
+ * @param max                maximum value (> min), can be smaller than 0 if min is smaller than 0
  */
 template<typename T, typename F>
 void cap_scale(T & x, T & y, T min, T max) {
-	assert (max >= min);
+	assert (max > min);
 	// weird case
 	if (max == min) {
 		x = y = min;
@@ -315,10 +368,24 @@ void cap_scale(T & x, T & y, T min, T max) {
 	y = sy - shift;
 }
 
+/**
+ * The same as cap_range, but now for an STL container.
+ */
 template<typename InputIterator, typename T>
 void cap_range(InputIterator first, InputIterator last, T min, T max) {
 	std::transform(first, last, first, cap_range_function<T>(min,max));
 }
+
+template<typename T, typename U>
+U scale(const T x, const T size_before, const U size_after, bool rounding = false) {
+	ASSERT(size_before && size_after);
+	ASSERT_LEQ(x,size_before);
+	if (rounding) {
+		return round((x * size_after) / size_before);
+	}
+	return (x * size_after) / size_before;
+}
+
 
 /***********************************************************************************************************************
  * Printing helpers

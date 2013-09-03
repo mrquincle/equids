@@ -1,7 +1,7 @@
 /**
  * 456789------------------------------------------------------------------------------------------------------------120
  *
- * @brief ...
+ * @brief Infrared avoidance controller
  * @file AvoidIRController.h
  * 
  * This file is created at Almende B.V. and Distributed Organisms B.V. It is open-source software and belongs to a
@@ -27,14 +27,10 @@
 #ifndef AVOIDIRCONTROLLER_H_
 #define AVOIDIRCONTROLLER_H_
 
-#include <string>
-#include <CMessageServer.h>
-#include <IRobot.h>
-
 #include <CMotors.h>
 #include <CLeds.h>
 
-#include <cassert>
+#include <CController.h>
 
 //! The name of the controller can be used for controller selection
 static const std::string NAME = "AvoidInfrared";
@@ -42,54 +38,42 @@ static const std::string NAME = "AvoidInfrared";
 //! Convenience function for printing to standard out
 #define DEBUG NAME << '[' << getpid() << "] " << __func__ << "(): "
 
-class AvoidIRController {
+/**
+ * Use this class as a template class for other controllers if you want to quickly prototype your own controller. The
+ * basic functionality is probably the same, except for the tick() function where you can use your own stuff.
+ */
+class AvoidIRController: public CController {
 public:
+	//! Constructor
 	AvoidIRController();
 
+	//! Destructor
 	virtual ~AvoidIRController();
 
-	void parsePort(int argc, char **argv);
-
-	void initServer();
-
-	void initRobot();
-
+	//! Initialize the periphery, probably best be done when you got the control from the jockey framework
 	void initRobotPeriphery();
 
-	void pause();
-
-	void start();
-
-	void acknowledge();
-
+	//! Controller specific function for calibration procedure
 	void calibrate();
 
+	//! Controller specific function for getting calibration values
 	void get_calibration();
 
+	//! Just print sensor values, do nothing
+	void print();
+
+	//! Controller specific code
 	void tick();
 
+	//! Signal the end of the controller by using LEDs
 	void signal_end();
 
+	//! Stop the controller by proper deallocation
 	void graceful_end();
 
-	inline std::string getPort() { return port; }
-
-	inline CMessageServer *getServer() { return server; }
-
-	//! Actually ugly that message is copied here, should have been by const and by reference
-	inline const CMessage & getMessage() { assert (server != NULL); return server->getMessage(); }
 private:
-
-	std::string port;
-
-	CMessageServer *server;
-
-	RobotBase *robot;
-
-	RobotBase::RobotType robot_type;
-
+	//! Specific bridles to be used
 	CMotors *motors;
-
 	CLeds *leds;
 };
 

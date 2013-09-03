@@ -229,8 +229,13 @@ int CLaserScan::generateVector(CRawImage* laserImage, CRawImage* noLaserImage, i
 }
 
 int CLaserScan::generateVector(CRawImage* laserImage, CRawImage* noLaserImage, std::vector<int> & vec) {
+
 	assert (laserImage->getwidth() == noLaserImage->getwidth());
 	assert (laserImage->getheight() == noLaserImage->getheight());
+
+	// clear the vector first
+	vec.clear();
+
 	int threshold = 20;
 	int diff_threshold = 20;
 	for (int j = 0; j < laserImage->getheight(); j++) {
@@ -246,7 +251,7 @@ int CLaserScan::generateVector(CRawImage* laserImage, CRawImage* noLaserImage, s
 		vec.push_back(p);
 	}
 	if (printLaser) {
-		fprintf(stdout, "%s(): Laser array [%i]: \n", __func__, vec.size());
+		fprintf(stdout, "%s(): Laser array [%li]: \n", __func__, vec.size());
 		for (int i = 0; i < vec.size(); i++) {
 			fprintf(stdout, "%03i ", vec[i]);
 			if ((i % 32) == 31) {
@@ -301,7 +306,11 @@ void CLaserScan::estimateParameters(std::vector<int> & vec, int & length, int & 
 }
 
 /**
+ * Get line out of the image using the Hough transform.
  *
+ * @param image              Image with differences between laser turned on and off
+ * @param alpha              Line angle
+ * @param d                  Distance of line to origin
  */
 void CLaserScan::getLine(CRawImage *image, double & alpha, double & d) {
 	std::vector<DecPoint*> points;
@@ -318,18 +327,21 @@ void CLaserScan::getLine(CRawImage *image, double & alpha, double & d) {
 
 	hough.addPoints(points);
 
-	std::cout << "Hough transform step ";
-	for (int t = 0; t < 40; t++) {
-		std::cout << t << ' ';
+	int hough_steps = 40;
+	std::cout << "Use " << hough_steps << " hough steps" << std::endl;
+
+	std::cout << "Hough transform status ";
+	for (int t = 0; t < hough_steps; t++) {
+		std::cout << '.';
 		hough.doTransform();
 	}
 	std::cout << std::endl;
 
-	for (int i = 0; i < points.size(); i++) {
-		delete points[i];
-	}
-	points.erase(points.begin(), points.end());
-	//	hough.
+	hough.getLine(d, alpha);
+
+	hough.clear();
+
+	std::cout << "Recognized line of angle " << alpha << " and distance " << d << std::endl;
 }
 
 /**
@@ -404,26 +416,26 @@ void CLaserScan::GetData() {
 	}
 
 	// Compute the orientation of the line and its distance to the origin
-	//	double alpha, d;
-	//	getLine(image_red_diff,alpha,d);
+	double alpha = 0, d = 0;
+	getLine(image_red_diff,alpha,d);
 
 	if (printTime) fprintf(stdout,"%s(): Laser scan detection time: %ims\n",__func__,sfTimer.getTime());
 
 	// Compute the laser vector using the two images
 	//generateVector(image2,image1,laserVec);
-//
-//	// Print laser data
-//	if (printLaser) {
-//		fprintf(stdout,"%s(): Laser [%i]: \n", __func__, laserResolution);
-//		for (int i = 0; (i < laserResolution) && printTime; i++) {
-//			fprintf(stdout,"%03i ",laserVec[i]);
-//			if ((i % 32) == 31) {
-//				fprintf(stdout,"\n");
-//				usleep(10000);
-//			}
-//		}
-//		fprintf(stdout,"\n");
-//	}
+	//
+	//	// Print laser data
+	//	if (printLaser) {
+	//		fprintf(stdout,"%s(): Laser [%i]: \n", __func__, laserResolution);
+	//		for (int i = 0; (i < laserResolution) && printTime; i++) {
+	//			fprintf(stdout,"%03i ",laserVec[i]);
+	//			if ((i % 32) == 31) {
+	//				fprintf(stdout,"\n");
+	//				usleep(10000);
+	//			}
+	//		}
+	//		fprintf(stdout,"\n");
+	//	}
 }
 
 int avg(int *vector, int size) {
@@ -513,6 +525,53 @@ void CLaserScan::Fill(int *in, int in_size, int *out, int out_size) {
 }
 
 /**
+ * Get recognized object.
+ */
+ObjectType CLaserScan::GetRecognizedObject() {
+	// get the two camera images and calculate the difference
+	GetData();
+
+	generateVector(image2,image1,laserVector);
+
+	int distance = 0, length = 0;
+	estimateParameters(laserVector, length, distance);
+
+	if (printLaser) {
+		std::cout << "Laser parameters: length=" << length << ", distance=" << distance << std::endl;
+		fprintf(stdout,"%s(): Estimated parameters length: %i pixels\n", __func__, length);
+	}
+
+	// used octave to fit the stuff, first array is the distance in cm, second array are the values from the laserscan
+	// x=[7,10,13,16,19,22,25,28,31,34,37];
+	// y=[151,204,234,250,265,276,281,287,292,298,300];
+	// p = polyfit(y,x,2)
+	// 1.9176e-03  -6.8800e-01   6.8157e+01
+	double coeff_a = 68.157;
+	double coeff_b = -0.688;
+	double coeff_c = 0.0019176;
+	distance = coeff_a + (double)distance * coeff_b + (double)distance*distance*coeff_c;
+
+	printf("Laser detected ");
+	if (distance > 40) {
+		printf("nothing for now\n");
+		return O_NOTHING;
+	} else if (length > 220) {
+		printf("wall\n");
+		return O_WALL;
+	} else if (length < 100) {
+		printf("small step\n");
+		return O_SMALL_STEP;
+	} else if (length < 200) {
+		printf("large step\n");
+		return O_LARGE_STEP;
+	} else {
+		printf("something, but has to decide\n");
+		return O_SOMETHING;
+	}
+
+}
+
+/**
  * Uses the laser data to calculate the distance to an object or the wall. The value distance[i]=0 is used as not a
  * number to get rid of values that are too large.
  *
@@ -525,42 +584,23 @@ void CLaserScan::GetDistance(int &distance) {
 
 	GetData();
 
-	laserVector.clear();
 	generateVector(image2,image1,laserVector);
 	int length = 0;
 	estimateParameters(laserVector, length, distance);
-//	if (printLaser) {
-		fprintf(stdout,"%s(): Line length: %i pixels\n", __func__, length);
-//		fprintf(stdout,"%s(): Distance to line: %i cm\n", __func__, distance);
-//	}
+	//	if (printLaser) {
+	fprintf(stdout,"%s(): Line length: %i pixels\n", __func__, length);
+	//		fprintf(stdout,"%s(): Distance to line: %i cm\n", __func__, distance);
+	//	}
 
-		//		x=[7,10,13,16,19,22,25,28,31,34,37];
-		//		y=[151,204,234,250,265,276,281,287,292,298,300];
-		//		p = polyfit(y,x,2)
-		//
-		//		   1.9176e-03  -6.8800e-01   6.8157e+01
+	//		x=[7,10,13,16,19,22,25,28,31,34,37];
+	//		y=[151,204,234,250,265,276,281,287,292,298,300];
+	//		p = polyfit(y,x,2)
+	//
+	//		   1.9176e-03  -6.8800e-01   6.8157e+01
 	double coeff_a = 68.157;
 	double coeff_b = -0.688;
 	double coeff_c = 0.0019176;
 	distance = coeff_a + (double)distance * coeff_b + (double)distance*distance*coeff_c;
-
-	if (printTime) fprintf(stdout,"%s(): Laser calculations: %i \n", __func__, sfTimer.getTime());
-
-	printf("Laser detected ");
-	if (distance > 40) {
-		printf("nothing for now\n");
-	} else if (length > 220) {
-		printf("wall\n");
-		std::cout << wall << std::endl;
-	} else if (length < 100) {
-		printf("small step\n");
-		std::cout << small << std::endl << step << std::endl;
-	} else if (length < 200) {
-		printf("large step\n");
-		std::cout << large << std::endl << step << std::endl;
-	} else {
-		printf("something, but has to decide\n");
-	}
 
 
 #ifdef CALC_DISTANCE

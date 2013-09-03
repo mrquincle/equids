@@ -30,7 +30,7 @@
  * Almost the same as Point2D. Dec stands for "decorated". The "Decorated Point" can be used in special types of Hough
  * transform where for example the points are matched with each other.
  */
-struct DecPoint: Point2D {
+struct DecPoint: Point2D<int> {
 	DecPoint();
 	DecPoint(int x, int y);
 	float skew;

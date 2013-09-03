@@ -9,6 +9,8 @@
 
 int CRawImage::numSaved = 0;
 
+int CRawImage::numLoaded = 0;
+
 #define ASSERT(condition) { \
 		if(!(condition)){ \
 			std::cerr << "ASSERT FAILED: " << #condition << " @ " << __FILE__ << " (" << __LINE__ << ")" << std::endl; \
@@ -60,6 +62,11 @@ CRawImage::CRawImage(int wi, int he, int bpp): width(wi), height(he), bpp(bpp)
 	size = bpp*width*height;
 	data = (VALUE_TYPE*)calloc(size,sizeof(VALUE_TYPE));
 	updateHeader();
+	// default brush is red
+	brush.r = 255;
+	brush.g = 0;
+	brush.b = 0;
+	do_swap = false;
 }
 
 CRawImage::CRawImage(const CRawImage & other): width(other.width), height(other.height),
@@ -193,7 +200,10 @@ CRawImage* CRawImage::patch2Img(Patch &patch) {
 	return img;
 }
 
-
+/**
+ * Free internal data structures and reallocate new ones. This is only necessary if you change resolution, or the number
+ * of bits per pixels for example. Else, just use clear().
+ */
 void CRawImage::refresh() {
 	ASSERT(width > 0);
 	size = bpp*width*height;
@@ -201,6 +211,15 @@ void CRawImage::refresh() {
 	data = (VALUE_TYPE*)calloc(size,sizeof(VALUE_TYPE));
 	std::cout << "Set size to " << width << '*' << height << '*' << bpp << std::endl;
 	updateHeader();
+}
+
+/**
+ * Clear the data in the image. Set it to 0.
+ */
+void CRawImage::clear() {
+	for (int i = 0; i < size; i++) {
+		data[i] = 0;
+	}
 }
 
 /**
@@ -357,8 +376,13 @@ void CRawImage::swap()
 	if (bpp != 3) {
 		return;
 	}
+	if (!do_swap) {
+		printf("%s(): we do not perform a computationally expensive swap\n", __func__);
+		return;
+	}
+
 	if (data == NULL) return;
-	printf("%s(): performing a computationally expensive swap\n");
+	printf("%s(): performing a computationally expensive swap\n", __func__);
 	VALUE_TYPE* newData = (VALUE_TYPE*)calloc(size,sizeof(VALUE_TYPE));
 	int span = width*bpp;
 	for (int j = 0;j<height;j++){
@@ -398,10 +422,17 @@ void CRawImage::saveBmp(const char* inName)
 
 void CRawImage::saveNumberedBmp(const char *name, bool increment)
 {
-	if (increment) numSaved++;
 	char nameext[100];
 	sprintf(nameext,"%s%04i.bmp",name,numSaved);
 	saveBmp(nameext);
+	if (increment) numSaved++;
+}
+
+bool CRawImage::loadNumberedBmp(const char *name, bool increment) {
+	char nameext[100];
+	sprintf(nameext,"%s%04i.bmp",name,numLoaded);
+	if (increment) numLoaded++;
+	return loadBmp(nameext);
 }
 
 /**
@@ -440,10 +471,11 @@ bool CRawImage::loadBmp(const char* inName)
 
 void CRawImage::plotCenter()
 {
+	assert(bpp == 3);
 	int centerWidth = 20;
-	VALUE_TYPE color[] = {255,150,150};
+	VALUE_TYPE color[] = { 255, 220, 100 }; // todo: change to use brush and setPixel
 	for (int i = -centerWidth;i<centerWidth;i++){
-		for (int j =0;j<3;j++){
+		for (int j=0;j<3;j++){
 			data[(width*(height/2+i)+width/2-centerWidth)*3+j] = color[j];
 			data[(width*(height/2+i)+width/2+centerWidth)*3+j] = color[j];
 			data[(width*(height/2-centerWidth)+width/2+i)*3+j] = color[j];
@@ -452,34 +484,40 @@ void CRawImage::plotCenter()
 	}
 }
 
-void CRawImage::plotLine(int x,int y) {
-	int base;
-	if (y < 0 || y > height-1) y = height/2;
-	if (x < 0 || x > width-1) x = width/2;
+/**
+ * Plot a purple horizontal line through y.
+ */
+void CRawImage::plotHorizontalLine(int y) {
+	assert (y >= 0 && y < height);
 	for(int i=0; i < width;i++) {
-		if (i == width/2) i++;
-		base = (width*y+i)*3;
-		data[base+0] = 255;
-		data[base+1] = 0;
-		data[base+2] = 255;
+		if (bpp == 1)
+			setValue(i,y,255);
+		else
+			setPixel(i,y,brush);
 	}
+}
 
+/**
+ * Plot a yellow vertical line.
+ */
+void CRawImage::plotVerticalLine(int x) {
+	assert (x >= 0 && x < width);
 	for(int j=0;j<height;j++) {
-		const int bidx = ((width*j)+x)*3;
-		if (j == height/2) j++;
-		data[bidx+0] = 255;
-		data[bidx+1] = 255;
-		data[bidx+2] = 0;
+		if (bpp == 1)
+			setValue(x,j,255);
+		else
+			setPixel(x,j,brush);
 	}
 }
 
 // Plot line from [x0,y0] to [x1,y1]
 void CRawImage::plotLine(int x0, int y0, int x1, int y1) {
-	assert(bpp == 1); // for now
+//	assert(bpp == 1); // for now
 	assert (x0 >= 0 && x0 < width);
 	assert (x1 >= 0 && x1 < width);
 	assert (y0 >= 0 && y0 < height);
 	assert (y1 >= 0 && y1 < height);
+
 	int xr = abs(x0-x1);
 	int yr = abs(y0-y1);
 	if (xr > yr) {
@@ -487,14 +525,20 @@ void CRawImage::plotLine(int x0, int y0, int x1, int y1) {
 		int ystep = y0 < y1 ? 1 : -1;
 		for (int i = x0; i != x1; i+=xstep) { // loop over slowest moving index
 			int j = y0 + xstep*ystep*((i-x0) * yr) / xr;
-			setValue(i,j,255);
+			if (bpp == 1)
+				setValue(i,j,255);
+			else
+				setPixel(i,j,brush);
 		}
 	} else {
 		int xstep = x0 < x1 ? 1 : -1;
 		int ystep = y0 < y1 ? 1 : -1;
 		for (int j = y0; j != y1; j+=ystep) { // loop over slowest moving index
 			int i = x0 + xstep*ystep*((j-y0) * xr) / yr;
-			setValue(i,j,255);
+			if (bpp == 1)
+				setValue(i,j,255);
+			else
+				setPixel(i,j,brush);
 		}
 	}
 }
@@ -505,17 +549,19 @@ void CRawImage::plotCross(int i,int j,int size) {
 		int dii = i+di;
 		if (dii < 0) continue;
 		if (dii >= width) continue;
-		data[dii*bpp+j*width*bpp+0] = 0;
-		data[dii*bpp+j*width*bpp+1] = 0;
-		data[dii*bpp+j*width*bpp+2] = 255;
+		if (bpp == 1)
+			setValue(dii,j,255);
+		else
+			setPixel(dii,j,brush);
 	}
 	for (int dj = -size; dj < size; ++dj) {
 		int djj = j+dj;
 		if (djj < 0) continue;
 		if (djj >= height) continue;
-		data[i*bpp+djj*width*bpp+0] = 0;
-		data[i*bpp+djj*width*bpp+1] = 0;
-		data[i*bpp+djj*width*bpp+2] = 255;
+		if (bpp == 1)
+			setValue(i,djj,255);
+		else
+			setPixel(i,djj,brush);
 	}
 }
 

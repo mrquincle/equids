@@ -23,41 +23,42 @@
 #include <CRawImage.h>
 
 #define NUM_CONNECTIONS 100
-typedef struct 
-{
+typedef struct {
 	int socket;
 	sem_t* sem;
-}SClientInfoIMG;
+} SClientInfoIMG;
 
 /*typedef enum
-{
-	CM_GET = 0,
-	CM_QUIT
-}
-ECameraMessage;*/
+ {
+ CM_GET = 0,
+ CM_QUIT
+ }
+ ECameraMessage;*/
 
 void* serverLoop(void* serv);
 
-class CImageServer{
-	public:
+class CImageServer {
+public:
 
-		CImageServer(sem_t *imsem,CRawImage* image);
-		~CImageServer();
-		int initServer(const char* port);
+	CImageServer(sem_t *imsem, CRawImage* image);
+	~CImageServer();
+	int initServer(const char* port);
 
-		int checkForMessage(int socket);
-		int sendImage(int socket);
-		int closeConnection(int socket);
-		void stopServer();
+	int checkForMessage(int socket);
+	int sendImage(int socket);
+	int closeConnection(int socket);
+	void stopServer();
 
-		int connected;
-		int serverSocket;
-		int mySocket;
-		sem_t *dataSem;
-		sem_t connectSem;
-		int messageRead;
-		CRawImage *image;
-		bool stop;
+	int connected;
+	int serverSocket;
+	int mySocket;
+	sem_t *dataSem;
+	sem_t connectSem;
+	int messageRead;
+	CRawImage *image;
+	bool stop;
+private:
+	pthread_t* connectLoopThread;
 };
 
 #endif

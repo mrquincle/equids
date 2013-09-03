@@ -37,6 +37,8 @@
 
 namespace dobots {
 
+#define M_PIx2              6.2831853071795861097
+
 /**
  * The Hough transform can be used to detect higher-order structures from a bunch of points, commonly called a point
  * cloud. It's first implementation used it to detect lines, we will use it to detect lines first, and planes later.
@@ -58,7 +60,7 @@ public:
 		input_size.y = 480;
 		max_distance = std::sqrt(input_size.x*input_size.x + input_size.y*input_size.y);
 		accumulator = new Accumulator<P>(size);
-//		use_cells = true;
+		//		use_cells = true;
 		use_cells = false;
 		use_random_patch_picker = false;
 	}
@@ -69,7 +71,7 @@ public:
 		this->input_size = input_size;
 		max_distance = std::sqrt(input_size.x*input_size.x + input_size.y*input_size.y);
 		accumulator = new Accumulator<P>(hough_space_size);
-//		use_cells = true;
+		//		use_cells = true;
 		use_cells = false;
 		use_random_patch_picker = false;
 	}
@@ -92,7 +94,7 @@ public:
 
 	//! Add points in a bunch, points should just be two or three elements, so by value, not by reference
 	void addPoints(std::vector<P*> & point_cloud) {
-//		std::cout << "Inserting " << point_cloud.size() << " points" << std::endl;
+		//		std::cout << "Inserting " << point_cloud.size() << " points" << std::endl;
 		points.insert(points.end(), point_cloud.begin(), point_cloud.end());
 	}
 
@@ -118,13 +120,13 @@ public:
 		for (int i = 0; i < spatial_points.size(); ++i) {
 			std::vector<P*> & pnts = spatial_points.getf(i);
 			//std::vector<P*> pnts;
-//			pnts.resize(cpy.size());
-//			ref(cpy.begin(), cpy.end(), pnts.begin());
-//			std::cout << "Add " << pnts.size() << " points " << std::endl;
+			//			pnts.resize(cpy.size());
+			//			ref(cpy.begin(), cpy.end(), pnts.begin());
+			//			std::cout << "Add " << pnts.size() << " points " << std::endl;
 			addPoints(pnts);
-//			for (int j = 0; j < pnts.size(); ++j) {
-//				addPoint(&pnts[j]);
-//			}
+			//			for (int j = 0; j < pnts.size(); ++j) {
+			//				addPoint(&pnts[j]);
+			//			}
 		}
 	}
 
@@ -142,8 +144,8 @@ public:
 
 		x = points[linear_e]->x / wx;
 		y = points[linear_e]->y / wy;
-//		std::cout << "Got point " << points[linear_e]->x << ',' << points[linear_e]->y <<
-//				" which becomes patch " << x << ',' << y << std::endl;
+		//		std::cout << "Got point " << points[linear_e]->x << ',' << points[linear_e]->y <<
+		//				" which becomes patch " << x << ',' << y << std::endl;
 	}
 
 	//! Perform the actual transform on all the points hitherto received
@@ -160,8 +162,8 @@ public:
 			std::vector<P*> & sp = spatial_points.get(ix,iy);
 			pnts.insert(pnts.end(), sp.begin(), sp.end()); // copy all references to points into pnts
 			// create vector with references to points, instead of copying the points
-//			pnts.resize(cpy.size());
-//			ref(cpy.begin(), cpy.end(), pnts.begin());
+			//			pnts.resize(cpy.size());
+			//			ref(cpy.begin(), cpy.end(), pnts.begin());
 		} else {
 			pnts.insert(pnts.end(), points.begin(), points.end()); // copy all references to points into pnts
 		}
@@ -169,10 +171,13 @@ public:
 		if (pnts.size() < 3) return;
 		std::vector<P*> random_set; random_set.clear();
 		random_set.resize(2);
+
 		random_n(pnts.begin(), pnts.end(), random_set.begin(), 2);
 		P* pnt0 = random_set[0];
 		P* pnt1 = random_set[1];
-		ACoordinates c = transform(*pnt0, *pnt1);
+
+		ACoordinates c;
+		if (!transform(*pnt0, *pnt1, c)) return;
 		Segment2D<P> segment;
 		segment.src = pnt0;
 		segment.dest = pnt1;
@@ -186,144 +191,116 @@ public:
 	}
 
 	/**
-	 * Returns a slope and intersection of the y-axis given two points. A line can be represented by ax+by+c=0, although
-	 * the representation y=mx+k is probably more familiar. Or: mx-y+k=x-(1/m)y+k/m=x+(b/a)y+c/a=0. Thus -m=a/b, the
-	 * slope corresponds to m=-a/b. The y-axis intersection can subsequently be interpolated by following the slope from
-	 * the y-value of the first point until you reach x=0, nothing complicated. The slope is undefined when the points
-	 * lie on a vertical line, the function returns false in that case and the slope and intersection values remain not
-	 * set.
-	 */
-	template <typename T>
-	inline bool getLineDescription(const Point2D point0, const Point2D point1, T & slope, T & y_intersect) {
-		//reorder, such that the point with highest x comes later, this will make the slope well-defined
-		Point2D pnt0, pnt1;
-		if (point0.x < point1.x) {
-			pnt0 = point0;
-			pnt1 = point1;
-		} else {
-			pnt0 = point1;
-			pnt1 = point0;
-		}
-		if (!(pnt1.x - pnt0.x)) return false;
-
-		slope = (T)(pnt1.y - pnt0.y) / (T)(pnt1.x - pnt0.x);
-		assert (slope);
-		T alpha = atan(slope);
-		y_intersect = pnt0.y - (T)(pnt0.x) * slope;
-		//		std::cout << "Line in rectangular coordinates: y=" << slope << "*x+" << y_intersect << std::endl;
-		return true;
-	}
-
-	/**
-	 * Returns the closest point of a line with respect to the origin. This was first calculated in polar coordinates,
-	 * but that is actually an inconvenient representation for it. A line that is drawn through point0 and point1 can
-	 * be represented by ax+by+c=0. As before the slope corresponds to -a/b. The closest point to the origin is
-	 * perpendicular to the line and hence has as slope b/a. So, this point is the intersection of the lines:
-	 *   y = b/a x
-	 *   ax + by + c = 0
-	 * Solving for x: ax + b*b/a x + c = 0, thus: x = -ac / (a*a + b*b), and with b=-1: x = -ac (a*a+1)
-	 * Solving for y: y = b/a x, with b=-1, y = -1/a x
-	 *
-	 * Check for yourself if you need some pictures at:
-	 *   http://www.intmath.com/plane-analytic-geometry/perpendicular-distance-point-line.php
-	 */
-	template <typename T>
-	inline void getClosestPoint(const T slope, const T y_intersect, T & x, T & y) {
-		x = -(slope*y_intersect)/(slope*slope+1.0);
-		y = (-1.0/slope)*x;
-	}
-
-	/**
-	 * Returns polar coordinates of a point. If the point is at the origin (r=0) this function will return false, because
-	 * theta cannot be defined. The angle returned is from -pi to +pi, use the make_positive argument to add "pi" to it,
-	 * to make it run from 0 to 2pi.
-	 */
-	template <typename T>
-	inline bool getPolarCoordinates(const T x, const T y, T & r, T & theta, bool make_positive = false) {
-		r = std::sqrt(x*x+y*y);
-		if (!r) return false;
-		theta = atan2(x, y);
-		if (make_positive) theta += (T)4*atan((T)1);
-		return true;
-	}
-
-	/**
 	 * Transform the line through two points to a (theta,r) coordinate pair. The angle theta ranges from -pi to +pi,
 	 * here it is scaled so it fits the accumulator type.
 	 */
-	ACoordinates transform(Point2D point0, Point2D point1) {
+	bool transform(Point2D<int> point0, Point2D<int> point1, ACoordinates & coordinates) {
 		// std::cout << "Transform " << pnt0.x << "," << pnt0.y << " and " << pnt1.x << "," << pnt1.y << std::endl;
+		ASSERT_NEQ(point0, point1);
 
 		typedef double ftype;
-		const ftype half_pi = 2*atan(1);
 		ftype theta, r;
-		//reorder, such that the point with highest x comes later, this will make the slope well-defined
-		Point2D pnt0, pnt1;
-		if (point0.x < point1.x) {
-			pnt0 = point0;
-			pnt1 = point1;
-		} else {
-			pnt0 = point1;
-			pnt1 = point0;
+
+		int pixels_apart = 10;
+		if (abs(point1 - point0) <= pixels_apart) {
+			return false;
 		}
 
-		if (pnt0.y == pnt1.y) { // horizontal lines are special, or else division by zero
-			//theta = (pnt0.y >= 0) ? 2*half_pi : 0;
-			theta = 0;
-			r = pnt0.y;
-		} else if (pnt0.x == pnt1.x) { // vertical lines are special too
-			theta = half_pi;
-			r = pnt0.x;
+		ftype slope,yisect,fx,fy;
+		bool slope_defined = getLineDescription(point0,point1,slope,yisect);
+		if (!slope_defined) {
+			// vertical line
+			theta = M_PI_2;
+			r = point0.x;
+			std::cout << "Undefined slope for " << point0 << " and " << point1 << ", just set it at " << theta <<
+					" and " << r << std::endl;
 		} else {
-			ftype slope,yisect,fx,fy;
-			getLineDescription<ftype>(pnt0,pnt1,slope,yisect);
-			getClosestPoint<ftype>(slope,yisect,fx,fy);
+			//std::cout << "From " << point0 << " and " << point1 << " got slope " << slope << " and y-intersection " << yisect << std::endl;
+			getClosestPoint(slope,yisect,fx,fy);
 
-			if (abs(fy) >= 2*max_distance) {
-				// too vertical to have reliable figures, let's not rely on floating point stuff below and catch it
-				// early
-				theta = half_pi;
-				r = pnt0.x;
-			} else {
-				bool success = getPolarCoordinates<ftype>(fx,fy,r,theta);
-				if (!success) {
-					// radial line (through origin)
-					theta = atan2(pnt1.x, pnt1.y) + half_pi;
-				}
-
-				// debugging / checks
-				ftype dist0 = sqrt(pnt0.x*pnt0.x+pnt0.y*pnt0.y);
-				ftype dist1 = sqrt(pnt1.x*pnt1.x+pnt1.y*pnt1.y);
-				// std::cout << "Point 0 is at dist=" << (int)dist0 << " and point 1 at dist=" << (int)dist1 << std::endl;
-				assert (r <= dist0);
-				assert (r <= dist1);
+			bool not_at_origin = getPolarCoordinates<ftype>(fx,fy,r,theta);
+			if (!not_at_origin) {
+				// radial line (through origin), pick random point and calculate atan(y/x)
+				theta = atan2(point1.y, point1.x) + M_PI_2;
+				r = 0;
+				std::cout << "Precisely through origin, set it at " << theta << " and " << r << std::endl;
 			}
+
+			// debugging / checks
+//			ftype dist0 = sqrt(pnt0.x*pnt0.x+pnt0.y*pnt0.y);
+//			ftype dist1 = sqrt(pnt1.x*pnt1.x+pnt1.y*pnt1.y);
+//			// std::cout << "Point 0 is at dist=" << (int)dist0 << " and point 1 at dist=" << (int)dist1 << std::endl;
+//			assert (r <= dist0);
+//			assert (r <= dist1);
 		}
 
-		// return in Hough coordinates
-		ACoordinates result;
+		transform(r, theta, coordinates);
+		return true;
+	}
 
-		result.x = (r * (ftype)accumulator->getSize().x) / (max_distance); // r scaled with max_dist/max x
-		if (result.x == accumulator->getSize().x) result.x = accumulator->getSize().x-1;
+	/**
+	 * Transform the polar coordinates of the closest point to a cell in Hough coordinates.
+	 */
+	void transform(const double r, const double theta, ACoordinates & coordinates) {
+		typedef double ftype;
 
-		result.y = ((theta) * (ftype)accumulator->getSize().y) / (4*half_pi) + accumulator->getSize().y / 2; // theta scaled with s
-		if (result.y == accumulator->getSize().y) result.y = accumulator->getSize().y-1;
+		coordinates.x = scale(r, max_distance, accumulator->getSize().x-1, true);
+//		if (coordinates.x == accumulator->getSize().x) result.x = accumulator->getSize().x-1;
 
-		//	std::cout << "Scaled distance " << result.x << " comes from " << r << std::endl;
-		//	std::cout << "Scaled angle " << result.y << " comes from " << theta << std::endl;
+		// divide theta by maximum range, and because of negative values shift
+		const ftype max_angle = (ftype)M_PIx2;
+		ftype positive_theta = theta + M_PI;
+		coordinates.y = scale(positive_theta, max_angle, accumulator->getSize().y-1, true);
+//		if (coordinates.y == accumulator->getSize().y) result.y = accumulator->getSize().y-1;
+
+//		std::cout << "Scaled distance " << result.x << " comes from " << r << std::endl;
+//		std::cout << "Scaled angle " << result.y << " comes from " << theta << " * " <<
+//				accumulator->getSize().y << " / " << (max_angle) << " + " << accumulator->getSize().y / 2 << std::endl;
 
 		// for debugging
-		assert (result.x < accumulator->getSize().x);
-		assert (result.y < accumulator->getSize().y);
-		return result;
+		ASSERT_LT(coordinates.x, accumulator->getSize().x);
+		ASSERT_LT(coordinates.y, accumulator->getSize().y);
 	}
 
 	//! Remove all points from the point cloud
-	void clear() {
-		points.clear();
+	void clear(bool deallocate = true) {
+		if (deallocate)
+			points.clear();
+		else
+			points.erase(points.begin(), points.end());
 	}
 
-	P getMax();
+	void transform(const ACoordinates coord, double & r, double & theta) {
+		typedef double ftype;
+
+		// r is scaled with max_dist / max, so scale back:
+//		r = (coord.x * max_distance) / (ftype)accumulator->getSize().x;
+		r = scale(coord.x, accumulator->getSize().x-1, max_distance);
+
+		const ftype max_angle = (ftype)M_PIx2;
+//		theta = ((coord.y-(ftype)accumulator->getSize().y/2) * max_angle) / (ftype)(accumulator->getSize().y-1);
+
+		theta = scale(coord.y, accumulator->getSize().y-1, max_angle);
+//		theta = scale<ftype,ftype>(coord.y-accumulator->getSize().y/2, accumulator->getSize().y-1, max_angle);
+		theta -= (ftype)M_PI;
+	}
+
+	/**
+	 * Get the cell with the maximum number of hits and return polar coordinates.
+	 *
+	 * @param r              distance to origin
+	 * @param theta          angle
+	 */
+	void getLine(double & r, double & theta) {
+		const ACoordinates coord = getMax();
+		transform(coord, r, theta);
+	}
+
+	ACoordinates getMax() {
+		ACoordinates coord = accumulator->getMaxCoord();
+		std::cout << "Found cell with max. number of hits at " << coord.x << "," << coord.y << std::endl;
+		return coord;
+	}
 
 	//! Get the accumulator, e.g. to reset it
 	inline Accumulator<P>* getAccumulator() { return accumulator; }
@@ -344,7 +321,7 @@ private:
 	ISize input_size;
 
 	//! Max distance (calculated from input_size)
-	int max_distance;
+	double max_distance;
 
 	//! Use grid cells
 	bool use_cells;

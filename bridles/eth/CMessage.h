@@ -9,6 +9,7 @@
 
 #include "ethlolmsg.h"
 #include <string.h>
+#include <stdio.h>
 
 #define MESSAGE_LENGTH  
 
@@ -46,6 +47,7 @@ typedef enum
    MSG_CAM_DETECTED_BLOB,
    MSG_CAM_DETECTED_BLOB_ARRAY,
    MSG_CAM_DETECTED_STAIR,
+   MSG_LASER_DETECT_STEP, // use the laser to detect the step
    MSG_MOTOR_CALIBRATION_RESULT,
    MSG_UBISENCE_POSITION,
    MSG_MAP_DATA,
@@ -53,6 +55,7 @@ typedef enum
    MSG_MAP_COMPLETE,
    MSG_CALIBRATE,
    MSG_NUMBER,
+   MSG_ZIGBEE_MSG
 } TMessageType;
 
 extern const char* StrMessage[];
@@ -65,13 +68,12 @@ class CMessage
         void set(const ELolMessage*msg);
         void set(const CMessage *msg);
 		const char* getStrType();
+		static CMessage unpackZBMessage(CMessage ZBmessage);
+		static CMessage packToZBMessage(uint64_t ubitag, int type, void *data,	int len);
 		TMessageType type;
 		int len;
 		bool valid;
 		uint8_t *data;
-		int value1;
-		int value2;
-		int value3;
 };
 
 #endif

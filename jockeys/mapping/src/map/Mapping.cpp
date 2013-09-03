@@ -7,7 +7,7 @@
 
 #include "Mapping.h"
 #define RANDOM_MOTION
-#define IMAGE_WAIT_COUNT 50
+#define IMAGE_WAIT_COUNT 20
 #define TURNING_COUNT 2
 #define MINIMUM_SEE_BLOB_REQ 20
 #define DRIVE_FORWARD_COUNT 5
@@ -19,8 +19,9 @@ Mapping::Mapping(CMotors* motors) {
 	this->actualState = START_MAPPING;
 	this->wait_stopped = IMAGE_WAIT_COUNT;
 	this->stai_in_motion = TURNING_COUNT;
-	this->seedSameBlob=0;
-	image_wait_count=IMAGE_WAIT_COUNT;
+	this->seedSameBlob = 0;
+	this->runs = 0;
+	image_wait_count = IMAGE_WAIT_COUNT;
 	//this->timer=new CTimer();
 	//this->timer->start();
 }
@@ -34,19 +35,19 @@ Mapping::~Mapping() {
  */
 void Mapping::doMappingMotion(bool seeBlob) {
 
-	if(seeBlob){
-		seedSameBlob+=1;
+	if (seeBlob) {
+		seedSameBlob += 1;
 	}
 
 	switch (this->actualState) {
 	case START_TURNING_AROUND: {
-	//	printf("START_TURNING_AROUND\n");
+		//	printf("START_TURNING_AROUND\n");
 		if (this->wait_stopped > 0) {
-		//	printf("wait stopped\n");
+			//	printf("wait stopped\n");
 			this->wait_stopped -= 1;
 			motor->setSpeeds(0, 0);
 		} else {
-		//	printf("moving\n");
+			//	printf("moving\n");
 			if (normalizeAngleDiff(
 					this->lastPosition[2] - motor->getPosition()[2])
 					< M_PI / 2) {
@@ -61,24 +62,25 @@ void Mapping::doMappingMotion(bool seeBlob) {
 				this->wait_stopped = IMAGE_WAIT_COUNT;
 				this->stai_in_motion = TURNING_COUNT;
 			}
-			this->seedSameBlob=0;
+			this->seedSameBlob = 0;
 			motor->setSpeeds(0, motor->calibratedSpeed);
 
 		}
-	//	printf("stai_turning %d \n", this->stai_in_motion);
-	//	printf("wait stopped %d \n", this->wait_stopped);
+		//	printf("stai_turning %d \n", this->stai_in_motion);
+		//	printf("wait stopped %d \n", this->wait_stopped);
 	}
 		break;
 	case END_TURNING_AROUND: {
-	//	printf("END_TURNING_AROUND\n");
+		//	printf("END_TURNING_AROUND\n");
 		if (this->wait_stopped > 0) {
 			this->wait_stopped -= 1;
 			motor->setSpeeds(0, 0);
 		} else {
 			if (normalizeAngleDiff(
 					this->lastPosition[2] - motor->getPosition()[2])
-					< M_PI / 4) {
+					< M_PI / 18) {
 				this->actualState = TURNING_TO_DIRECTION;
+				this->runs += 1;
 				memcpy(lastPosition, motor->getPosition(), 5 * sizeof(double));
 				//set turnToDirectionAngle
 #if defined(RANDOM_MOTION)
@@ -93,14 +95,14 @@ void Mapping::doMappingMotion(bool seeBlob) {
 				this->wait_stopped = IMAGE_WAIT_COUNT;
 				this->stai_in_motion = TURNING_COUNT;
 			}
-			this->seedSameBlob=0;
+			this->seedSameBlob = 0;
 			motor->setSpeeds(0, motor->calibratedSpeed);
 
 		}
 	}
 		break;
 	case DRIVE_FORWARD: {
-	//	printf("DRIVE_FORWAR\n");
+		//	printf("DRIVE_FORWAR\n");
 		if (this->wait_stopped > 0) {
 			this->wait_stopped -= 1;
 			motor->setSpeeds(0, 0);
@@ -117,14 +119,14 @@ void Mapping::doMappingMotion(bool seeBlob) {
 				memcpy(lastPosition, motor->getPosition(), 5 * sizeof(double));
 				motor->setSpeeds(0, 0);
 			} else {
-				this->seedSameBlob=0;
+				this->seedSameBlob = 0;
 				motor->setSpeeds(motor->calibratedSpeed, 0);
 			}
 		}
 	}
 		break;
 	case TURNING_TO_DIRECTION: {
-	//	printf("TURNING_TO_DIRECTION\n");
+		//	printf("TURNING_TO_DIRECTION\n");
 		if (this->wait_stopped > 0) {
 			this->wait_stopped -= 1;
 			motor->setSpeeds(0, 0);
@@ -142,7 +144,7 @@ void Mapping::doMappingMotion(bool seeBlob) {
 				this->actualState = DRIVE_FORWARD;
 				motor->setSpeeds(0, 0);
 			} else {
-				this->seedSameBlob=0;
+				this->seedSameBlob = 0;
 				motor->setSpeeds(0, motor->calibratedSpeed);
 			}
 		}
@@ -150,7 +152,7 @@ void Mapping::doMappingMotion(bool seeBlob) {
 	}
 		break;
 	case START_MAPPING: {
-	//	printf("START_MAPPIN\n");
+		//	printf("START_MAPPIN\n");
 		memcpy(lastPosition, motor->getPosition(), 5 * sizeof(double));
 		this->actualState = START_TURNING_AROUND;
 	}
@@ -160,7 +162,6 @@ void Mapping::doMappingMotion(bool seeBlob) {
 	}
 		break;
 	}
-
 
 }
 

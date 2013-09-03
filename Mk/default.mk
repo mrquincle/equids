@@ -27,14 +27,14 @@ include $(SELF_DIR)/paths.mk
 # be propagated to the compiler, so you can use #ifdef TARGET_PLATFORM==HOST in your
 # code to distinguish the robot use case from the one running on your laptop.
 #TARGET_PLATFORM=RASPBERRY, BLACKFIN, or HOST
-TARGET_PLATFORM=BLACKFIN
+TARGET_PLATFORM?=BLACKFIN
 #TARGET_PLATFORM=HOST
 
 # There are currently only two types of middleware targets supported, there is the
 # IROBOT middleware from Stuttgart and there is the HDMR middleware from Karlsruhe.
 # The IROBOT middleware has nothing with the iRobot / Roomba robot.
 #TARGET_MIDDLEWARE=HDMR
-TARGET_MIDDLEWARE=IROBOT
+TARGET_MIDDLEWARE?=IROBOT
 
 ####################################################################################
 # Specific macros for the academic Replicator robots
@@ -50,10 +50,20 @@ COMPILER_PREFIX=
 TARGET=
 
 ####################################################################################
+# When just compiling for host
+####################################################################################
+
+ifeq ($(TARGET_PLATFORM),HOST)
+#$(warning Compiling for host)
+endif
+
+####################################################################################
 # Path and prefix to the Blackfin compiler specific to uClinux
 ####################################################################################
 
 ifeq ($(TARGET_PLATFORM),BLACKFIN)
+
+#$(warning Compiling for blackfin)
 
 # See http://docs.blackfin.uclinux.org/doku.php?id=toolchain:executable_file_formats
 # There are two compilers for the Blackfin, one expects you to have uclibc on the 
@@ -87,6 +97,8 @@ endif
 ####################################################################################
 
 ifeq ($(TARGET_PLATFORM),RASPBERRY)
+
+#$(warning Compiling for raspberry)
 
 # This is a hardware implemented floating point ARM processor
 COMPILER=arm-linux-gnueabihf

@@ -70,22 +70,10 @@ void sigproc(int) {
 	}
 }
 
-/**
- * Main routine for a collision avoidance controller that does only use infrared to perform this simple task. It can be
- * executed with "calibrate" as argument to perform calibration. During that phase it will rotate to find a smoothed
- * average to correct the bias of the different infrared leds. If a robot has been calibrated once, it can use the
- * calibration values because they are stored in a text file.
- */
-int main(int argc, char **argv) {
+void controller_specific_args(AvoidIRController & controller, int argc, char **argv) {
 	bool calibrate = false;
 	bool standalone = false;
-
-	signal(SIGINT, sigproc);
-
-	std::cout << "Run " << NAME << " compiled at time " << __TIME__ << std::endl;
-
-	AvoidIRController controller;
-	controller.parsePort(argc, argv);
+	bool justsensors = false;
 
 	if (argc == 3) {
 		std::string arg2 = std::string(argv[2]);
@@ -93,15 +81,20 @@ int main(int argc, char **argv) {
 			calibrate = true;
 		} else if (arg2.find("standalone") != std::string::npos) {
 			standalone = true;
+		} else if (arg2.find("justsensors") != std::string::npos) {
+			justsensors = true;
+		} else {
+			std::cerr << DEBUG << " usage: " << argv[0] << " PORT [OPTION]" << std::endl << std::endl;
+			std::cerr << "OPTION: calibrate|standalone|justsensors" << std::endl;
+			exit(EXIT_FAILURE);
 		}
 	} else if ((argc > 3) || (argc <= 1)) {
 		std::cerr << DEBUG << " usage: " << argv[0] << " PORT [OPTION]" << std::endl << std::endl;
-		std::cerr << "OPTION: calibrate|standalone" << std::endl;
-		return EXIT_FAILURE;
+		std::cerr << "OPTION: calibrate|standalone|justsensors" << std::endl;
+		exit(EXIT_FAILURE);
 	}
 
-	if (standalone || calibrate) {
-		int timespan = 1000;
+	if (standalone || calibrate || justsensors) {
 		controller.initRobot();
 		controller.initRobotPeriphery();
 		controller.start();
@@ -109,14 +102,39 @@ int main(int argc, char **argv) {
 			controller.calibrate();
 		} else {
 			controller.get_calibration();
-			for (int t = 0; t < timespan; ++t) {
-				controller.tick();
+			if (justsensors) {
+				// only be able to quit by Ctrl+C
+				controller.setVerbosity(LOG_INFO);
+				do {
+					controller.print();
+				} while (!gStop);
+			} else {
+				do {
+					controller.tick();
+				} while (!gStop);
 			}
 		}
 		controller.signal_end();
 		controller.graceful_end();
-		return EXIT_SUCCESS;
+		exit(EXIT_SUCCESS);
 	}
+}
+
+/**
+ * Main routine for a collision avoidance controller that does only use infrared to perform this simple task. It can be
+ * executed with "calibrate" as argument to perform calibration. During that phase it will rotate to find a smoothed
+ * average to correct the bias of the different infrared leds. If a robot has been calibrated once, it can use the
+ * calibration values because they are stored in a text file.
+ */
+int main(int argc, char **argv) {
+	signal(SIGINT, sigproc);
+
+	std::cout << "Run " << NAME << " compiled at time " << __TIME__ << std::endl;
+
+	AvoidIRController controller;
+	controller.parsePort(argc, argv);
+
+	controller_specific_args(controller, argc, argv);
 
 	controller.initServer();
 
@@ -127,8 +145,7 @@ int main(int argc, char **argv) {
 		message = controller.getMessage();
 
 		if (message.type != MSG_NONE)
-			std::cout << "Command: " << message.getStrType() << ' ' << message.value1 << ',' \
-			<< message.value2 << std::endl;
+			std::cout << "Command: " << message.getStrType() << " of length " << message.len << std::endl;
 
 		switch (message.type){
 		case MSG_INIT: {

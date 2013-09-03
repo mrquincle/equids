@@ -1,7 +1,7 @@
 /**
  * 456789------------------------------------------------------------------------------------------------------------120
  *
- * @brief ...
+ * @brief A collection of histogram objects
  * @file CMultiHistogram.h
  * 
  * This file is created at Almende B.V. and Distributed Organisms B.V. It is open-source software and belongs to a
@@ -29,15 +29,27 @@
 
 #include <CHistogram.h>
 
+/**
+ * A histogram is a nice object to use to smooth for example the subsequent sensor inputs of a given sensor. However, if
+ * there are multiple sensors, it is convenient to have an object that contains a bunch of these histograms and which
+ * can be used to set configuration options for all of them at once.
+ */
 template <typename T, typename R>
 class CMultiHistogram {
 public:
-	CMultiHistogram() {
-		window_size = -1;
+	//! Construct a collection of histograms, the sliding window has to be set still
+	CMultiHistogram(): window_size(-1) {}
+
+	//! Construct a collection of histograms with given sliding window
+	CMultiHistogram(int sliding_window) {
+		set_sliding_window(window_size);
 	}
 
+	//! The deconstructor deletes the collection including the allocated histograms themselves
 	~CMultiHistogram() {
-		histograms.erase(histograms.begin(), histograms.end());
+		for (int i = 0; i < histograms.size(); ++i)
+			delete histograms[i];
+		histograms.clear();
 	}
 
 	//! Add histogram
@@ -57,15 +69,31 @@ public:
 	//! Gets size of sliding window
 	inline int get_sliding_window() { return window_size; }
 
+	//! Push an item unto histogram i
 	void push(int i, T item) {
 		histograms[i]->push(item);
 	}
 
+	//! Get average of histogram i
 	R average(int i) {
 		return histograms[i]->average();
 	}
 
-	//! If you provide a STL container, previously allocated to proper size with resize(), averages can be written to it
+	//! Get sum of histogram i
+	T sum(int i) {
+		return histograms[i].sum();
+	}
+
+	/**
+	 * Return the average of each histogram from index 0 to index N. Use it like this:
+	 *   vector<int> values;
+	 *   values.resize(histogram->size()); // make sure you have indeed allocated a vector with the right size
+	 *   histogram->average(values.begin()).
+	 *
+	 * @template OutputIterator        any iterator that defines the ++ operator
+	 * @param result                   pointer to where the results should be written
+	 * @return                         pointer to entry beyond last one (most often end of the container)
+	 */
 	template<typename OutputIterator>
 	OutputIterator average(OutputIterator result) {
 		for (int i = 0; i < histograms.size(); ++i, ++result) {
@@ -74,14 +102,11 @@ public:
 		return result;
 	}
 
-
-	T sum(int i) {
-		return histograms[i].sum();
-	}
-
 private:
+	//! Internally, we use a vector of pointers to histograms
 	std::vector<CHistogram<T,R>* > histograms;
 
+	//! Window size is defined across all histograms
 	int window_size;
 };
 

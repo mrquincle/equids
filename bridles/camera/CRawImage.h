@@ -64,15 +64,14 @@ struct Patch {
 		this->width = width;
 		this->height = height;
 		printf("%s(): what is weird about new or calloc here?\n", __func__);
-		//data = (VALUE_TYPE*)calloc(width*height*bpp, sizeof(VALUE_TYPE));
 		data = new VALUE_TYPE[width*height*bpp];
 		printf("%s(): initialized patch of size %i\n", __func__, width*height*bpp);
 	}
+	void free() {
+		if (data != NULL) delete [] data;
+	}
 	~Patch() {
-		if (data != NULL) {
-			delete [] data;
-//			free(data);
-		}
+		free();
 	}
 };
 
@@ -129,6 +128,9 @@ public:
 	//! Get a patch the size of the picture divided by some factor
 	void compress(Patch &patch);
 
+	//! Clear all pixels (set them to zero), does not allocate or deallocate anything
+	void clear();
+
 	//! Reallocate internal data structures if necessary
 	void refresh();
 
@@ -138,11 +140,17 @@ public:
 	//! With instances of class CRawImage across multiple binaries, the images will overwrite each other
 	void saveNumberedBmp(const char* name, bool increment = true);
 
+	//! Load the saved images
+	bool loadNumberedBmp(const char* name, bool increment = true);
+
 	//! Get the last file name
 	int getSaveNumber();
 
 	//! Get the last number/index of saved file
 	static int numSaved;
+
+	//! Get the last number/index of loaded file
+	static int numLoaded;
 
 	//! Load the image from file again, no index will be appended to the name
 	bool loadBmp(const char* name);
@@ -153,8 +161,11 @@ public:
 	//! Set the right BMP header, depends on dimensions, bpp, etc.
 	void updateHeader();
 
-	//! Plot a vertical and/or horizontal line through x and y (not entirely trivial if bpp > 1)
-	void plotLine(int x,int y);
+	//! Plot a vertical line through x (not entirely trivial if bpp > 1)
+	void plotVerticalLine(int x);
+	//! Plot a horizontal line through y (not entirely trivial if bpp > 1)
+	void plotHorizontalLine(int y);
+
 	//! Plot line from [x0,y0] to [x1,y1], only working for bpp=1 for now
 	void plotLine(int x0, int y0, int x1, int y1);
 	//! Plot blob in center of image
@@ -167,6 +178,9 @@ public:
 
 	//! This really throws information away! The grayscale values are according to human sensitivity values (30, 59, 11)
 	void makeMonochrome();
+
+	//! Set the brush color
+	inline void setBrush(Pixel color) { brush = color; }
 
 	/**
 	 * Same as makeMonochrome, but keeps image intact, and stores result in parameter "result"
@@ -203,6 +217,12 @@ private:
 	int bpp;
 	//! Size of data structure (pixels times the bytes per pixel)
 	int size;
+
+	//! Brush with this color
+	Pixel brush;
+
+	//! To swap the color channels, or not
+	bool do_swap;
 };
 
 #endif

@@ -26,39 +26,12 @@
 
 #include <AvoidIRController.h>
 
-
-AvoidIRController::AvoidIRController(): port(""), server(NULL), robot(NULL), robot_type(RobotBase::UNKNOWN),
-motors(NULL), leds(NULL) {
+AvoidIRController::AvoidIRController(): motors(NULL), leds(NULL) {
 
 }
 
 AvoidIRController::~AvoidIRController() {
 
-}
-
-//! First get the port of the jockey
-void AvoidIRController::parsePort(int argc, char **argv) {
-	std::string port = "";
-	if (argc <= 1) {
-		std::cout << DEBUG << "First parameter must be the port the jockey can be reached on" << std::endl;
-		exit(EXIT_FAILURE);
-	}
-	port = std::string(argv[1]);
-}
-
-//! Create server and start it
-void AvoidIRController::initServer() {
-	std::cout << "Create (receiving) message server on port " << port << std::endl;
-	server = new CMessageServer();
-	server->initServer(port.c_str());
-}
-
-void AvoidIRController::initRobot() {
-	robot_type = RobotBase::Initialize(NAME);
-	robot = RobotBase::Instance();
-	for (int i = 0; i < 4; ++i)
-		robot->SetPrintEnabled(i, false);
-	std::cout << "Initialized robot of type " << RobotTypeStr[robot_type] << std::endl;
 }
 
 void AvoidIRController::initRobotPeriphery() {
@@ -71,47 +44,67 @@ void AvoidIRController::initRobotPeriphery() {
 	leds->init();
 }
 
-void AvoidIRController::acknowledge() {
-	server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
-}
+void AvoidIRController::print() {
+	// sample the LEDs for a while, each update() takes a bit of time, so the total span is around 0.1 seconds.
+//	leds->setVerbosity(LOG_ERR);
+//	for (int s = 0; s < leds->get_window_size(); ++s)  {
+//		leds->update();
+//	}
+//	leds->setVerbosity(LOG_INFO);
+//	leds->update();
 
-void AvoidIRController::pause() {
-	robot->pauseSPI(true);
-	usleep(10000);
-}
-
-void AvoidIRController::start() {
-	robot->pauseSPI(false);
-	usleep(10000);
+	if (leds->encounter()) {
+		std::cout << std::endl << "Encountered a robot" << std::endl;
+	} else {
+		std::cout << ".";
+	}
+	if (!(leds->messages_sent % 50)) std::cout << std::endl;
 }
 
 /**
- * The main function of the controller.
+ * The main function of the controller. This one uses the collision() function of the Leds class to know if there has
+ * been a collision. Then it reverses for a bit, rotates for 60 degrees and starts driving again. This is repeated
+ * each time tick() is called.
  */
 void AvoidIRController::tick() {
 	// by default straight forward
 	int speed = 40;
 	int radius = 1000;
 
-	// sample the LEDs for a while
+	// sample the LEDs for a while, each update() takes a bit of time, so the total span is around 0.1 seconds.
 	for (int s = 0; s < leds->get_window_size(); ++s)  {
 		leds->update();
-		//usleep(100000); // 1000 * 100 is every 0.1seconds
-		//		sleep(1);
 	}
+
+	// only on a collision, drive the wheels
 	if (leds->collision()) {
 		// two seconds in reverse
 		std::cout << "Go back and rotate for 60 degrees" << std::endl;
-		motors->setRadianSpeeds(-speed, 1000);
+		motors->setRadianSpeeds(-speed, radius);
 		sleep(2);
 		// and rotate
 		motors->rotate(60);
 	} else {
+		// else just go forward
 		motors->setRadianSpeeds(speed, radius);
 	}
-	//usleep(100000); // 1000 * 100 is every 0.1seconds
-	//	std::cout << "Send wheel commands [" << speed << ',' << radius << ']' << std::endl;
-	//	motors->setSpeeds(speed, radius);
+
+	if (log_level >= LOG_DEBUG) {
+		std::cout << "Send wheel commands [" << speed << ',' << radius << ']' << std::endl;
+	}
+}
+
+void AvoidIRController::calibrate() {
+	std::cout << "Calibrate!" << std::endl;
+	leds->calibrate();
+	std::cout << "Calibration done" << std::endl;
+	graceful_end();
+}
+
+void AvoidIRController::get_calibration() {
+	std::cout << "Get calibration values" << std::endl;
+	leds->get_calibration();
+	std::cout << "Sliding window size used of " << leds->get_window_size() << std::endl;
 }
 
 /**
@@ -135,18 +128,4 @@ void AvoidIRController::signal_end() {
 	sleep(1);
 	leds->color(LC_GREEN);
 }
-
-void AvoidIRController::calibrate() {
-	std::cout << "Calibrate!" << std::endl;
-	leds->calibrate();
-	std::cout << "Calibration done" << std::endl;
-	graceful_end();
-}
-
-void AvoidIRController::get_calibration() {
-	std::cout << "Get calibration values" << std::endl;
-	leds->get_calibration();
-	std::cout << "Sliding window size used of " << leds->get_window_size() << std::endl;
-}
-
 

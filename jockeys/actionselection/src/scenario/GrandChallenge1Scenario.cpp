@@ -46,6 +46,7 @@ bool GrandChallenge1Scenario::Init() {
 
 	J_MAPPING = equids->find("mapping");
 	J_WENGUO = equids->find("wenguo");
+	J_LASER_EXPLORATION = equids->find("laser");
 
 	//! Send an error message or also quit program..
 	if (J_MAPPING==-1) {
@@ -54,6 +55,10 @@ bool GrandChallenge1Scenario::Init() {
 	}
 	if (J_WENGUO==-1) {
 		std::cout << "Not defined jockey \"wenguo\"" << std::endl;
+		continue_program = true;
+	}
+	if (J_LASER_EXPLORATION==-1) {
+		std::cout << "Not defined jockey \"laser\"" << std::endl;
 		continue_program = true;
 	}
 
@@ -72,7 +77,11 @@ void GrandChallenge1Scenario::Run() {
 		case S_MAPPING:
 			if (equids->getMessage(J_MAPPING)->type==MSG_MAP_COMPLETE) {
 				state = S_EXPLORATION;
+				equids->switchToJockey(J_LASER_EXPLORATION);
 			}
+			break;
+		case S_EXPLORATION:
+
 			break;
 		case S_QUIT:
 			quit = true;

@@ -30,13 +30,15 @@
 #include <IRobot.h>
 #include <CMotors.h>
 
+#include <syslog.h>
 #include <vector>
 
 #include <worldfile.h>
+#include <pthread.h>
 
 #include <CMultiHistogram.h>
 
-enum LedType { LT_REFLECTIVE, LT_AMBIENT, LT_NORMAL, LT_ENUM_SIZE };
+enum LedType { LT_REFLECTIVE, LT_AMBIENT, LT_PROXIMITY, LT_NORMAL, LT_ENUM_SIZE };
 
 enum LedColor { LC_RED, LC_YELLOW, LC_GREEN, LC_CYAN, LC_BLUE, LC_MAGENTA, LC_WHITE, LC_ORANGE, LC_OFF, LC_ENUM_SIZE };
 
@@ -63,21 +65,40 @@ enum LedLocation {
 	LL_RIGHT_FRONT = 7
 };
 
+/**
+ * Everything around the infrared and other types of leds on the robot.
+ */
 class CLeds {
 public:
+	//! Construct everything
 	CLeds(RobotBase *robot_base, RobotBase::RobotType robot_type);
 
+	//! Deallocate everything
 	~CLeds();
 
+	//! Initialize the leds, calibrate the MSP stuff
 	void init();
 
+	//! Do the calibration now, if turn_around use the wheels to turn around
 	void calibrate(bool turn_around = true);
 
+	//! Get previously calibrated values
 	void get_calibration();
 
+	//! Map from led index to side index
+	int led_index_to_side(int i);
+
+	//! Get actual sensor values
+	void sample();
+
+	//! Get the reflective led with index i
 	int reflective(int i, bool offset=true);
 
+	//! Get the ambient led with index i
 	int ambient(int i, bool offset=true);
+
+	//! Get the proximity led with index i
+	int proximity(int i, bool offset=true);
 
 	//! Update all sensors (includes waiting time)
 	void update();
@@ -102,6 +123,21 @@ public:
 
 	//! Useful to get distances from the infrared LEDs
 	inline int get_window_size() { return window_size; }
+
+	//! Set verbosity
+	inline void setVerbosity(char verbosity) { log_level = verbosity; }
+
+	//! Thread that continuously checks if there has been a message received over infrared
+    static void *IRCommTxThread(void* leds);
+
+    //! Only get indication that "a" message is received, not which message
+	bool message_received();
+
+	//! Send this message to a random side of the robot
+	void send_message(const std::string & msg);
+
+	//! Encounter of another robot
+	bool encounter();
 private:
 
 	CMotors *motors;
@@ -112,25 +148,45 @@ private:
 
 	int irled_count;
 
-	std::vector<int> ir_query_order;
-
 	std::vector<int> board_running;
 
 	bool save_to_file;
+
+	int board_count;
 
 	std::vector<int32_t> offset_reflective;
 
 	std::vector<int32_t> offset_ambient;
 
+	std::vector<int32_t> offset_proximity;
+
+	//! Store the ir-values
+	std::vector<IRValues> ir_values;
+
 	CMultiHistogram<int32_t, int32_t> hist_reflective;
 
 	CMultiHistogram<int32_t, int32_t> hist_ambient;
+
+	CMultiHistogram<int32_t, int32_t> hist_proximity;
 
 	int window_size;
 
 	Worldfile optionfile;
 
 	std::string optionfile_name;
+
+	char log_level;
+
+    pthread_t ircomm_rx_thread;
+
+public:
+	pthread_mutex_t ir_rx_mutex;
+
+	bool receiving_messages;
+
+	bool message_recv;
+
+	long int messages_sent;
 };
 
 #endif /* CLEDS_H_ */

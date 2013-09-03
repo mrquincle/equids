@@ -100,7 +100,8 @@ bool IPC::Start(const char* h, int p, bool s)
     bool ret=true;
     if(Running())
     {
-        printf("IPC %s is running, can not create another one: connection %d (%d)\n", name, connections.size(), BrokenConnections());
+        printf("IPC %s is running, can not create another one: connection %d (%d)\n",
+        		name, (int)connections.size(), BrokenConnections());
         return false;
     }
 
@@ -265,7 +266,7 @@ bool IPC::StartServer(int port)
         if(bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
         {
             perror("Server socket bind failed:");
-            printf("failed on port: %d");
+            printf("failed on port: %d", port);
             binded = false;
             Close(sockfd);
             usleep(1000000);

@@ -29,6 +29,8 @@
 #include <HoughDefs.h>
 #include <cmath>
 
+#include <CGeometry.hpp>
+
 using namespace rur;
 using namespace dobots;
 
@@ -54,13 +56,13 @@ const int MATCH_NEIGHBOURHOOD_DEVIATION = 15;
 
 //static int DEBUG_DECPOINT_INDEX = 0;
 
-DecPoint::DecPoint(): Point2D(), skew(0), match(NULL) {
+DecPoint::DecPoint(): Point2D<int>(), skew(0), match(NULL) {
 //	index = ++DEBUG_DECPOINT_INDEX;
 //	if (index > 800)
 //		std::cout << "Create point " << index << std::endl;
 }
 
-DecPoint::DecPoint(int x, int y): Point2D(x,y), skew(0), match(NULL) {
+DecPoint::DecPoint(int x, int y): Point2D<int>(x,y), skew(0), match(NULL) {
 //	index = ++DEBUG_DECPOINT_INDEX;
 //	if (index > 800)
 //		std::cout << "Create point " << index << std::endl;
@@ -295,7 +297,7 @@ void DetectLineModuleExt::getSegments() {
 void DetectLineModuleExt::calculateSkew(Cell<DecPoint> * c) {
 	if (c->hits <= HIT_THRESHOLD) return;
 
-	sort(c->points.begin(), c->points.end(), xref_increasing());
+	sort(c->points.begin(), c->points.end(), xref_increasing<int>());
 
 	for (int i = 0; i < c->points.size(); ++i) {
 		float midway = (float) c->points.size() / 2;

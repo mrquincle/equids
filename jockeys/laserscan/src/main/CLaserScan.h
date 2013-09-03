@@ -41,16 +41,39 @@
 #include <DetectLineModuleExt.h>
 
 /***********************************************************************************************************************
+ * Nice feature, á la YARP middleware
+ **********************************************************************************************************************/
+
+#define VOCAB(a,b,c,d) ((((int)(d))<<24)+(((int)(c))<<16)+(((int)(b))<<8)+((int)(a)))
+#define VOCAB4(a,b,c,d) VOCAB((a),(b),(c),(d))
+#define VOCAB3(a,b,c) VOCAB((a),(b),(c),(0))
+#define VOCAB2(a,b) VOCAB((a),(b),(0),(0))
+#define VOCAB1(a) VOCAB((a),(0),(0),(0))
+
+/***********************************************************************************************************************
  * Interface
  **********************************************************************************************************************/
+
+//! Define the different object types as integers, so they can used in a switch statements and - on the other hand - be
+//! understood immediately.
+#define O_SMALL_STEP         VOCAB4('s','t','e','p')
+#define O_LARGE_STEP         VOCAB4('S','T','E','P')
+#define O_WALL               VOCAB4('w','a','l','l')
+#define O_NOTHING            VOCAB4('n','a','d','a')
+#define O_SOMETHING          VOCAB4('s','o','m','e')
+
+//! They are of the type "int"
+typedef int ObjectType ;
 
 /**
  * Uses data from laser and camera for e.g. distance information
  */
 class CLaserScan {
 public:
+	//! Construct laserscan and all corresponding objects like camera and laser data array
 	CLaserScan(RobotBase *robot_base, RobotBase::RobotType robot_type, int img_width, int img_height, int laser_width);
 
+	//! Destroy laserscan and all objects
 	~CLaserScan();
 
 	//! All the necessary initialisation, needs to be called before anything
@@ -79,6 +102,8 @@ public:
 
 	CRawImage *getImg2() { return image2; }
 
+	//! Get recognized object type
+	ObjectType GetRecognizedObject();
 protected:
 	//! Get the laser scan
 	void GetData();
@@ -94,7 +119,6 @@ protected:
 	//! Get line from an image
 	void getLine(CRawImage *image, double & alpha, double & d);
 
-//	int estimateLength(std::vector<int> & vec);
 	void estimateParameters(std::vector<int> & vec, int & length, int & distance);
 
 private:

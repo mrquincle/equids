@@ -34,6 +34,7 @@ OBJS=$(wildcard ../obj/*.o)
 #IROBOTPATH=../../repos/irobot
 #CXXFLAGS+=-L/opt/uClinux/bfin-linux-uclibc/bfin-linux-uclibc/runtime/usr/lib -lgsl -lgslcblas -lm
 LXXLIBS+=-L../../../libs/gsl -lgsl -lgslcblas -lm
+LDFLAGS+=-s -L$(WAPI_PATH) -lWAPI
 #LXXLIBS+= -L/opt/uClinux/bfin-linux-uclibc/lib/gcc/bfin-linux-uclibc/4.3.5 -L/opt/uClinux/bfin-linux-uclibc/bfin-linux-uclibc/
 #LXXLIBS+=-DBOOST_NO_INTRINSIC_WCHAR_T -DBLACKFIN -s -L../../wapi/wapi -lWAPI
 COPY_ETC_CMD=../etc/copy.sh

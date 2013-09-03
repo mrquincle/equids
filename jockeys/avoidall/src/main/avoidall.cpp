@@ -54,7 +54,7 @@
  **********************************************************************************************************************/
 
 //! The name of the controller can be used for controller selection
-std::string NAME = "LaserScan";
+std::string NAME = "AvoidAll";
 
 /**
  * If the user presses Ctrl+C, this can be used to do memory deallocation or a last communication with the MSPs.

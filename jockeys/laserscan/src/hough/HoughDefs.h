@@ -28,6 +28,8 @@
 #include <vector>
 #include <istream>
 
+#include <CGeometry.hpp>
+
 typedef int ACCUMULATOR_DATA_TYPE;
 
 const ACCUMULATOR_DATA_TYPE ACCUMULATOR_SIZE_X = 100;
@@ -42,41 +44,7 @@ struct ACoordinates {
 
 struct ASize: ACoordinates {};
 
-struct Point {};
-
-//! Local class that knows that commas can be treated as white spaces. It is by the input stream operator.
-struct commasep: std::ctype<char> {
-	commasep(): std::ctype<char>(get_table()) {}
-	static std::ctype_base::mask const* get_table() {
-		static std::vector<std::ctype_base::mask>
-		rc(std::ctype<char>::table_size,std::ctype_base::mask());
-		rc[','] = std::ctype_base::space;
-		return &rc[0];
-	}
-};
-
-/**
- * The point cloud can be in 2D. Stream operators are defined. They are declared as friends in case we want to make the
- * fields x and y private later on.
- */
-struct Point2D: Point {
-	int x;
-	int y;
-	Point2D(): x(0), y(0) {}
-	Point2D(int x, int y) { this->x = x; this->y = y; }
-	void set(int x, int y) { this->x = x; this->y = y; }
-	friend std::ostream& operator<<(std::ostream& os, const Point2D & p) {
-		os << p.x << ',' << p.y;
-		return os;
-	}
-	friend std::istream& operator>>( std::istream& is, Point2D& p) {
-		is.imbue(std::locale(std::locale(), new commasep));
-		is >> p.x >> p.y;
-		return is;
-	}
-};
-
-struct ISize: Point2D { };
+struct ISize: Point2D<int> { };
 
 /**
  * The definition of a segment is a bit filthy. It does only except templates which are subsequently used in the form
@@ -109,8 +77,9 @@ struct Cell {
  * singled out. The alternative would be to use some sorting function that minimizes the inter-point distances. This
  * would correspond exactly to an Euclidean traveling salesman problem, a bit of an overkill for most applications.
  */
+template <typename R>
 struct x_increasing {
-    inline bool operator() (const Point2D& self, const Point2D& other) {
+    inline bool operator() (const Point2D<R>& self, const Point2D<R>& other) {
     	if (self.x == other.x) {
     		return (self.y < other.y); // for points that are exactly vertical, consider the y-coordinate
     	}
@@ -118,14 +87,33 @@ struct x_increasing {
     }
 };
 
+/**
+ * Exactly the same as x_increasing, but here the Points are by pointer, not by reference.
+ */
+template <typename R>
 struct xref_increasing {
-    inline bool operator() (Point2D* self, Point2D* other) {
+    inline bool operator() (Point2D<R>* self, Point2D<R>* other) {
     	if (self->x == other->x) {
     		return (self->y < other->y); // for points that are exactly vertical, consider the y-coordinate
     	}
         return (self->x < other->x);
     }
 };
+
+/**
+ * Use to sort cells on decreasing hit count. However, most often we are just interested in the maximum element, so a
+ * sorting function like this is not really necessary.
+ */
+template <typename P>
+struct hit_decreasing {
+    inline bool operator() (Cell<P>* self, Cell<P>* other) {
+    	if (self->hits == other->hits) {
+    		return (self->hits < other->hits);
+    	}
+        return (self->hits < other->hits);
+    }
+};
+
 
 /**
  * How I would be solving the TSP is by using the following method.

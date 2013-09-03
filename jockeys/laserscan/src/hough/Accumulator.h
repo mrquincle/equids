@@ -74,6 +74,31 @@ public:
 
 	//! Size of the accumulator
 	inline ASize getSize() { return asize; }
+
+	//! Return cell with maximum number of hits
+	Cell<P> *getMax() {
+		Cell<P> *m = max_element(this->begin(), this->end(), hit_decreasing<P>());
+		return m;
+	}
+
+	//! Return coordinates of cell with maximum number of hits
+	ACoordinates getMaxCoord() {
+		ACoordinates max;
+		max.x = max.y = 0;
+		Cell<P> & max_cell = this->get(max.x,max.y);
+		for (int i = 0; i < asize.x; i++) {
+			for (int j = 0; j < asize.y; j++) {
+				Cell<P> & cell = this->get(i, j);
+				if (cell.hits > max_cell.hits) {
+					max.x = i;
+					max.y = j;
+					max_cell = this->get(max.x,max.y);
+				}
+			}
+		}
+		return max;
+	}
+
 private:
 
 	ASize asize;

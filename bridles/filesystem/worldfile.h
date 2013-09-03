@@ -35,6 +35,11 @@
 #include <algorithm>
 #include <vector>
 
+/**
+ * This code is from the Player/Stage simulator and is "contagious" license-wise. So, do not use it if you want to keep
+ * your code for yourself. The reason it's here is because Wenguo's code uses it for configuration files.
+ */
+
 //namespace Morph {
 
   /// Property class

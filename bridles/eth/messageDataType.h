@@ -34,5 +34,27 @@ struct UbiPosition {
 	uint32_t time_stamp; //!< The Ubisense coordinate time
 };
 
+enum MapObjectType {
+	NORMAL_CIRCLE, DOCK_CIRCLE, STEP, WALL, ROBOT
+};
+struct MappedObjectPosition {
+	int mappedBy;
+	MapObjectType type;
+	int map_id;
+	float xPosition; //!< The x coordinate
+	float yPosition; //!< The y coordinate
+	float zPosition; //!< The z coordinate
+	float phiPosition; //!< The phi coordinate
+};
+struct MappedObjectCovariance {
+	int mappedBy;
+	MapObjectType type;
+	int map_id;
+	float xUncertainty; //!< The x coordinate Uncertainty
+	float yUncertainty; //!< The y coordinate Uncertainty
+	float zUncertainty; //!< The z coordinate Uncertainty
+	float phiUncertainty; //!< The phi coordinate Uncertainty
+};
+
 #endif /* MESSAGEDATATYPE_H_ */
 
