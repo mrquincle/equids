@@ -102,6 +102,10 @@ protected:
 	//! Debug state
 	char log_level;
 
+	//!
+	bool initialized_robot;
+
+	bool initialized_server;
 };
 
 

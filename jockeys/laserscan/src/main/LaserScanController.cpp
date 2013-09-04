@@ -29,7 +29,7 @@
 #include <syslog.h> // LOG_DEBUG
 
 LaserScanController::LaserScanController(): scan(NULL), imageSem(new sem_t()), image_server(NULL), images(), patch(),
-mosaic_image(NULL), streaming(false), motors(NULL), create_mosaic(true) {
+mosaic_image(NULL), streaming(false), motors(NULL), create_mosaic(true), initialized_periphery(false) {
 	images.resize(4);
 }
 
@@ -45,6 +45,8 @@ LaserScanController::~LaserScanController() {
 }
 
 void LaserScanController::initRobotPeriphery() {
+	if (initialized_periphery) return;
+
 	robot->SetLEDAll(0, LED_OFF);
 	robot->SetLEDAll(1, LED_RED);
 	robot->SetLEDAll(2, LED_GREEN);
@@ -59,6 +61,8 @@ void LaserScanController::initRobotPeriphery() {
 	if (robot_id == 217) {
 		motors->reversed(true);
 	}
+
+	initialized_periphery = true;
 }
 
 void LaserScanController::motorCommand(MotorCommand &motorCommand) {

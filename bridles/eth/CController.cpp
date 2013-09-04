@@ -35,7 +35,7 @@ static const std::string NAME = "CController";
 #define DEBUG NAME << '[' << getpid() << "] " << __func__ << "(): "
 
 CController::CController(): port(""), server(NULL), robot(NULL), robot_type(RobotBase::UNKNOWN), robot_id(-1),
-log_level(LOG_EMERG) {}
+log_level(LOG_EMERG), initialized_robot(false), initialized_server(false) {}
 
 CController::~CController() { }
 
@@ -50,12 +50,16 @@ void CController::parsePort(int argc, char **argv) {
 
 //! Create server and start it
 void CController::initServer() {
+	if (initialized_server) return;
 	std::cout << "Create (receiving) message server on port " << port << std::endl;
 	server = new CMessageServer();
 	server->initServer(port.c_str());
+	initialized_server = true;
 }
 
 void CController::initRobot() {
+	if (initialized_robot) return;
+
 	robot_type = RobotBase::Initialize(NAME);
 	robot = RobotBase::Instance();
 	for (int i = 0; i < 4; ++i)
@@ -66,6 +70,8 @@ void CController::initRobot() {
 	if (robotID != NULL)
 		robot_id = atoi(robotID);
 	std::cout << "Robot has id " << robotID << std::endl;
+
+	initialized_robot = true;
 }
 
 void CController::acknowledge() {

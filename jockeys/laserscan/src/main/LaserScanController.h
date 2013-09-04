@@ -82,6 +82,8 @@ private:
 	CMotors *motors;
 
 	bool create_mosaic;
+
+	bool initialized_periphery;
 };
 
 

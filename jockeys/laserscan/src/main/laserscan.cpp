@@ -92,6 +92,10 @@ int main(int argc, char **argv) {
 		if (message.type != MSG_NONE)
 			std::cout << "Command: " << message.getStrType() << " of length " << message.len << std::endl;
 
+		if (gStop) {
+			message.type = MSG_QUIT;
+		}
+
 		switch (message.type) {
 		case MSG_INIT: {
 			controller.initRobot();
