@@ -52,8 +52,7 @@ CMotors::CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 
 	max_radius = 1000; // the maximum value
 	axle_track = 10;
-	left_right_reversed = true;
-	//	left_right_reversed = false;
+	left_right_reversed = false;
 
 	printf("setting buf\n");
 	buf[0]=0;
@@ -114,6 +113,10 @@ void CMotors::init() {
 	printf("Enable motors, this turns on the high voltage circuitry on the robot\n");
 	this->go();
 	srand(time(NULL));
+}
+
+void CMotors::reversed(bool left_right_reversed) {
+	this->left_right_reversed = left_right_reversed;
 }
 
 void CMotors::calibrate(MotorCalibResult calibrationResult){
@@ -177,6 +180,12 @@ void CMotors::translate(int speed, int radius, int & left, int & right) {
 	if (speed < 0) {
 		left = -left;
 		right = -right;
+	}
+
+	if (radius < 0) {
+		int temp = left;
+		left = right;
+		right = temp;
 	}
 
 	std::cout << "Translated [speed,radius]=[" << speed << ',' << radius << ']' << " into " <<
@@ -375,6 +384,30 @@ void CMotors::randomSpeeds(){
 	this->setSpeeds(rand() % 30 + 30, rand() % 50 + 30 );
 }
 
+void CMotors::set_to_zero() {
+	switch (robot_type) {
+	case RobotBase::ACTIVEWHEEL: {
+		ActiveWheel *bot = (ActiveWheel*)robot_base;
+		bot->MoveWheelsFront(0,0);
+		bot->MoveWheelsRear(0,0);
+		break;
+	}
+	case RobotBase::KABOT: {
+		KaBot *bot = (KaBot*)robot_base;
+		bot->MoveScrewFront(0);
+		bot->MoveScrewRear(0);
+		break;
+	}
+	case RobotBase::SCOUTBOT: {
+		ScoutBot *bot = (ScoutBot*)robot_base;
+		bot->Move(0,0);
+		break;
+	}
+	default:
+		fprintf(stderr, "in function halt no robot type\n");
+		break;
+	}
+}
 
 //! Halt does not set last command, so go() can be used to continue
 void CMotors::halt() {
@@ -401,7 +434,6 @@ void CMotors::halt() {
 }
 
 void CMotors::go() {
-	fprintf(stderr, "in go\n");
 	robot_base->EnableMotors(true);
 	for (int var = 0; var < 4; ++var) {
 		robot_base->enableAccelerometer(var,true);
@@ -437,7 +469,6 @@ void CMotors::go() {
 	fprintf(stderr, "in go no robot base\n");
 	break;
 	}*/
-	fprintf(stdout, "exiting go\n");
 }
 
 void CMotors::setMotorSpeedsKB(int sFront,int sRear)

@@ -56,9 +56,13 @@ public:
 
 	void randomSpeeds();
 
+	void reversed(bool left_right_reversed);
+
 	void halt();
 
 	void go();
+
+	void set_to_zero();
 
 	//! Speed and radius are translated into commands for left and right
 	void translate(int speed, int radius, int & left, int & right);

@@ -36,6 +36,8 @@
  * Controller base class to be used in jockey framework. Functions that require implementation are initRobotPeriphery()
  * with respect to for example initialization of leds, lasers, motors, and alike, and tick() which does the actual hard
  * work. Of course subclasses can have other specialized functions.
+ *
+ * The controller has a CMessageServer instance, to connect to it use a CMessageClient.
  */
 class CController {
 public:
@@ -94,7 +96,7 @@ protected:
 	//! Type of robot (Scout, ActiveWheel, Backbone)
 	RobotBase::RobotType robot_type;
 
-	//! Robot id as set in sr_id envionmental variable
+	//! Robot id as set in sr_id environmental variable
 	int robot_id;
 
 	//! Debug state

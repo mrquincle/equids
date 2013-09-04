@@ -35,8 +35,12 @@ struct UbiPosition {
 };
 
 enum MapObjectType {
-	NORMAL_CIRCLE, DOCK_CIRCLE, STEP, WALL, ROBOT
+	NORMAL_CIRCLE, DOCK_CIRCLE, SMALL_STEP, LARGE_STEP, WALL, ROBOT, UNIDENTIFIED
 };
+
+/**
+ * Anne: I assume phi is rotation in x,y plane, running from [-pi,+pi] with [x,y]=[1,0] corresponding with phi=0
+ */
 struct MappedObjectPosition {
 	int mappedBy;
 	MapObjectType type;
@@ -45,7 +49,8 @@ struct MappedObjectPosition {
 	float yPosition; //!< The y coordinate
 	float zPosition; //!< The z coordinate
 	float phiPosition; //!< The phi coordinate
-};
+} __attribute__((packed));
+
 struct MappedObjectCovariance {
 	int mappedBy;
 	MapObjectType type;
@@ -55,6 +60,14 @@ struct MappedObjectCovariance {
 	float zUncertainty; //!< The z coordinate Uncertainty
 	float phiUncertainty; //!< The phi coordinate Uncertainty
 };
+
+/**
+ * Send motor command as understood by CMotors.setRadianSpeeds
+ */
+struct MotorCommand {
+	int16_t forward;
+	int16_t radius;
+} __attribute__((packed));
 
 #endif /* MESSAGEDATATYPE_H_ */
 

@@ -2,24 +2,26 @@
 # Compile it separately for debugging purposes.
 
 # Load default Makefile for a bridle in the jockey framework 
-include $(EQUID_PATH)/Mk/default.mk
+-include $(EQUID_PATH)/Mk/default.mk
 # Override default Makefile options with a local Makefile
 -include $(EQUID_PATH)/Mk/local.mk
 
+
+# By default grab only all .cpp files to compile
 # By default grab only all .cpp files to compile
 OBJS=$(patsubst %.cpp,%.o,$(wildcard *.cpp))
 OBJSC=$(patsubst %.c,%.o,$(wildcard *.c))
+OBJS+=$(OBJSC)
 
-# The directories that this "bridle" depends on
-CXXINCLUDE+=-I./ -I../camserver -I../laser -I../camera -I../common -I../hough -I../eth -I../motor
-
-all: $(OBJS) $(OBJSC)
+CXXINCLUDE+=-I./ -I../common -I../eth -I../motor -I../move_to
+CXXFLAGS+=-std=c++0x
+all: $(OBJS) 
 
 .cpp.o:
 	$(CXX)  $(CXXFLAGS) $(CXXDEFINE) -c  $(CXXINCLUDE) $< 
 
 .c.o:
-	$(CC)  $(FLAGS) $(CXXDEFINE) -c  $(CXXFLAGS) $(CXXINCLUDE) $< 
+	$(CXX)  $(FLAGS) $(CXXDEFINE) -c  $(CXXFLAGS) $(CXXINCLUDE) $< 
 
 clean:
-	$(RM) $(OBJSC) $(OBJS) *.moc $(UI_HEAD) $(UI_CPP)
+	$(RM) $(OBJS) *.moc $(UI_HEAD) $(UI_CPP)

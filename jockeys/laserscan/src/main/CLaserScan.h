@@ -94,16 +94,28 @@ public:
 	//! Setter for limits, top < bottom... (awkward, yes)
 	inline void setLimits(int top, int bottom) { topRowLimit = top; bottomRowLimit = bottom; }
 
-	CRawImage *getRGBDiffImg() { return image_rgb_diff; }
+	CRawImage *getRGBDiffImg() {
+		assert (image_rgb_diff != NULL);
+		return image_rgb_diff;
+	}
 
-	CRawImage *getRedDiffImg() { return image_red_diff; }
+	CRawImage *getRedDiffImg() {
+		assert (image_red_diff != NULL);
+		return image_red_diff;
+	}
 
-	CRawImage *getImg1() { return image1; }
+	CRawImage *getImg1() {
+		assert (image1 != NULL);
+		return image1;
+	}
 
-	CRawImage *getImg2() { return image2; }
+	CRawImage *getImg2() {
+		assert (image2 != NULL);
+		return image2;
+	}
 
 	//! Get recognized object type
-	ObjectType GetRecognizedObject();
+	void GetRecognizedObject(ObjectType &object_type, int & distance);
 protected:
 	//! Get the laser scan
 	void GetData();

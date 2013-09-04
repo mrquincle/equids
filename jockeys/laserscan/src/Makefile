@@ -32,6 +32,7 @@ SUBDIRS+=common
 SUBDIRS+=camserver
 SUBDIRS+=hough
 SUBDIRS+=eth
+SUBDIRS+=motor
 
 ####################################################################################
 # Name of the final binary

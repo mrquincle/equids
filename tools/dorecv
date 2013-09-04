@@ -60,7 +60,7 @@ then
 fi
 
 help() {
-	msg_info "Usage: $0 \"[robot hostname]\" \"program\""
+	msg_info "Usage: $0 \"robot hostname\" \"program\""
 }
 
 if [[ "$1" == "-h" ]]
@@ -69,8 +69,8 @@ then
 	exit 0
 fi
 
-if [[ "$#" > "2" ]]; then
-	msg_error "This program requires one or two arguments"
+if [[ "$#" != "2" ]]; then
+	msg_error "This program requires two arguments"
 	help
 	exit 0
 fi
@@ -79,51 +79,34 @@ fi
 # Configuration continued
 #######################################################################################################################
 
-#msg_debug "Remove previous log files"
+msg_debug "Remove previous log files"
 rm -f $COMPILE_STD
 rm -f $COMPILE_ERR
 
 # The program arguments
-if [[ "$#" == "2" ]]; then
-	ROBOT="$1"
-	FILE="$2"
-else
-	ROBOT=$(dofind)
-	FILE=$1
-fi
-
-# Will be set in host_configure
-HOST=
-IFACE=
+ROBOT="$1"
+FILE="$2"
+HOST="192.168.52.200"
 
 FILE_PORT=10001
 PORT=23
 TARGETDIR=/flash
 
-# method can be telnet or rcp
-METHOD=rcp
-
+# Computer hangs when ad-hoc network fails (could be telnet as well)
+#TERMINAL_PROGRAM=nc
 TERMINAL_PROGRAM=telnet
 MODEM=--zmodem
 
-cmd_send=/tmp/cmd_send
-cmd_recv=/tmp/cmd_recv
+cmd_send_from=/tmp/cmd_send_from
+cmd_recv_from=/tmp/cmd_recv_from
 cmd_goto=/tmp/cmd_goto
 cmd_size=/tmp/cmd_size
 
 #######################################################################################################################
-# File to send
+# File to receive
 #######################################################################################################################
 
-if [[ ! -f "$FILE" ]]; then
-	msg_error "Error: \"$FILE\" does not exist (as regular file). Was it compiled without errors?"
-	exit 1
-fi
-
-FILEPATH=$(cd $(dirname $FILE); pwd)
-FILE=$(basename $FILE)
-
-cd $FILEPATH
+msg_warning "We will overwrite the local file"
 
 #######################################################################################################################
 # Function definitions
@@ -132,30 +115,30 @@ cd $FILEPATH
 # The functions write the exact command to a temporary file, e.g. $cmd_goto (default /tmp/cmd_goto). This allows the
 # user to subsequently run this command outside of this script.
 
-welcome() {
-	msg_info "Welcome...!"
-	msg_info "Remark, use rpc when available, this is a small bash script that does not need rpc on the robot"
-	msg_info "However, you will need to install the following: telnet, netcat, expect"
-	msg_debug "Use e.g. standard \"sudo apt-get install expect\" to do so on Ubuntu"
+get_ip_adress() {
+	msg_info "We will use \"$ROBOT\" to retrieve the IP address of the robot"
+	msg_debug "We assume there is an entry for \"$ROBOT\" in /etc/hosts"
+	IP_ADDRESS=$(cat /etc/hosts | grep -i $ROBOT | grep -v '#')
+	msg_info "Found ip address: \"$IP_ADDRESS\" (if empty, check /etc/hosts)"
+	if [ "$IP_ADDRESS" = "" ]; then
+		msg_warning "Cannot find hostname (and IP address) in /etc/hosts"
+		msg_info "We will use $ROBOT directly as IP_ADDRESS"
+		IP_ADDRESS=$ROBOT
+		msg_debug "This might fail"
+	else 
+		msg_info "Ping robot $ROBOT (at $IP_ADDRESS)"
+	fi
 }
 
 ping_robot() {
-	PING=$(ping -a -W 2 -c 1 $ROBOT)
-	CONNECTION=$(echo $PING | grep "1 received")
+	PING=`ping -a -W 2 -c 1 $ROBOT`
+	CONNECTION=`echo $PING | grep "1 received"`
 	if [ "$CONNECTION" != "" ]; then
 		msg_info "We can ping the robot. Let's connect!"
-		IP_ADDRESS=$(ping -q -t 1 -c 1 $ROBOT | grep PING | sed -e "s/).*//" | sed -e "s/.*(//")
 	else
 		msg_error "Sorry, we can not ping the robot (exit)"
 		exit 23
 	fi
-}
-
-configure_host() {
-	msg_debug "ip route get $IP_ADDRESS"
-	IFACE=$(ip route get $IP_ADDRESS | grep -oP '(?<=dev )[a-zA-Z0-9]*')
-	HOST=$(ifconfig $IFACE| grep -oP '(?<=inet addr:)[0-9.]*')
-	msg_info "We will connect over interface $IFACE with host IP $HOST"
 }
 
 go_to_target() {
@@ -167,86 +150,43 @@ go_to_target() {
 # This function is adapted to use "expect". The other functions should be rewritten likewise. With expect it is easy 
 # to wait for commands to be actually finished. In this case direct echoing of commands into a telnet session will 
 # cause files to be transferred only partly.
-receive_on_robot() {
+send_from_robot() {
 	msg_info "Receive file (using nc) in directory /flash"
-	echo "#!/usr/bin/expect -f" > $cmd_recv
-	echo "spawn $TERMINAL_PROGRAM $ROBOT $PORT" >> $cmd_recv
-	echo "expect login" >> $cmd_recv
-	echo "send \"root\\n\"" >> $cmd_recv
-	echo "send \"cd /flash\\n\"" >> $cmd_recv
-	echo "send \"rm $FILE\\n\"" >> $cmd_recv
-	echo "send \"nc -vv $HOST $FILE_PORT >$FILE\\n\"" >> $cmd_recv
-	echo "send \"chmod a+x $FILE\\n\"" >> $cmd_recv
-	echo "send \"exit\\n\"" >> $cmd_recv
-	echo "expect eof" >> $cmd_recv
-	chmod u+x $cmd_recv
-	$cmd_recv > /dev/null
+	msg_debug "This takes a while because we have to go to the robot and setup a telnet session there..."
+	echo "#!/usr/bin/expect -f" > $cmd_send_from
+	echo "spawn $TERMINAL_PROGRAM $ROBOT $PORT" >> $cmd_send_from
+	echo "expect login" >> $cmd_send_from
+	echo "send \"root\\n\"" >> $cmd_send_from
+	echo "send \"cd /flash\\n\"" >> $cmd_send_from
+	echo "send \"cat $FILE | netcat -l -p $FILE_PORT\\n\"" >> $cmd_send_from
+	echo "send \"exit\\n\"" >> $cmd_send_from
+	echo "expect eof" >> $cmd_send_from
+	chmod u+x $cmd_send_from 
+	$cmd_send_from > /dev/null
 	sleep 1
-}
-
-# Get file size of the file on the robot side. And in the mean time, also set its chmod rwx access bits.
-getfilesize_on_robot() {
-	echo "Get file size in directory /flash"
-	echo "#!/usr/bin/expect -f" > $cmd_size
-	echo "spawn $TERMINAL_PROGRAM $ROBOT $PORT" >> $cmd_size
-	echo "expect login" >> $cmd_size
-	echo "send \"root\\n\"" >> $cmd_size
-	echo "send \"cd /flash\\n\"" >> $cmd_size
-	echo "send \"echo print file size on the robot:\\n\"" >> $cmd_size
-	echo "send \"ls -l | grep $FILE | tr -s ' ' | cut -f5 -d' ' \\n\"" >> $cmd_size
-	echo "send \"chmod a+x $FILE\\n\"" >> $cmd_size
-	echo "send \"exit\\n\"" >> $cmd_size
-	echo "expect eof" >> $cmd_size
-	chmod u+x $cmd_size
-	$cmd_size
-	msg_info "print file size on the host:"
-	du -b $FILE
 }
 
 # On the server-side a netcat process is started (in the background). Subsequently a corresponding receive nc process
 # should be started on the robot side.
-send_file() {
+receive_file() {
 	msg_info "Kill previous netcat processes"
 	ps acux | grep netcat > /dev/null && killall netcat
-	SECONDS=0
-	TYPE=$(file --brief "$FILE")
-	SIZE=$(ls -latrh "$FILE" | awk '{print $5}')
-	msg_info "Send file \"$FILE\" of type \"$TYPE\" and size \"$SIZE\""
-	echo "cat "$FILE" | netcat -l -p $FILE_PORT" > $cmd_send
-	chmod u+x $cmd_send
-	$cmd_send &
-	sleep 1
-	seconds=$SECONDS
-	hours=$((seconds / 3600))
-	seconds=$((seconds % 3600))
-	minutes=$((seconds / 60))
-	seconds=$((seconds % 60))
-
-	print_hours=$(printf %02d $hours)
-	print_minutes=$(printf %02d $minutes)
-	print_seconds=$(printf %02d $seconds)
-	msg_info "Sending took $print_hours:$print_minutes.$print_seconds (HH:MM.SS)"
-}
-
-rcp_file() {
-	rcp $FILE root@$ROBOT:/flash/$FILE
+	msg_info "Receive file \"$FILE\" (this takes a long time for something like an image)"
+	msg_info "Press Enter to end..."
+	echo "netcat $ROBOT $FILE_PORT >"$FILE"" > $cmd_recv_from
+	chmod u+x $cmd_recv_from
+	$cmd_recv_from
+	msg_info "Successfully (probably) received the file"
 }
 
 #######################################################################################################################
 # Function execution
 #######################################################################################################################
 
-welcome
+get_ip_adress
 ping_robot
-configure_host
-
-if [ $METHOD == "rcp" ]; then
-	rcp_file
-elif [ $METHOD == "telnet" ]; then
-	send_file
-	receive_on_robot
-else
-	msg_error "We do not know this communication method"
-fi
+#go_to_target
+send_from_robot
+receive_file
 
 

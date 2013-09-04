@@ -1,10 +1,11 @@
+include ../Mk/localBF.mk
 OBJS=$(patsubst %.cpp,%.o,$(wildcard *.cpp))
-OBJS+=$(patsubst %.c,%.o,$(wildcard *.c))
 
-CXX= 
 
-include ../Mk/local.Mk
-CXXINCLUDE+=-I./ 
+CXXINCLUDE+=-I./ -I../common
+CXXINCLUDE+=-I/home/robot/include
+CXXINCLUDE+=-I../motor
+CXXINCLUDE+=-I$(IROBOTPATH)
 
 all: $(OBJS)
 

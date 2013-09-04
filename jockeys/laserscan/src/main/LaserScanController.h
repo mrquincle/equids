@@ -32,8 +32,12 @@
 #include <CLaserScan.h>
 #include <CImageServer.h>
 #include <CRawImage.h>
+#include <CMotors.h>
 
 #include <semaphore.h>
+#include <vector>
+
+#include <messageDataType.h>
 
 /**
  * Controller for the laser scan.
@@ -48,27 +52,36 @@ public:
 
 	void tick();
 
-	void startVideoStream();
+	//! Overload pause to also stop the motors
+	void pause();
+
+	void startVideoStream(std::string port);
 
 	void stopVideoStream();
 
 	void testCamera();
 
-	void sendDetectedObject();
+	void sendDetectedObject(MappedObjectPosition &position);
+
+	void motorCommand(MotorCommand &motorCommand);
 private:
 	CLaserScan *scan;
 
-	sem_t imageSem;
+	sem_t *imageSem;
 
 	CImageServer* image_server;
 
-	CRawImage *images[4];
+	std::vector<CRawImage*> images;
 
-	Patch p[4];
+	Patch patch[4];
 
 	CRawImage *mosaic_image;
 
 	bool streaming;
+
+	CMotors *motors;
+
+	bool create_mosaic;
 };
 
 

@@ -26,11 +26,11 @@ void* connectLoop(void *serv) {
 				(struct sockaddr *) &clientAddr, &addrLen);
 		if (newServer > -1) {
 			if (CISdebug)
-				fprintf(stdout, "Incoming connection from %s.\n",
+				fprintf(stdout, "CImageServer: Incoming connection from %s.\n",
 						inet_ntoa(clientAddr.sin_addr));
 			if (CISdebug)
 				fprintf(stdout,
-						"Incoming connection accepted on socket level %i.\n",
+						"CImageServer: Incoming connection accepted on socket level %i.\n",
 						newServer);
 			sem_wait(&server->connectSem);
 			server->mySocket = newServer;
@@ -39,7 +39,7 @@ void* connectLoop(void *serv) {
 			pthread_create(thread, NULL, &serverLoop, (void*) server);
 		} else {
 			if (CISdebug)
-				fprintf(stdout, "Accept on listening socked failed.\n");
+				fprintf(stdout, "CImageServer: Accept on listening socked failed.\n");
 		}
 	}
 	return NULL;
@@ -47,7 +47,7 @@ void* connectLoop(void *serv) {
 
 int CImageServer::initServer(const char* port) {
 	if (CISdebug)
-		fprintf(stdout, "Initialize server.\n");
+		fprintf(stdout, "CImageServer: Initialize server.\n");
 	int used_port = atoi(port);
 	stop = false;
 	struct sockaddr_in mySocketAddr;
@@ -97,10 +97,10 @@ void* serverLoop(void* serv) {
 	while (connected && !server->stop) {
 		dataOk = 0;
 		if (CISdebug)
-			fprintf(stdout, "Waiting to receive a message.\n", info.socket);
+			fprintf(stdout, "CImageServer: Waiting to receive a message.\n", info.socket);
 		int msg = server->checkForMessage(info.socket);
 		if (CISdebug)
-			fprintf(stdout, "Message received from %i.\n", info.socket);
+			fprintf(stdout, "CImageServer: Message received from %i.\n", info.socket);
 		sem_wait(info.sem);
 		server->sendImage(info.socket);
 		sem_post(info.sem);
@@ -129,14 +129,13 @@ int CImageServer::checkForMessage(int socket) {
 }
 
 int CImageServer::sendImage(int socket) {
-	if (send(socket, image->data, image->getsize(), MSG_NOSIGNAL)
-			== image->getsize()) {
+	if (send(socket, image->data, image->getsize(), MSG_NOSIGNAL) == image->getsize()) {
 		if (CISdebug)
-			fprintf(stdout, "Image send.\n");
+			fprintf(stdout, "CImageServer: Image send.\n");
 		return 0;
 	} else {
 		if (CISdebug)
-			fprintf(stdout, "Network error.\n");
+			fprintf(stdout, "CImageServer: Network error.\n");
 		return -1;
 	}
 	return 0;

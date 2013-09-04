@@ -28,14 +28,20 @@
 
 #include <syslog.h> // LOG_DEBUG
 
-LaserScanController::LaserScanController(): streaming(false) {
-
+LaserScanController::LaserScanController(): scan(NULL), imageSem(new sem_t()), image_server(NULL), images(), patch(),
+mosaic_image(NULL), streaming(false), motors(NULL), create_mosaic(true) {
+	images.resize(4);
 }
 
 LaserScanController::~LaserScanController() {
 	// flush, because deallocation can go wrong somewhere and we'd have a memory dump
 	std::cout << std::endl << std::flush;
-	printf("Robot object is automatically deleted by the factory.\n");
+	std::cout << "Robot object is automatically deleted by the factory." << std::endl;
+
+	std::cout << "Delete CLaserScan instance" << std::endl;
+	delete scan;
+	std::cout << "Delete CMotors instance" << std::endl;
+	delete motors;
 }
 
 void LaserScanController::initRobotPeriphery() {
@@ -46,16 +52,66 @@ void LaserScanController::initRobotPeriphery() {
 	std::cout << "Setup laser functionality" << std::endl;
 	scan = new CLaserScan(robot, robot_type, 640, 480, 640);
 	scan->Init();
+
+	motors = new CMotors(robot, robot_type);
+	motors->init();
+
+	if (robot_id == 217) {
+		motors->reversed(true);
+	}
 }
 
-void LaserScanController::sendDetectedObject() {
-	ObjectType object = scan->GetRecognizedObject();
+void LaserScanController::motorCommand(MotorCommand &motorCommand) {
+	if (motors == NULL) {
+		std::cerr << "Motor is null, did you call initRobotPeriphery through sending MSG_INIT!?" << std::endl;
+		return;
+	}
+	motors->setRadianSpeeds(motorCommand.forward, motorCommand.radius);
+	usleep(100000);
+}
+
+void LaserScanController::sendDetectedObject(MappedObjectPosition &position) {
+
+	// overwrite position.type
+	ObjectType object;
+	int distance;
+
+	scan->GetRecognizedObject(object, distance);
+	switch(object) {
+	case O_WALL:
+		position.type = WALL;
+		break;
+	case O_SMALL_STEP:
+		position.type = SMALL_STEP;
+		break;
+	case O_LARGE_STEP:
+		position.type = LARGE_STEP;
+		break;
+	default:
+		position.type = UNIDENTIFIED;
+		break;
+	}
+
+	// overwrite message type
 	CMessage msg;
 	msg.type = MSG_MAP_DATA;
-	msg.data = new uint8_t[1];
-	msg.data[0] = object;
-	msg.len = 1;
+
+	// overwrite sender id
+	position.mappedBy = robot_id;
+
+	// set relative position
+	// assuming that phi is from -pi to +pi, and 0 at [x,y]=[+1,0].
+	position.xPosition += std::sin(position.phiPosition) * distance;
+	position.yPosition += std::cos(position.phiPosition) * distance;
+
+	// set payload
+	msg.len = sizeof(MappedObjectPosition);
+	memcpy(msg.data, &position, msg.len);
+
+	// send message
 	server->sendMessage(msg);
+
+	// delete payload of message
 	if (msg.data != NULL) {
 		delete [] msg.data;
 	}
@@ -70,33 +126,54 @@ void LaserScanController::tick() {
 	std::cout << "Distance: " << distance << " cm" << std::endl;
 
 	if (streaming) {
-		if (log_level >= LOG_DEBUG) std::cout << "Compress images so they fit one mosaic image" << std::endl;
-		// fill for patches
-		for (int i = 0; i < 4; i++) {
-			images[i]->compress(p[i]);
+
+		if (create_mosaic) {
+
+			if (log_level >= LOG_DEBUG) std::cout << "Compress images so they fit one mosaic image" << std::endl;
+			// fill for patches
+			for (int i = 0; i < 4; i++) {
+				images[i]->compress(patch[i]);
+			}
+
+			mosaic_image->setPatch(0, 0, patch[0]);
+			mosaic_image->setPatch(0, 1, patch[1]);
+			mosaic_image->setPatch(1, 0, patch[2]);
+			mosaic_image->setPatch(1, 1, patch[3]);
+
+			if (log_level >= LOG_DEBUG) std::cout << "Written all subimages to one image" << std::endl;
+
+		} else {
+			// pick one of the images
+			mosaic_image = images[2];
 		}
 
-		mosaic_image->setPatch(0, 0, p[0]);
-		mosaic_image->setPatch(0, 1, p[1]);
-		mosaic_image->setPatch(1, 0, p[2]);
-		mosaic_image->setPatch(1, 1, p[3]);
-
-		if (sem_post(&imageSem) == -1) {
+		if (sem_post(imageSem) == -1) {
 			std::cerr << "Fail to sem_post image semaphore" << std::endl;
+		} else {
+			if (log_level >= LOG_DEBUG) std::cout << "Signalled CImageServer through semaphore" << std::endl;
 		}
-		if (log_level >= LOG_DEBUG) std::cout << "Written all subimages to one image" << std::endl;
 	}
 
 	// every 0.1 seconds
 	usleep(100000);
-
 }
 
-void LaserScanController::startVideoStream() {
+void LaserScanController::pause() {
+	if (motors != NULL) {
+		if (log_level >= LOG_DEBUG) std::cout << "Stop motors" << std::endl;
+		motors->set_to_zero();
+//		motors->halt();
+		sleep(1);
+	}
+	CController::pause();
+}
+
+void LaserScanController::startVideoStream(std::string port) {
 	if (log_level >= LOG_DEBUG) printf("%s(): configure streaming of images...\n", __func__);
 
 	mosaic_image = new CRawImage(640,480,3);
 
+	assert (scan != NULL);
 	images[0] = scan->getRedDiffImg();
 	images[1] = scan->getRGBDiffImg();
 	images[2] = scan->getImg1();
@@ -105,18 +182,21 @@ void LaserScanController::startVideoStream() {
 	for (int i = 0; i < 4; i++)
 		assert (images[i] != NULL);
 
-	if (log_level >= LOG_DEBUG) printf("%s(): initialize patches...\n", __func__);
-	for (int i = 0; i < 4; i++) {
-		p[i].init(640/2, 480/2);
+	if (create_mosaic) {
+		if (log_level >= LOG_DEBUG) printf("%s(): create mosaic image...\n", __func__);
+		//			if (log_level >= LOG_DEBUG) printf("%s(): initialize patches...\n", __func__);
+		for (int i = 0; i < 4; i++) {
+			patch[i].init(640/2, 480/2);
+		}
+
 	}
 
-	if (log_level >= LOG_DEBUG) printf("%s(): create mosaic image...\n", __func__);
+	sem_init(imageSem, 0, 0); // do not send first image, only at sem_post, see below
 
-	image_server = new CImageServer(&imageSem, mosaic_image);
-	image_server->initServer("10002");
+	image_server = new CImageServer(imageSem, mosaic_image);
+	image_server->initServer(port.c_str());
 
 	if (log_level >= LOG_DEBUG) printf("%s(): create semaphore for streaming images at the right moment...\n", __func__);
-	sem_init(&imageSem, 0, 0); // do not send first image, only at sem_post, see below
 
 	streaming = true;
 }
@@ -125,8 +205,10 @@ void LaserScanController::stopVideoStream() {
 	if (mosaic_image != NULL)
 		delete mosaic_image;
 
-	for (int i = 0; i < 4; i++) {
-		p[i].free();
+	if (create_mosaic) {
+		for (int i = 0; i < 4; i++) {
+			patch[i].free();
+		}
 	}
 
 	if (log_level >= LOG_DEBUG) printf("%s(): stop image server...\n", __func__);

@@ -61,9 +61,11 @@ int CImageClient::sendSmallMessage(unsigned char i)
 int CImageClient::sendMessage(CMessage message)
 {
   int result = -1;
-  message.pack();
-  int len =  send(socketNumber,&message.buf,MESSAGE_LENGTH,0);
-  if (len == MESSAGE_LENGTH){
+  //message.pack();
+  //int len =  send(socketNumber,&message.buf,MESSAGE_LENGTH,0);
+  int len = send(socketNumber,&message.data,message.len,0);
+  if (len == message.len){
+  //if (len == MESSAGE_LENGTH){
 	 result = 0;
 //	 fprintf(stdout,"Send length %i. \n",len);
   }

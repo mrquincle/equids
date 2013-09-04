@@ -1,0 +1,160 @@
+#!/bin/bash
+
+#######################################################################################################################
+# Color configuration
+#######################################################################################################################
+
+# Example usage:
+# echo -e ${RedF}This text will be red!${Reset}
+# echo -e ${BlueF}${BoldOn}This will be blue and bold!${BoldOff} - and this is just blue!${Reset}
+# echo -e ${RedB}${BlackF}This has a red background and black font!${Reset}and everything after the reset is normal text!
+colors() {
+	Escape="\033";
+	BlackF="${Escape}[30m"; RedF="${Escape}[31m";   GreenF="${Escape}[32m";
+	YellowF="${Escape}[33m";  BlueF="${Escape}[34m";    PurpleF="${Escape}[35m";
+	CyanF="${Escape}[36m";    WhiteF="${Escape}[37m";
+	BlackB="${Escape}[40m";     RedB="${Escape}[41m";     GreenB="${Escape}[42m";
+	YellowB="${Escape}[43m";    BlueB="${Escape}[44m";    PurpleB="${Escape}[45m";
+	CyanB="${Escape}[46m";      WhiteB="${Escape}[47m";
+	BoldOn="${Escape}[1m";      BoldOff="${Escape}[22m";
+	ItalicsOn="${Escape}[3m";   ItalicsOff="${Escape}[23m";
+	UnderlineOn="${Escape}[4m";     UnderlineOff="${Escape}[24m";
+	BlinkOn="${Escape}[5m";   BlinkOff="${Escape}[25m";
+	InvertOn="${Escape}[7m";  InvertOff="${Escape}[27m";
+	Reset="${Escape}[0m";
+}
+
+colors
+
+msg_error() {
+	echo -e ${RedF}"[#] $(date +"%x %R") - Error: $1"${Reset}
+}
+
+msg_warning() {
+	echo -e ${YellowF}"[#] $(date +"%x %R") - Warning: $1"${Reset}
+}
+
+msg_info() {
+	echo -e ${GreenF}"[#] $(date +"%x %R") - Info: $1"${Reset}
+}
+
+msg_debug() {
+	echo -e ${BlueF}"[#] $(date +"%x %R") - Debug: $1"${Reset}
+}
+
+#######################################################################################################################
+# Standard configuration
+#######################################################################################################################
+
+COMPILE_STD=/tmp/compile_std.log
+COMPILE_ERR=/tmp/compile_err.log
+
+#######################################################################################################################
+# Argument checking
+#######################################################################################################################
+
+if [[ "$1" == "" ]]
+then
+	msg_error "No args supplied! Run $0 -h for more info"
+	exit 1
+fi
+
+help() {
+	msg_info "Usage: $0 \"robot hostname\" \"program\""
+}
+
+if [[ "$1" == "-h" ]]
+then
+	help
+	exit 0
+fi
+
+if [[ "$#" != "2" ]]; then
+	msg_error "This program requires two arguments"
+	help
+	exit 0
+fi
+
+#######################################################################################################################
+# Configuration continued
+#######################################################################################################################
+
+msg_debug "Remove previous log files"
+rm -f $COMPILE_STD
+rm -f $COMPILE_ERR
+
+# The program arguments
+ROBOT="$1"
+FILE="$2"
+
+# Our own IP address should be in the same netmask as the robot we would to reach
+HOST="192.168.52.200"
+
+FILE_PORT=10001
+PORT=23
+TARGETDIR=/flash
+
+# Computer hangs when ad-hoc network fails (could be telnet as well)
+#TERMINAL_PROGRAM=nc
+TERMINAL_PROGRAM=telnet
+MODEM=--zmodem
+
+cmd_stop=/tmp/cmd_stop
+
+#######################################################################################################################
+# Function definitions
+#######################################################################################################################
+
+# The functions write the exact command to a temporary file, e.g. $cmd_goto (default /tmp/cmd_goto). This allows the
+# user to subsequently run this command outside of this script.
+
+get_ip_adress() {
+	msg_info "We will use \"$ROBOT\" to retrieve the IP address of the robot"
+	msg_debug "We assume there is an entry for \"$ROBOT\" in /etc/hosts"
+	IP_ADDRESS=$(cat /etc/hosts | grep -i $ROBOT | grep -v '#')
+	msg_info "Found ip address: \"$IP_ADDRESS\" (if empty, check /etc/hosts)"
+	if [ "$IP_ADDRESS" = "" ]; then
+		msg_warning "Cannot find hostname (and IP address) in /etc/hosts"
+		msg_info "We will use $ROBOT directly as IP_ADDRESS"
+		IP_ADDRESS=$ROBOT
+		msg_debug "This might fail"
+	else 
+		msg_info "Ping robot $ROBOT (at $IP_ADDRESS)"
+	fi
+}
+
+ping_robot() {
+	PING=`ping -a -W 2 -c 1 $ROBOT`
+	CONNECTION=`echo $PING | grep "1 received"`
+	if [ "$CONNECTION" != "" ]; then
+		msg_info "We can ping the robot. Let's connect!"
+	else
+		msg_error "Sorry, we can not ping the robot (exit)"
+		exit 23
+	fi
+}
+
+stop_on_target() {
+	msg_info "Stop $FILE on the robot"
+	echo "#!/usr/bin/expect -f" > $cmd_stop
+	echo "spawn $TERMINAL_PROGRAM $ROBOT $PORT" >> $cmd_stop
+	echo "expect login" >> $cmd_stop
+	echo "send \"root\\n\"" >> $cmd_stop
+	echo "send \"killall -9 $FILE \\n\"" >> $cmd_stop
+	echo "send \"cd /flash\\n\"" >> $cmd_stop
+	echo "send \"./mspreset.sh\\n\"" >> $cmd_stop
+	echo "send \"exit\\n\"" >> $cmd_stop
+	echo "expect eof" >> $cmd_stop
+	chmod u+x $cmd_stop
+	$cmd_stop > /dev/null
+}
+
+#######################################################################################################################
+# Function execution
+#######################################################################################################################
+
+get_ip_adress
+ping_robot
+stop_on_target
+
+

@@ -415,11 +415,13 @@ void CLaserScan::GetData() {
 		image2->saveBmp(ss.str().c_str());
 	}
 
+#ifdef CALCULATE_HOUGH
 	// Compute the orientation of the line and its distance to the origin
 	double alpha = 0, d = 0;
 	getLine(image_red_diff,alpha,d);
 
 	if (printTime) fprintf(stdout,"%s(): Laser scan detection time: %ims\n",__func__,sfTimer.getTime());
+#endif
 
 	// Compute the laser vector using the two images
 	//generateVector(image2,image1,laserVec);
@@ -527,13 +529,14 @@ void CLaserScan::Fill(int *in, int in_size, int *out, int out_size) {
 /**
  * Get recognized object.
  */
-ObjectType CLaserScan::GetRecognizedObject() {
+void CLaserScan::GetRecognizedObject(ObjectType &object_type, int & distance) {
 	// get the two camera images and calculate the difference
 	GetData();
 
 	generateVector(image2,image1,laserVector);
 
-	int distance = 0, length = 0;
+	distance = 0;
+	int length = 0;
 	estimateParameters(laserVector, length, distance);
 
 	if (printLaser) {
@@ -554,19 +557,24 @@ ObjectType CLaserScan::GetRecognizedObject() {
 	printf("Laser detected ");
 	if (distance > 40) {
 		printf("nothing for now\n");
-		return O_NOTHING;
+		object_type = O_NOTHING;
+		return;
 	} else if (length > 220) {
 		printf("wall\n");
-		return O_WALL;
+		object_type = O_WALL;
+		return;
 	} else if (length < 100) {
 		printf("small step\n");
-		return O_SMALL_STEP;
+		object_type = O_SMALL_STEP;
+		return;
 	} else if (length < 200) {
 		printf("large step\n");
-		return O_LARGE_STEP;
+		object_type = O_LARGE_STEP;
+		return;
 	} else {
 		printf("something, but has to decide\n");
-		return O_SOMETHING;
+		object_type = O_SOMETHING;
+		return;
 	}
 
 }

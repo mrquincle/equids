@@ -25,6 +25,7 @@
  */
 
 #include <signal.h>
+#include <sys/syslog.h>
 
 /***********************************************************************************************************************
  * Controller include
@@ -72,6 +73,16 @@ int main(int argc, char **argv) {
 	controller.parsePort(argc, argv);
 	controller.initServer();
 
+	std::string cam_port = "10002";
+	if (argc == 3) {
+		cam_port = std::string(argv[2]);
+	}
+	std::cout << "Streaming images will be on port " << cam_port << " on receiving MSG_CAM_VIDEOSTREAM_START" << std::endl;
+
+	// temporary data structures, so we do not allocate memory all the time
+	MotorCommand motorCommand;
+	MappedObjectPosition positionForMappedObject;
+
 	CMessage message;
 	bool quitController = false;
 	bool runController = false;
@@ -95,6 +106,25 @@ int main(int argc, char **argv) {
 			controller.acknowledge();
 			break;
 		}
+		case MSG_CAM_VIDEOSTREAM_START: { // you also have to call MSG_START
+//			runController = true;
+//			controller.start();
+//			controller.setVerbosity(LOG_DEBUG);
+			controller.startVideoStream(cam_port);
+			controller.acknowledge();
+//			controller.setVerbosity(LOG_EMERG);
+			break;
+		}
+		case MSG_CAM_VIDEOSTREAM_STOP: {
+			controller.stopVideoStream();
+			controller.acknowledge();
+			break;
+		}
+		case MSG_SPEED: {
+			memcpy(&motorCommand, message.data, sizeof(MotorCommand));
+			controller.motorCommand(motorCommand);
+			break;
+		}
 		case MSG_STOP: {
 			runController = false;
 			controller.pause();
@@ -109,7 +139,8 @@ int main(int argc, char **argv) {
 			break;
 		}
 		case MSG_LASER_DETECT_STEP: {
-			controller.sendDetectedObject();
+			memcpy(&positionForMappedObject, message.data, sizeof(MappedObjectPosition));
+			controller.sendDetectedObject(positionForMappedObject);
 			break;
 		}
 		case MSG_QUIT: {

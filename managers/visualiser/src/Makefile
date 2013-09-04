@@ -4,7 +4,7 @@ SUBDIRS+=control
 SUBDIRS+=gui
 SUBDIRS+=main
 SUBDIRS+=main
-LXXLIBS+=-lSDL
+LXXLIBS+=-lSDL -lpthread
 
 OBJS=$(wildcard ../obj/*.o)
 

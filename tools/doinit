@@ -1,0 +1,80 @@
+#!/bin/bash
+
+COMPILE_STD=/tmp/compile_std.log
+COMPILE_ERR=/tmp/compile_err.log
+
+ROBOT=${1:? "Usage: $0 {url|-h}"}
+
+help() {
+	echo "Usage: $0 {url|-h}"
+	setdate=$(date "+%Y-%m-%d %H:%M:%S")
+	echo "  On robot itself this does: date -s \"$setdate\""
+}
+
+if [[ "$1" == "-h" ]]; then
+	help
+	exit 0
+fi
+
+echo "Remove previous log files"
+rm -f $COMPILE_STD
+rm -f $COMPILE_ERR
+
+# The program arguments
+ROBOT="$1"
+HOST="192.168.0.10"
+PORT=23
+
+TARGETDIR=/flash
+
+TERMINAL_PROGRAM=telnet
+MODEM=--zmodem
+
+cmd_init=/tmp/cmd_init
+
+get_ip_adress() {
+	echo "* We will use \"$ROBOT\" to retrieve the IP address of the robot"
+	echo "* We assume there is an entry for \"$ROBOT\" in /etc/hosts"
+	IP_ADDRESS=`cat /etc/hosts | grep -i $ROBOT | grep -v '#'`
+	echo "* Found ip address: \"$IP_ADDRESS\" (if empty, check /etc/hosts)"
+	if [ "$IP_ADDRESS" = "" ]; then
+		echo "Sorry, set hostname (and IP address) in /etc/hosts"
+		exit 37
+	else 
+		echo "* Ping robot $ROBOT (at $IP_ADDRESS)"
+	fi
+}
+
+ping_robot() {
+	PING=`ping -a -W 2 -c 1 $ROBOT`
+	CONNECTION=`echo $PING | grep "1 received"`
+	if [ "$CONNECTION" != "" ]; then
+		echo "Notice: We can ping the robot. Let's connect!"
+	else
+		echo "Sorry, we can not ping the robot (exit)"
+		exit 23
+	fi
+}
+
+init_robot() {
+	echo "Initialize robot"
+	echo "{" > $cmd_init
+	echo "sleep 1" >> $cmd_init
+	echo "echo \"root\"" >> $cmd_init
+	setdate=$(date "+%Y-%m-%d %H:%M:%S")
+	echo "set date as $setdate"
+	echo "echo \"date -s \\\"$setdate\"\\\"" >> $cmd_init
+	echo "echo \"sleep 1\"" >> $cmd_init
+	echo "sleep 1" >> $cmd_init
+	echo "echo" >> $cmd_init
+	echo "} | $TERMINAL_PROGRAM $ROBOT $PORT" >> $cmd_init
+	chmod u+x $cmd_init
+	$cmd_init > /dev/null
+	sleep 1
+}
+
+get_ip_adress
+ping_robot
+init_robot
+
+
