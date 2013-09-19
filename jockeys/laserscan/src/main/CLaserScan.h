@@ -131,7 +131,7 @@ protected:
 	//! Get line from an image
 	void getLine(CRawImage *image, double & alpha, double & d);
 
-	void estimateParameters(std::vector<int> & vec, int & length, int & distance);
+	void estimateParameters(std::vector<int> & vec, int & length, int & distance, int &start, int &end);
 
 private:
 	//! The internal structure for the Hough transform

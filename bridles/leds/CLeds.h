@@ -121,6 +121,9 @@ public:
 	//! Set to specific color
 	void color(LedColor color);
 
+	//! Toggle to specific color
+	void colorToggle(LedColor color);
+
 	//! Useful to get distances from the infrared LEDs
 	inline int get_window_size() { return window_size; }
 
@@ -148,6 +151,9 @@ private:
 
 	int irled_count;
 
+	bool colored;
+
+
 	std::vector<int> board_running;
 
 	bool save_to_file;
@@ -159,6 +165,12 @@ private:
 	std::vector<int32_t> offset_ambient;
 
 	std::vector<int32_t> offset_proximity;
+
+	float variance_reflective;
+
+	float variance_ambient;
+
+	float variance_proximity;
 
 	//! Store the ir-values
 	std::vector<IRValues> ir_values;

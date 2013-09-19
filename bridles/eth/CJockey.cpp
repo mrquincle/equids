@@ -7,6 +7,7 @@ CJockey::CJockey() {
 	sprintf(name, "Not defined");
 	argv[0] = NULL;
 	started = false;
+	sem_init(&messSem, 0, 1);
 }
 
 CJockey::~CJockey() {
@@ -21,7 +22,6 @@ static void getMessageCallback(const ELolMessage *msg, void * connection, void *
 }
 
 bool CJockey::addMessage(const ELolMessage *msg) {
-	messageRead = 0;
 	if (msg->command == MSG_QUIT) {
 		quit();
 	} else if (msg->command == MSG_ACKNOWLEDGE) {
@@ -29,15 +29,44 @@ bool CJockey::addMessage(const ELolMessage *msg) {
 	} else if (redirection(msg)) {
 //redirection already done inside redirection(msg)
 	} else {
-		last_length = msg->length;
-		last_msg = msg->command;
-		memcpy(last_data, msg->data, (last_length>MAX_DATA) ? MAX_DATA : last_length);
-		last_ptr = msg->data;
-      message.set(msg);
+
+		sem_wait(&messSem);
+		if (incomingMessages.size() > 50) {
+			printf(
+					"%s incoming message buffer overfull - delete 10 oldes messages\n",name);
+			incomingMessages.erase(incomingMessages.begin(),
+					incomingMessages.begin() + 10);
+		}
+		CMessage message;
+		message.set(msg);
+		incomingMessages.push_back(message);
+		sem_post(&messSem);
 	}
 	return true;
 }
 
+CMessage CJockey::getMessage() {
+	CMessage message;
+	sem_wait(&messSem);
+	//printf("num incoming messages %d \n",incomingMessages.size());
+	//usleep(1000000);
+	if (incomingMessages.size() > 0) {
+		//if(incomingMessages[0].type==MSG_)
+		message = incomingMessages[0];
+		message.len=incomingMessages[0].len;
+		uint8_t* newdata = new uint8_t[message.len];
+		memcpy(newdata,incomingMessages[0].data,message.len);
+		message.data = newdata;
+		incomingMessages.erase(incomingMessages.begin());
+	} else {
+		message.type = MSG_NONE;
+		message.valid = false;
+		message.data = NULL;
+		message.len = 0;
+	}
+	sem_post(&messSem);
+	return message;
+}
 
 bool CJockey::init(int my_pid, CEquids *master) {
 	char name_IPC[120];
@@ -53,14 +82,15 @@ void CJockey::quit() {
 	jockey_IPC.SendData(MSG_QUIT, NULL, 0);
 }
 
-void CJockey::stop(bool wait_acknow){
-	   	jockey_IPC.SendData(MSG_STOP, NULL, 0);
-	   	if(wait_acknow){
-	   	 while (this->acknowledge==0) {
-	   	            usleep(10000);
-	   	         }
-	   	}
-  }
+void CJockey::stop(bool wait_acknow) {
+	jockey_IPC.SendData(MSG_STOP, NULL, 0);
+	this->started = false;
+	if (wait_acknow) {
+		while (this->acknowledge == 0) {
+			usleep(10000);
+		}
+	}
+}
 
 bool CJockey::redirection(const ELolMessage *msg) {
 	bool isredirected=false;

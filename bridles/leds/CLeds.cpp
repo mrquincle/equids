@@ -292,6 +292,7 @@ void CLeds::power_all(LedType led_type, bool on) {
  */
 void CLeds::color(LedColor color) {
 	uint8_t c;
+	colored = true;
 	switch (color) {
 	case LC_RED:          c = 0b00000011; break;
 	case LC_YELLOW:       c = 0b00001111; break;
@@ -307,6 +308,21 @@ void CLeds::color(LedColor color) {
 	for (int i = 0; i < 4; ++i)
 		robot->SetLEDAll(i, c);
 }
+
+void CLeds::colorToggle(LedColor color) {
+	if(colored){
+		this->color(LC_OFF);
+		colored=false;
+	} else {
+		this->color(color);
+		colored=true;
+	}
+}
+
+// in FSM state WAITING
+//switch on proximity ir leds and ir pulsing
+//for(uint8_t i=0; i< NUM_DOCKS; i++)
+//    SetIRLED(i, IRLEDOFF, LED1, IRPULSE0|IRPULSE1);
 
 /**
  * This is the same way Wenguo calibrates the IR. The only difference is that he stores them to a file, so he only needs
@@ -334,7 +350,7 @@ void CLeds::calibrate(bool turn_around) {
 
 	for (int t = 0; t < count; ++t) {
 		update();
-		for(int i=0; i < irled_count ;i++)
+		for(int i=0; i < irled_count; i++)
 		{
 			offset_reflective[i] += reflective(i, false);
 			offset_ambient[i] += ambient(i, false);

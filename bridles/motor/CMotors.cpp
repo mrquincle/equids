@@ -12,15 +12,9 @@
 #include <cassert>
 #include <cmath>
 #include <cstdio>
-//#include <fcntl.h>
-//#include <unistd.h>
-//#include <sys/ioctl.h>
 
 #include <CMotors.h>
 #include <dim1algebra.hpp>
-
-// Remark: better to use e.g. acos(-1)
-#define PI 3.141592654
 
 /**
  * This class, in the end, will be able to drive robots in multiple ways. A holonomic drive (in which a robot can
@@ -52,8 +46,18 @@ CMotors::CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 
 	max_radius = 1000; // the maximum value
 	axle_track = 10;
-	left_right_reversed = false;
 
+	// use an environmental variable REVERSE_TRACKS, by default reverse tracks is false
+	char *reverse_tracks = getenv("REVERSE_TRACKS");
+	if (reverse_tracks) {
+		std::string rev = std::string(reverse_tracks);
+		std::transform(rev.begin(), rev.end(), rev.begin(), ::tolower);
+		if (rev == "true") {
+			left_right_reversed = true;
+		} else {
+			left_right_reversed = false;
+		}
+	}
 	printf("setting buf\n");
 	buf[0]=0;
 	buf[1]=0;
@@ -64,6 +68,10 @@ CMotors::CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 	actualspeed1=0;
 	actualspeed2=0;
 	actualspeed3=0;
+	motorOrientation1 = 1;
+	motorOrientation2 = 1;
+	motorOrientation3 = 1;
+	this->readMotorOrientations();
 	posX=0;
 	posY=0;
 	posPhi=0;
@@ -74,6 +82,7 @@ CMotors::CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 
 	switch (robot_type) {
 	case RobotBase::ACTIVEWHEEL: {
+		printf("AW\n");
 		odometry_koef1 = 1.186562e-06;
 		odometry_koef2 = 1.436724e-06;
 		odometry_koef3 = 8.650865e-01;
@@ -81,19 +90,21 @@ CMotors::CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 		break;
 	}
 	case RobotBase::KABOT: {
+		printf("Kabot\n");
 		odometry_koef1 = 0.000000152;
 		odometry_koef2 = 0.65;
 		odometry_koef3 = 0.3713;
 		break;
 	}
 	case RobotBase::SCOUTBOT: {
+		printf("scout\n");
 		odometry_koef1=0.000001253;
 		odometry_koef2=0.000001253;
 		odometry_koef3=0.12;
 		break;
 	}
 	default:
-		fprintf(stderr, "can not set odometry koeficients\n");
+		fprintf(stderr, "can not set odometry coefficients\n");
 		break;
 	}
 	fprintf(stdout, "time\n");
@@ -124,6 +135,7 @@ void CMotors::calibrate(MotorCalibResult calibrationResult){
 	this->odometry_koef2=calibrationResult.odometry_koef2;
 	this->odometry_koef3=calibrationResult.odometry_koef3;
 	this->calibratedSpeed=calibrationResult.calibratedSpeed;
+	printf("calibrating on %d\n",calibratedSpeed);
 }
 
 /**
@@ -281,6 +293,7 @@ void CMotors::rotate(int degrees) {
  * Always try to use calibrated speed for motions to avoid nonlinearity in speed setting
  */
 void CMotors::setSpeeds(int forward, int turn) {
+	//printf("robot type is %d\n",this->robot_type);
 	switch (robot_type) {
 	case RobotBase::ACTIVEWHEEL: {
 		//drive diferentially - means two down wheel speeds are equal
@@ -479,8 +492,9 @@ void CMotors::setMotorSpeedsKB(int sFront,int sRear)
 			actualspeed1=sFront;
 			actualspeed2=sRear;
 			KaBot *bot = (KaBot*)robot_base;
-			bot->MoveScrewFront(actualspeed1);
-			bot->MoveScrewRear(actualspeed2);
+			bot->MoveScrewFront(motorOrientation1*actualspeed1);
+			bot->MoveScrewRear(motorOrientation2*actualspeed2);
+			usleep(10000);
 		}
 		lastTime=timer->getTime();
 	}else{
@@ -493,7 +507,7 @@ void CMotors::setMotorSpeedsAW(int leftD,int rightD,int top)
 	if(robot_type==RobotBase::ACTIVEWHEEL){
 
 		ActiveWheel *bot = (ActiveWheel*)robot_base;
-		//buf[5] = bot -> GetHingeStatus().currentAngle*PI/180;
+		//buf[5] = bot -> GetHingeStatus().currentAngle*M_PI/180;
 		countOdometryTimeAW(timer->getTime()-lastTime,buf[5]);
 		if(actualspeed1!=leftD || actualspeed2!=rightD || actualspeed3!=top){
 			actualspeed1=leftD;
@@ -501,8 +515,8 @@ void CMotors::setMotorSpeedsAW(int leftD,int rightD,int top)
 			actualspeed3=top;
 			//dopredu
 
-			bot->MoveWheelsFront(actualspeed1 , actualspeed2);
-			bot->MoveWheelsRear(actualspeed3, 0);
+			bot->MoveWheelsFront(motorOrientation1*actualspeed1 , motorOrientation2*actualspeed2);
+			bot->MoveWheelsRear(motorOrientation3*actualspeed3, 0);
 		}
 		lastTime=timer->getTime();
 	}else{
@@ -518,7 +532,7 @@ void CMotors::setMotorSpeedsS(int left,int right)
 			actualspeed1=left;
 			actualspeed2=right;
 			ScoutBot *bot = (ScoutBot*)robot_base;
-			bot->Move(actualspeed1,actualspeed2);
+			bot->Move(motorOrientation1*actualspeed1,motorOrientation2*actualspeed2);
 		}
 		lastTime=timer->getTime();
 	}else{
@@ -565,7 +579,7 @@ void CMotors::countOdometryTimeAW(int timediff,double hinge){
 	//L3=0.1575;
 	//L12=L12/1.225;
 	//L3=L3/1.225;
-
+	//printf("timediff %d \n",timediff);
 	double D=2*cos(delta)*(L12+L3*sin(delta));
 	double ld=odometry_koef1*timediff*(-actualspeed1);
 	double pd=odometry_koef1*timediff*(-actualspeed2);
@@ -657,11 +671,27 @@ void CMotors::evaluatePosition(){
 		break;
 	}
 	default:
-		fprintf(stderr, "cannot evalueta position for unknown robot type\n");
+		fprintf(stderr, "cannot evaluate position for unknown robot type\n");
 		break;
 	}
 }
 
 bool CMotors::isMoving(){
 	return this->actualspeed1!=0 || this->actualspeed2!=0 || this->actualspeed3!=0;
+}
+
+bool CMotors::readMotorOrientations() {
+	FILE * file;
+	int calibspeed;
+	if (file = fopen("/flash/motorCalibration/motorOrientation.dat", "rb")) {
+
+		fscanf(file, "%d\n%d\n%d\n", &motorOrientation1, &motorOrientation2,
+				&motorOrientation3);
+		printf("readed orientation of motors %d %d %d\n",motorOrientation1,motorOrientation2,motorOrientation3);
+		fclose(file);
+		return true;
+	} else {
+		printf("can not load motor orientation, leaving default 1 1 1 \n");
+		return false;
+	}
 }

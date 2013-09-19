@@ -28,6 +28,8 @@
 
 #include <iostream>
 
+#include <messageDataType.h>
+
 LaserExplorationScenario::LaserExplorationScenario(CEquids * equids): CScenario(equids) {
 	J_LASER_RECOGNITION = J_POSITION = J_RANDOM_EXPLORATION = -1;
 
@@ -49,27 +51,59 @@ bool LaserExplorationScenario::Init() {
 	//! Send an error message or also quit program..
 	if (J_POSITION==-1) {
 		std::cout << "Not defined jockey \"position\"" << std::endl;
+		continue_program = true;
+	}
+
+	J_LASER_RECOGNITION = equids->find("laserscan");
+	if (J_LASER_RECOGNITION==-1) {
+		std::cout << "Not defined jockey \"laserscan\"" << std::endl;
 		continue_program = false;
 	}
 
-	equids->initJockey(J_POSITION);
+	//equids->initJockey(J_POSITION);
+
+	equids->initJockey(J_LASER_RECOGNITION);
 
 	return continue_program;
 }
 
 void LaserExplorationScenario::Run() {
+	CMessage msg;
+	MappedObjectPosition position;
+	int len = sizeof(struct MappedObjectPosition);
+	msg.data = new uint8_t[len];
+	msg.len = len;
 	while (!quit) {
 		switch(state) {
 		case S_START:
-			equids->switchToJockey(J_POSITION);
-			state = S_RANDOM_EXPLORATION;
+			//equids->switchToJockey(J_POSITION);
+//			state = S_RANDOM_EXPLORATION;
+//			equids->switchToJockey(J_LASER_RECOGNITION);
+			state = S_RECOGNITION;
 			break;
 		case S_RANDOM_EXPLORATION: {
 			// run this forever for now
-			CMessage *msg = equids->getMessage(J_POSITION);
-			if (msg->type==MSG_UBISENCE_POSITION) {
-				std::cout << "Position is: " << msg->data << std::endl;
+			CMessage msg = equids->getMessage(J_POSITION);
+			if (msg.type==MSG_UBISENCE_POSITION) {
+				std::cout << "Position is: " << msg.data << std::endl;
 			}
+			break;
+		}
+		case S_RECOGNITION: {
+			std::cout << "Send recognition message of size " << len << std::endl;
+			// send message to recognize object at this location
+			position.mappedBy = -1;
+			position.type = UNIDENTIFIED;
+			position.map_id = -1;
+			position.xPosition = -1.0;
+			position.yPosition = -1.0;
+			position.zPosition = -1.0;
+			position.phiPosition = -1.0;
+			msg.type = MSG_LASER_DETECT_STEP;
+			memcpy(msg.data, &position, len);
+			equids->sendMessage(J_LASER_RECOGNITION, msg);
+			std::cout << "Recognition message sent" << std::endl;
+			sleep(4);
 			break;
 		}
 		case S_QUIT:

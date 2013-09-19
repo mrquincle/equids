@@ -53,6 +53,7 @@
 #include <BackandforthScenario.h>
 #include <LaserExplorationScenario.h>
 #include <GrandChallenge1Scenario.h>
+#include <MappingScenario.h>
 
 /***********************************************************************************************************************
  * Implementation
@@ -74,7 +75,14 @@ void interrupt_signal_handler(int signal) {
 /**
  * Add to this list of scenarios for your own. In the end we want to use the scenario S_GRAND_CHALLENGE1.
  */
-enum Scenario { SC_BACK_AND_FORTH_TEST, SC_STANDALONE_CAMERA, SC_LASER_EXPLORATION, SC_GRAND_CHALLENGE1, SCENARIO_COUNT };
+enum Scenario {
+	SC_BACK_AND_FORTH_TEST,
+	SC_STANDALONE_CAMERA,
+	SC_MAPPING,
+	SC_LASER_EXPLORATION,
+	SC_GRAND_CHALLENGE1,
+	SCENARIO_COUNT
+};
 
 /**
  * Cast Scenario to a string. Usage: ScenarioStr[scenario].
@@ -83,6 +91,7 @@ enum Scenario { SC_BACK_AND_FORTH_TEST, SC_STANDALONE_CAMERA, SC_LASER_EXPLORATI
 static const std::string ScenarioStr[] = {
 		MACROSTR(SC_BACK_AND_FORTH_TEST),
 		MACROSTR(SC_STANDALONE_CAMERA),
+		MACROSTR(SC_MAPPING),
 		MACROSTR(SC_LASER_EXPLORATION),
 		MACROSTR(SC_GRAND_CHALLENGE1)
 };
@@ -96,6 +105,7 @@ int main(int argc, char **argv) {
 
 	Scenario scenario;
 	//	scenario = SC_GRAND_CHALLENGE1;
+//	scenario = SC_MAPPING;
 	scenario = SC_LASER_EXPLORATION;
 
 	std::cout << "We will use scenario " << ScenarioStr[scenario] << std::endl;
@@ -145,6 +155,17 @@ int main(int argc, char **argv) {
 			break;
 		}
 		scenario.Run();
+		break;
+	}
+	case SC_MAPPING: {
+#ifdef ENABLE_MAPPING_SCENARIO
+		MappingScenario scenario(&equids);
+		if (!scenario.Init()) {
+			std::cerr << "Error in initialization, break out" << std::endl;
+			break;
+		}
+		scenario.Run();
+#endif
 		break;
 	}
 	case SC_STANDALONE_CAMERA: {

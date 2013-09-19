@@ -55,7 +55,7 @@ CTimer* timer;
 CRawImage* image;
 sem_t imageSem;
 CImageServer* image_server;
-CCamera* camera;
+CCamera* camera = NULL;
 bool swapIMG = false;
 std::string portIS;
 bool streamVideo = false;
@@ -67,6 +67,7 @@ STrackedObject o;
 SSegment currentSegment;
 SSegment lastSegment;
 RobotBase::RobotType robot_type;
+RobotBase* robot;
 //cicrcle detector for docking
 CCircleDetect *detectorArray[MAX_DOCKING_PATTERNS];
 STrackedObject objectArray[MAX_DOCKING_PATTERNS];
@@ -115,7 +116,7 @@ void switchActualTask(ActualCameraUsage newTask) {
 		switch (newTask) {
 		case DETECT_DOCKING: {
 			circle_trans = new CTransformation(IMAGE_WIDTH, IMAGE_HEIGHT,
-					TRACKED_CIRC_DIAMETER_DOCK, false);
+					TRACKED_CIRC_DIAMETER_DOCK, robot_type);
 
 			for (int i = 0; i < MAX_DOCKING_PATTERNS; i++)
 				detectorArray[i] = new CCircleDetect(IMAGE_WIDTH, IMAGE_HEIGHT,
@@ -125,7 +126,7 @@ void switchActualTask(ActualCameraUsage newTask) {
 			break;
 		case DETECT_MAPPING: {
 			circle_trans = new CTransformation(IMAGE_WIDTH, IMAGE_HEIGHT,
-					TRACKED_CIRC_DIAMETER_MAP, false);
+					TRACKED_CIRC_DIAMETER_MAP, robot_type);
 			circle_detector = new CCircleDetect(IMAGE_WIDTH, IMAGE_HEIGHT,
 					INNER_CIRC_DIAMETER_MAP / TRACKED_CIRC_DIAMETER_MAP);
 		}
@@ -156,27 +157,30 @@ void readMessages() {
 		switch (message.type) {
 		case MSG_INIT: {
 			printf("message init\n");
-			//need robot type for image swap
-			/*
-			robot_type = RobotBase::Initialize(NAME);
-			switch (robot_type) {
-			case RobotBase::SCOUTBOT: {
-				swapIMG = false;
-			}
-				break;
-			default: {
-				printf("swapping ................. ..............\n");
-				swapIMG = true;
-			}
-				break;
-			}*/
-			swapIMG = false;
-#ifdef OLD_CAMERA_INIT
-			sem_init(&imageSem, 0, 1);
-			camera = new CCamera(&imageSem, swapIMG);
-			camera->init(VIDEO_DEVICE, IMAGE_WIDTH, IMAGE_HEIGHT);
-			image = new CRawImage(IMAGE_WIDTH, IMAGE_HEIGHT);
-#endif
+			//need robot type for right calibration file
+
+			 robot_type = RobotBase::Initialize(NAME);
+			 robot = RobotBase::Instance();
+
+			 	for (int i = 0; i < 4; ++i)
+			 		robot->SetPrintEnabled(i, false);
+
+			 robot->pauseSPI(true);
+			 while (!robot->isSPIPaused()) {
+			 		usleep(10000);
+			 }
+			 switch (robot_type) {
+			 case RobotBase::SCOUTBOT: {
+			 swapIMG = false;
+			 }
+			 break;
+			 default: {
+			 printf("swapping ................. ..............\n");
+			 swapIMG = true;
+			 }
+			 break;
+			 }
+
 			sem_init(&imageSem, 0, 1);
 
 			int cameraDeviceHandler;
@@ -184,7 +188,8 @@ void readMessages() {
 			int imgHeight = IMAGE_HEIGHT;
 			int bytes_per_pixel = 3;
 			camera = new CCamera();
-			camera->Init(VIDEO_DEVICE, cameraDeviceHandler, imgWidth, imgHeight);
+			camera->Init(VIDEO_DEVICE, cameraDeviceHandler, imgWidth,
+					imgHeight);
 			image = new CRawImage(imgWidth, imgHeight, bytes_per_pixel);
 
 			image_server = new CImageServer(&imageSem, image);
@@ -299,9 +304,9 @@ int main(int argc, char **argv) {
 	message_server->initServer(portMS.c_str());
 
 	while (!stop) {
-		if (actualTask != DETECT_NO_TASK || streamVideo) {
+		if (actualTask != DETECT_NO_TASK || (streamVideo && camera !=NULL)) {
 			//camera->renewImage(image,true);
-			camera->renewImage(image, true);
+			camera->renewImage(image, true,false);
 		}
 		readMessages();
 		switch (actualTask) {
@@ -311,15 +316,15 @@ int main(int argc, char **argv) {
 			if (currentSegment.valid) {
 				o = circle_trans->transform(currentSegment, false);
 				int sign = (o.roll > 0) ? -1 : 1;
-					DetectedBlob blob = { o.x, o.y, o.z, o.pitch * PI / 180 * sign };
+				DetectedBlob blob = { o.x, o.y, o.z, o.pitch * PI / 180 * sign };
 				DetectedBlobWSize blobWSize = { 1, { o.x, o.y, o.z, o.pitch * PI
 						/ 180 * sign } };
-				printf("%f %f %f %f\n",blob.x,blob.y,blob.z,blob.phi);
+				//	printf("%f %f %f %f\n",blob.x,blob.y,blob.z,blob.phi);
 				//		std::cout << "MSG_CAM_DETECTED_BLOB_SIZE " << sizeof(DetectedBlobWSize) << std::endl;
 				message_server->sendMessage(MSG_CAM_DETECTED_BLOB, &blobWSize,
 						sizeof(DetectedBlobWSize));
 			} else {
-				printf("NULL blob\n");
+				//	printf("NULL blob\n");
 				message_server->sendMessage(MSG_CAM_DETECTED_BLOB, NULL, 0);
 			}
 		}
@@ -350,6 +355,7 @@ int main(int argc, char **argv) {
 				blobArrayWSize.size = pocet;
 				for (int var = 0; var < pocet; ++var) {
 					blobArrayWSize.detectedBlobArray[var] = blobArray[var];
+					//		printf("%f %f %f %f\n",blobArrayWSize.detectedBlobArray[var].x,blobArrayWSize.detectedBlobArray[var].y,blobArrayWSize.detectedBlobArray[var].z,blobArrayWSize.detectedBlobArray[var].phi);
 				}
 				message_server->sendMessage(MSG_CAM_DETECTED_BLOB_ARRAY,
 						&blobArrayWSize, sizeof(DetectedBlobWSizeArray));

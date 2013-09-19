@@ -422,6 +422,7 @@ void CRawImage::saveBmp(const char* inName)
 
 void CRawImage::saveNumberedBmp(const char *name, bool increment)
 {
+	if (increment) numSaved++;
 	char nameext[100];
 	sprintf(nameext,"%s%04i.bmp",name,numSaved);
 	saveBmp(nameext);

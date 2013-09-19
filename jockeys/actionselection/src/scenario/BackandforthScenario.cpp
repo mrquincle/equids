@@ -103,8 +103,9 @@ void BackandforthScenario::Run() {
 		case S_RECRUITING:
 			uint8_t st;
 			if (cnt<60) { // one minut wait for recruiting
-				if (equids->getMessage(J_WENGUO)->type==DAEMON_MSG_STATE) {
-					st = equids->getMessage(J_WENGUO)->data[0];
+				CMessage mess=equids->getMessage(J_WENGUO);
+				if (mess.type==DAEMON_MSG_STATE) {
+					st = mess.data[0];
 					printf("J_WENGUO state is %i\n", st);
 					if (st == INORGANISM) {
 						printf("Quit Goal finished\n");
@@ -112,10 +113,10 @@ void BackandforthScenario::Run() {
 					} else {
 						sleep(1);
 						cnt++;
-						equids->getMessage(J_WENGUO)->type==0;
+						mess.type==0;
 						equids->sendMessage(J_WENGUO, DAEMON_MSG_STATE_REQ, NULL, 0);
 					}
-					equids->getMessage(J_WENGUO)->type==0;
+					mess.type==0;
 				}
 			} else {
 				printf("Quit TIME elapsed\n");

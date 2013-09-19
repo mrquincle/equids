@@ -74,11 +74,14 @@ int main(int argc, char **argv) {
 	controller.initServer();
 
 	std::string cam_port = "10002";
-	if (argc == 3) {
+	if (argc >= 3) {
 		cam_port = std::string(argv[2]);
 	}
 	std::cout << "Streaming images will be on port " << cam_port << " on receiving MSG_CAM_VIDEOSTREAM_START" << std::endl;
 
+	if (argc >= 4) {
+		std::cerr << "Too many arguments" << std::endl;
+	}
 	// temporary data structures, so we do not allocate memory all the time
 	MotorCommand motorCommand;
 	MappedObjectPosition positionForMappedObject;
@@ -89,8 +92,18 @@ int main(int argc, char **argv) {
 	while (!quitController){
 		message = controller.getMessage();
 
-		if (message.type != MSG_NONE)
-			std::cout << "Command: " << message.getStrType() << " of length " << message.len << std::endl;
+		if (message.type != MSG_NONE) {
+//			std::cout << "******************************************************************************" << std::endl;
+			std::cout << "Command: " << message.getStrType();
+//			if (message.len) {
+//				std::cout << " with payload of length " << message.len << ", namely: ";
+//				for (int i = 0; i < message.len; i++) {
+//					std::cout << (int)message.data[i] << ',';
+//				}
+//			}
+			std::cout << std::endl;
+//			std::cout << "******************************************************************************" << std::endl;
+		}
 
 		if (gStop) {
 			message.type = MSG_QUIT;
@@ -108,6 +121,7 @@ int main(int argc, char **argv) {
 			runController = true;
 			controller.start();
 			controller.acknowledge();
+			std::cout << "Started controller" << std::endl;
 			break;
 		}
 		case MSG_CAM_VIDEOSTREAM_START: { // you also have to call MSG_START
@@ -143,7 +157,12 @@ int main(int argc, char **argv) {
 			break;
 		}
 		case MSG_LASER_DETECT_STEP: {
-			memcpy(&positionForMappedObject, message.data, sizeof(MappedObjectPosition));
+			std::cout << "Detect step with the laser" << std::endl;
+			int len = sizeof(struct MappedObjectPosition);
+			if (message.len != len) {
+				std::cerr << "Error, expected payload of MappedObjectPosition of size " << len << std::endl;
+			}
+			memcpy(&positionForMappedObject, message.data, message.len);
 			controller.sendDetectedObject(positionForMappedObject);
 			break;
 		}

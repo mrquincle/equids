@@ -32,17 +32,23 @@ const char* StrMessage[] = {
 		"Start detect stair",
 		"Detected blob",
 		"Detected blob array",
-		"Detected stair",
-		"Detected stair by laser",
+		"Detect stair",
+		"Detect stair by laser",
 		"Results of motor calibration",
 		"Robot position from ubisence",
 		"Map data",
+		"Get all mapped objects",
+		"Get nearest object of type",
 		"Map covariance",
-		"Map is complete now",
-		"Calibrate controller",
+		"MSG_MAP_COMPLETE",
+		"MSG_CALIBRATE",
 		"MSG_NUMBER",
 		"MSG_ZIGBEE_MSG"
-};
+		"MSG_POSITION_REACHED",
+		"MSG_DOCKED",
+		"MSG_FORCE_CHANGE_JOCKEY",
+		"MSG_REMOTE_CONTROL",
+		"MSG_INIT_ORGANISM"};
 
 CMessage::CMessage()
 {
@@ -88,7 +94,7 @@ void CMessage::set(const CMessage *msg) {
 
 CMessage CMessage::packToZBMessage(uint64_t ubitag, int type, void *data,
 		int len) {
-	printf("packing to ZB message \n");
+	//printf("packing to ZB message \n");
 	CMessage message;
 	message.len = sizeof(uint64_t) + sizeof(int) + len;
 	message.data = new uint8_t[message.len];
@@ -102,11 +108,15 @@ CMessage CMessage::packToZBMessage(uint64_t ubitag, int type, void *data,
 CMessage CMessage::unpackZBMessage(CMessage ZBmessage) {
 	CMessage message;
 	message.len = ZBmessage.len - sizeof(uint64_t) - sizeof(int);
-	printf("whole zigbee size is : %d \n",message.len);
-	message.data = new uint8_t[message.len];
+	//printf("whole zigbee size is : %d \n", message.len);
+	if (message.len > 0) {
+		message.data = new uint8_t[message.len];
+		memcpy(message.data, ZBmessage.data + sizeof(uint64_t) + sizeof(int),
+				message.len);
+	} else {
+		message.data = NULL;
+	}
 	memcpy(&message.type, ZBmessage.data + sizeof(uint64_t), sizeof(int));
-	printf("type is : %d \n",message.type);
-	memcpy(message.data, ZBmessage.data + sizeof(uint64_t) + sizeof(int),
-			message.len);
+	//printf("type is : %d \n", message.type);
 	return message;
 }

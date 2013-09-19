@@ -10,13 +10,13 @@
 #define WAIT_FOR_COORDINATES_TIMEOUT_MS 5000
 
 CUbisencePosition::CUbisencePosition() {
-	sem_init(&dataSem,0,1);
+	sem_init(&dataSem, 0, 1);
 	own_ubitag = new Ubitag();
 	coordinates = new Coordinates();
 	wapi = new WAPI();
-	stop=false;
-	validPosition=false;
-	threadFinished=false;
+	stop = true;
+	validPosition = false;
+	threadFinished = false;
 }
 
 CUbisencePosition::~CUbisencePosition() {
@@ -26,69 +26,69 @@ CUbisencePosition::~CUbisencePosition() {
 	delete own_ubitag;
 }
 
-
-void* connectLoopUP(void *serv)
-{
+void* connectLoopUP(void *serv) {
 	int wapi_error;
 	CUbisencePosition* ubisencePosition = (CUbisencePosition*) serv;
-	while (!ubisencePosition->stop)
-	{
+	while (!ubisencePosition->stop) {
 		sem_wait(&ubisencePosition->dataSem);
-		wapi_error = ubisencePosition->wapi->position(*ubisencePosition->coordinates,
+		wapi_error = ubisencePosition->wapi->position(
+				*ubisencePosition->coordinates,
 				WAIT_FOR_COORDINATES_TIMEOUT_MS);
 		sem_post(&ubisencePosition->dataSem);
-			if (WAPI::WAPI_OK == wapi_error)
-			{
-				ubisencePosition->validPosition = true;
+		if (WAPI::WAPI_OK == wapi_error) {
+			ubisencePosition->validPosition = true;
 			//cout << "Position: " << ubisencePosition->coordinates->toString() << endl;
 			usleep(WAIT_PROGRAM_uS);
-			}
-			else
-			{
-				ubisencePosition->validPosition = false;
+		} else {
+			ubisencePosition->validPosition = false;
 			//std::cout << "Cannot get position wapi_error " << wapi_error << endl;
 			usleep(WAIT_PROGRAM_uS);
-			}
+		}
 	}
-	ubisencePosition->threadFinished=true;
+	ubisencePosition->threadFinished = true;
 	return NULL;
 }
 
-int CUbisencePosition::initServer(const int channel)
-{
+int CUbisencePosition::initServer(const int channel) {
 	stop = false;
+	int error =0;
 	int wapi_error;
 	wapi_error = wapi->join(channel);
-	if(WAPI::WAPI_OK != wapi_error)	{
-	std::cout << "Cannot join to channel " << channel << " wapi_error " << wapi_error << endl;
-	return (EXIT_FAILURE);
+	if (WAPI::WAPI_OK != wapi_error) {
+		std::cout << "Cannot join to channel for ubisence" << channel
+				<< " wapi_error " << wapi_error << endl;
+		return (EXIT_FAILURE);
 	}
 	std::cout << "Joined to channel " << channel << endl;
-	do	{
-	wapi_error = wapi->nodeInfo(*own_ubitag);
-	if(WAPI::WAPI_OK != wapi_error)	{
+	do {
+		wapi_error = wapi->nodeInfo(*own_ubitag);
+		if (WAPI::WAPI_OK != wapi_error ) {
 
-		std::cout << "Waiting for identity" <<	endl;
-		usleep(WAIT_PROGRAM_uS);
+			std::cout << "Waiting for identity" << endl;
+			usleep(WAIT_PROGRAM_uS);
 
-	}
-	}while(WAPI::WAPI_OK != wapi_error);
-	pthread_t* thread=(pthread_t*)malloc(sizeof(pthread_t));
-	pthread_create(thread,NULL,&connectLoopUP,(void*)this);
+		}
+		if(error > 20){
+			return -1;
+		}
+	} while (WAPI::WAPI_OK != wapi_error);
+	thread = (pthread_t*) malloc(sizeof(pthread_t));
+	pthread_create(thread, NULL, &connectLoopUP, (void*) this);
 	return 0;
 }
 
-int CUbisencePosition::stopServer(){
+int CUbisencePosition::stopServer() {
+	pthread_cancel(*thread);
 	stop = true;
 }
 
-UbiPosition CUbisencePosition::getPosition(){
+UbiPosition CUbisencePosition::getPosition() {
 	UbiPosition position;
 	sem_wait(&this->dataSem);
-	position.x=this->coordinates->getX()/1000.0;
-	position.y=this->coordinates->getY()/1000.0;
-	position.z=this->coordinates->getZ()/1000.0;
-	position.time_stamp=this->coordinates->getTimestamp();
+	position.x = this->coordinates->getX() / 1000.0;
+	position.y = this->coordinates->getY() / 1000.0;
+	position.z = this->coordinates->getZ() / 1000.0;
+	position.time_stamp = this->coordinates->getTimestamp();
 	sem_post(&this->dataSem);
 	return position;
 }

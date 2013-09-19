@@ -41,7 +41,7 @@ public:
 	~CCamera();
 
 	//! This gets you a new image, by default it will convert it to RGB values
-	int renewImage(CRawImage* image, bool convert);
+	int renewImage(CRawImage* image, bool convert , bool swap=false);
 
 	//! Denoise image by capturing another image and averaging over the two
 	int denoiseImageByCapturingAnother(CRawImage* image);

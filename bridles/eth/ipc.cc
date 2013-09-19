@@ -18,6 +18,8 @@
 #include <errno.h>
 #include "ipc.hh"
 
+#include <assert.h>
+
 namespace IPC{
 
 #define Close(fd) {\
@@ -378,7 +380,7 @@ bool IPC::ConnectToServer(const char * host, int port)
 
 bool Connection::SendData(const uint8_t type, uint8_t *data, int data_size)
 {
-    //printf("Send data [%s] to %s:%d\n", message_names[type], inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+    printf("Send data [%i] of size %i to %s:%d\n", type, data_size, inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
     ELolMessage msg;
 #ifdef IPC_TEST
     ElolmsgInit(&msg, 0, type, data, data_size);
@@ -386,6 +388,7 @@ bool Connection::SendData(const uint8_t type, uint8_t *data, int data_size)
     ElolmsgInit(&msg, type, data, data_size);
 #endif
     int len = ElolmsgSerializedSize(&msg);
+//    printf("Serialize msg into total size %i\n", len);
     uint8_t buf[len];
     ElolmsgSerialize(&msg, buf);
 
@@ -403,13 +406,12 @@ bool Connection::SendData(const uint8_t type, uint8_t *data, int data_size)
        connected = false;
        printf("write error %d, %i is %s\n", n, errno, strerror(errno));
     }
-    
     return n == len;
-
 }
 
 bool IPC::SendData(const uint8_t type, uint8_t *data, int data_size)
 {
+	if (data_size > 0) assert (data != NULL);
     for(unsigned int i=0; i< connections.size(); i++)
     {
         if(connections[i] && connections[i]->connected)

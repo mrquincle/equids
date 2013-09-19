@@ -30,18 +30,6 @@
 #include <CScenario.h>
 
 /**
- * After starting we perform random exploration. Later on we will need to replace this by going to position indicated
- * as interesting by the mapping jockey.
- */
-typedef enum
-{
-	S_START,
-	S_RANDOM_EXPLORATION,              // randomly explore, using infrared for collision avoidance
-	S_RECOGNITION,                     // recognize (height of) an object, small obstacle like a step, or a wall
-	S_QUIT
-} TState;
-
-/**
  * The scenario implements the overall Grand Challenge 1. It contains mapping, exploration (which puts on the map where
  * there are small steps versus walls), and eventually also where the specially colored power outlets are. Then there
  * is a phase of recruiting from an organism that subsequently assembles to a form with 5 robots. Subsequently there is
@@ -51,6 +39,18 @@ typedef enum
  */
 class LaserExplorationScenario: public CScenario {
 public:
+	/**
+	 * After starting we perform random exploration. Later on we will need to replace this by going to position indicated
+	 * as interesting by the mapping jockey.
+	 */
+	typedef enum
+	{
+		S_START,
+		S_RANDOM_EXPLORATION,              // randomly explore, using infrared for collision avoidance
+		S_RECOGNITION,                     // recognize (height of) an object, small obstacle like a step, or a wall
+		S_QUIT
+	} TState;
+
 	//! Construct and get the CEquids object.
 	LaserExplorationScenario(CEquids * equids);
 

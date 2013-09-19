@@ -104,7 +104,10 @@ private:
 	void countOdometryTimeAW(int timediff,double hinge);//count dead reckoning position change for ActiveWheel
 	void countOdometryTimeS(int timediff);//count dead reckoning position change for ScoutBot
 	void evaluatePosition();
-
+	bool readMotorOrientations();
+	int motorOrientation1;
+	int motorOrientation2;
+	int motorOrientation3;
 	int max_radius;
 	int min_wheel_velocity; // minimum value to the motors
 	int max_wheel_velocity; // maximum value to the motors

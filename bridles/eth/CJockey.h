@@ -13,6 +13,7 @@
 
 #include "ipc.hh"
 #include "CMessage.h"
+#include <semaphore.h>
 #include <vector>
 
 
@@ -26,45 +27,38 @@ TMessageType messagetype;
 };
 
 public:
-   IPC::IPC jockey_IPC;
-   char name[MAX_NAME_LEN];
-   char *argv[MAX_JOCKEYS_PARAMS+1];
-   int port_num;
-   int pid;
-   int acknowledge;
-   int getLast_msg(){messageRead+=1; return last_msg;};
-   const unsigned char* getLast_ptr(){return last_ptr;};
-   int getLast_msg_length(){return last_length;};
-   int getMessageRead(){return messageRead;};
+	IPC::IPC jockey_IPC;
+	char name[MAX_NAME_LEN];
+	char *argv[MAX_JOCKEYS_PARAMS + 1];
+	int port_num;
+	int pid;
+	int acknowledge;
 
-   CJockey();
-   ~CJockey();
-   bool init(int my_pid,CEquids* const);
-   bool addMessage(const ELolMessage *msg);
-   void SendMessage(CMessage &msg) {
-      acknowledge = 0;
-      jockey_IPC.SendData(msg.type, (uint8_t*)msg.data, msg.len);
-   }
-   void SendMessage(int type, void *data, int len) {
-      acknowledge = 0;
-      jockey_IPC.SendData(type, (uint8_t*)data, len);
-   }
-   void quit();
-   void stop(bool wait_acknow);
-   void addRedirection(int redirectTo,TMessageType redirectedMessT);
-   void removeRedirection(int redirectTo, TMessageType redirectedMessT);
-   bool started;
-   CMessage *getMessage() {return &message;}
+	CJockey();
+	~CJockey();
+	bool init(int my_pid, CEquids* const);
+	bool addMessage(const ELolMessage *msg);
+	void SendMessage(CMessage &msg) {
+		acknowledge = 0;
+		jockey_IPC.SendData(msg.type, (uint8_t*) msg.data, msg.len);
+	}
+	void SendMessage(int type, void *data, int len) {
+		acknowledge = 0;
+		jockey_IPC.SendData(type, (uint8_t*) data, len);
+	}
+	void quit();
+	void stop(bool wait_acknow);
+	void addRedirection(int redirectTo, TMessageType redirectedMessT);
+	void removeRedirection(int redirectTo, TMessageType redirectedMessT);
+	bool started;
+	CMessage getMessage();
 private:
-   int last_msg;
-   unsigned char last_data[MAX_DATA];
-   const unsigned char *last_ptr;
-   int last_length;
-   int messageRead;
-   CMessage message;
-   CEquids* equids;
-   bool redirection(const ELolMessage *msg);
-   std::vector<Redirection> redirectinTable;
+	CMessage message;
+	CEquids* equids;
+	sem_t messSem;
+	bool redirection(const ELolMessage *msg);
+	std::vector<Redirection> redirectinTable;
+	std::vector<CMessage> incomingMessages;
 
 };
 

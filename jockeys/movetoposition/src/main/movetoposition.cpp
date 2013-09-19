@@ -31,12 +31,11 @@
 #define UBISENCE_MESSAGE_SERVER_CHANNEL 56
 #define DEBUGSTRING NAME << '[' << getpid() << "] " << __func__ << "(): "
 typedef enum {
-	WAIT = 0, MAPPING
+	WAIT = 0, MOVING
 } ActualCalibrationState;
 
 using namespace std;
-MoveToPosition* finishPosition;
-
+RobotPosition* finishPosition;
 ActualCalibrationState actualTask = WAIT;
 RobotBase::RobotType robot_type;
 RobotBase* robot;
@@ -45,7 +44,7 @@ CMessageServer* message_server;
 CMessage messagee;
 std::string portMS;
 move_to* mv;
-MoveToPosition endPosition;
+RobotPosition endPosition;
 UbiPosition detectedPosition;
 UbiPosition detectedPositionOld3;
 UbiPosition detectedPositionOld1;
@@ -114,6 +113,7 @@ void readMessages() {
 	if (messagee.type != MSG_NONE) {
 		switch (messagee.type) {
 		case MSG_INIT: {
+			printf("msg init \n");
 			robot->pauseSPI(false);
 			while (robot->isSPIPaused()) {
 				usleep(10000);
@@ -132,12 +132,13 @@ void readMessages() {
 			;
 			break;
 		case MSG_START: {
+			printf("msg start \n");
 
 			robot->pauseSPI(false);
 			while (robot->isSPIPaused()) {
 				usleep(10000);
 			}
-			actualTask = MAPPING;
+			actualTask = MOVING;
 			if (robot_type == RobotBase::ACTIVEWHEEL) {
 				ActiveWheel *bot = (ActiveWheel*) robot;
 				printf("changing hinge \n");
@@ -152,6 +153,7 @@ void readMessages() {
 			break;
 		case MSG_STOP: {
 			motor->setSpeeds(0, 0);
+			usleep(5000);
 			robot->pauseSPI(true);
 			while (!robot->isSPIPaused()) {
 				usleep(10000);
@@ -168,22 +170,27 @@ void readMessages() {
 				usleep(10000);
 				robot->pauseSPI(true);
 				actualTask = WAIT;
-				stop = true;
+				//stop = true;
 			}
 			break;
 		}
 		case MSG_MOVETOPOSITION: {
+			printf("msg movetopos \n");
+
 			{
+				//actualTask = MOVING;
 				if (finishPosition == NULL) {
-					finishPosition = new MoveToPosition();
+					finishPosition = new RobotPosition();
 				}
-				memcpy(finishPosition, messagee.data, sizeof(MoveToPosition));
+				memcpy(finishPosition, messagee.data, sizeof(RobotPosition));
 				usleep(10000);
 				gSet = true;
 			}
 			break;
 		}
 		case MSG_UBISENCE_POSITION: {
+			printf("msg ubisense \n");
+
 			pos++;
 			detectedPositionOld3 = detectedPositionOld2;
 			detectedPositionOld2 = detectedPositionOld1;
@@ -232,61 +239,86 @@ int main(int argc, char **argv) {
 	printf("goal position set\n");
 
 	while (!stop) {
+		switch (actualTask) {
+		case (WAIT): {
+			readMessages();
+			usleep(200000);
+		}
+			break;
+		default: {
 
-		readMessages();
+			readMessages();
 
-		if (onPosition == 1) {
-			turned = mv->turn(*finishPosition);
-			usleep(50000);
-		} else {
-			if (pos > 4) {
-				//printf("move\n");
-				//onPosition = mv->move(*finishPosition, *detectedPosition);
-				if (fabs(detectedPosition.y - detectedPositionOld3.y) > 0.04
-						|| fabs(detectedPosition.x - detectedPositionOld3.x)
-								> 0.08) {
-					if (onPosition == 0) {
-						motor->setMotorPosition(detectedPosition.x,
-								detectedPosition.y,
-								(atan2(
-										detectedPosition.y
-												- detectedPositionOld3.y,
-										detectedPosition.x
-												- detectedPositionOld3.x)));
-
-					}
-
-					onPosition = mv->move(*finishPosition, detectedPosition);
-					//motor->setSpeeds(motor->calibratedSpeed, 0);
-					//usleep(500000);
-					//motor->setSpeeds(0,0);
-				} else {
-					printf("neni dostatecne velka zmena pozice\n");
-					motor->setSpeeds(40, 0);
-				}
+			if (onPosition == 1) {
+				turned = mv->turn(*finishPosition);
+				usleep(50000);
 			} else {
-				printf("jedu rovne pro zjisteni HEADING\n");
-				motor->setSpeeds(40, 0);
+				if (pos > 4) {
+					//printf("move\n");
+					//onPosition = mv->move(*finishPosition, *detectedPosition);
+					if (fabs(detectedPosition.y - detectedPositionOld3.y) > 0.03
+							|| fabs(detectedPosition.x - detectedPositionOld3.x)
+									> 0.03) {
+						if (onPosition == 0) {
+							motor->setMotorPosition(detectedPosition.x,
+									detectedPosition.y,
+									(atan2(
+											detectedPosition.y
+													- detectedPositionOld3.y,
+											detectedPosition.x
+													- detectedPositionOld3.x)));
+
+						}
+
+						onPosition = mv->move(*finishPosition,
+								detectedPosition);
+						//motor->setSpeeds(motor->calibratedSpeed, 0);
+						//usleep(500000);
+						//motor->setSpeeds(0,0);
+					} else {
+
+						if (detectedPosition.x == detectedPositionOld3.x
+								&& detectedPosition.y == detectedPositionOld3.y
+								&& detectedPosition.time_stamp
+										!= detectedPositionOld3.time_stamp) {
+							printf("kolize\n");
+							motor->setSpeeds(-40, 0);
+							sleep(2);
+							motor->setSpeeds(0, 0);
+							usleep(5000);
+							message_server->sendMessage(MSG_MOVETOPOSITION_DONE,
+									&endPosition, sizeof(endPosition));
+							actualTask = WAIT;
+						} else {
+							printf("neni dostatecne velka zmena pozice\n");
+							motor->setSpeeds(40, 0);
+						}
+					}
+				} else {
+					printf("jedu rovne pro zjisteni HEADING\n");
+					motor->setSpeeds(40, 0);
+
+				}
+				usleep(500000);
+			}
+
+			if (turned == 1) {
+				printf("turned == 1\n");
+				motor->setSpeeds(0,0);
+				actualTask = WAIT;
+				endPosition.x = detectedPosition.x;
+				endPosition.y = detectedPosition.y;
+				endPosition.phi = (float) motor->getPosition()[2];
+				message_server->sendMessage(MSG_MOVETOPOSITION_DONE,
+						&endPosition, sizeof(endPosition)); //todo &
 
 			}
-			usleep(500000);
 		}
-
-		if (turned == 1) {
-			printf("turned ==1\n");
-			stop = true;
+			break;
 		}
 
 	}
-	endPosition.x = detectedPosition.x;
-	endPosition.y = detectedPosition.y;
-	endPosition.phi = (float)motor->getPosition()[2];
-	message_server->sendMessage(MSG_MOVETOPOSITION_DONE,&endPosition,sizeof(endPosition)); //todo &
-	motor->setMotorPosition(0, 0, 0);
-	motor->setSpeeds(0, 0);
 
-	delete motor;
-	delete message_server;
 	return 0;
 }
 

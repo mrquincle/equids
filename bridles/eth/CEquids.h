@@ -21,17 +21,17 @@ class CEquids
    int runningJockey;
    int message;
 public:
-   CEquids();
-   ~CEquids();
-   CJockey* getRunningJockey(){return &this->jockeys[this->runningJockey];};
-   CJockey* getJockey(int jockeyNumber){return &this->jockeys[jockeyNumber];};
-   bool init(const char *filename);
-   void initJockey(int j);
-   void switchToJockey(int j);
-   void sendMessage(int jockey, CMessage &m);
-   void sendMessage(int jockey,int type, void *data, int len);
-   void sendMessageToALL(int type, void *data, int len);
-   CMessage *getMessage(int j);
+	CEquids();
+	~CEquids();
+	CJockey* getRunningJockey(){return &this->jockeys[this->runningJockey];};
+	CJockey* getJockey(int jockeyNumber){return &this->jockeys[jockeyNumber];};
+	bool init(const char *filename);
+	void initJockey(int j);
+	void switchToJockey(int j);
+	void sendMessage(int jockey, CMessage &m);
+	void sendMessage(int jockey, int type, void *data, int len);
+	void sendMessageToALL(int type, void *data, int len);
+	CMessage getMessage(int j);
 
    int  find(const char *name);
    void quit();

@@ -2,95 +2,117 @@
 
 #define NETWORK_BLOCK MSG_WAITALL
 
-CMessageClient::CMessageClient(): mySocket(-1)
-{
-	printf("Create message client\n");
+bool debugCMC = false;
+
+CMessageClient::CMessageClient(const char* ips) {
+	sem_init(&dataSem, 0, 1);
+	sem_init(&connectSem, 0, 1);
+	last_ptr = 0;
+	mm.type = MSG_NONE;
+	mm.data = NULL;
+	this->ip = ips;
 }
 
-
-CMessageClient::~CMessageClient()
-{
-	printf("Deallocate message client\n");
+CMessageClient::~CMessageClient() {
 }
 
-int CMessageClient::sendMessage(CMessage* message)
-{
- // message->pack();
-  //fprintf(stdout,"Message %s: %i,%i [%i,%i,%i,%i]\n",message->getStrType(),message->value1,message->value2,\
-//	  message->buf[0],message->buf[1],message->buf[2],message->buf[3]);
-/*  if (send(mySocket,message->buf,MESSAGE_LENGTH,MSG_NOSIGNAL) == MESSAGE_LENGTH) return 0; else
-  {
-    fprintf(stdout,"Network error\r\n");
-    return -1;
-  }*/
+static void addMessage(const ELolMessage *msg, void * connection, void * serv) {
+	printf("adding message\n");
+	CMessageClient* server = (CMessageClient*) serv;
+
+	if (server != NULL) {
+		sem_wait(&server->dataSem);
+		bool found = false;
+		for (int var = 0; var < server->lastMessages.size(); ++var) {
+			if (server->lastMessages[var]->type
+					== (TMessageType) msg->command) {
+				if (server->lastMessages[var]->len != msg->length) {
+               delete server->lastMessages[var];
+					server->lastMessages.erase(
+							server->lastMessages.begin() + var);
+					CMessage* message = new CMessage();
+					message->set(msg);
+               message->valid = true;
+					server->lastMessages.push_back(message);
+				} else {
+               if (msg->length>0) {
+					   memcpy(server->lastMessages[var]->data, msg->data,
+							msg->length);
+               }
+               server->lastMessages[var]->valid = true;
+				}
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			CMessage* message = new CMessage();
+			message->set(msg);
+			message->valid = true;
+			server->lastMessages.push_back(message);
+		}
+		sem_post(&server->dataSem);
+	} else {
+      fprintf(stderr, "NULL server ERROR\n");
+   }
 }
 
-int CMessageClient::init(const char *ip,const char* port,bool requirements[])
-{
-  int result = -1;
-  mySocket = socket(AF_INET, SOCK_STREAM, 0);
-  CMessage message;
-  if (mySocket > 0)
-  {
-    struct sockaddr_in server_addr;
-    struct hostent *host_info;
-    host_info =  gethostbyname(ip);
-    if (host_info != NULL)
-    {
-      server_addr.sin_family = host_info->h_addrtype;
-      memcpy((char *) &server_addr.sin_addr.s_addr,host_info->h_addr_list[0], host_info->h_length);
-      server_addr.sin_port = htons(atoi(port));
-      result = connect(mySocket,(struct sockaddr*) &server_addr,sizeof(server_addr));
-    }
-    if (result == 0)
-    {
-	    if (send(mySocket,requirements,5*sizeof(bool),MSG_NOSIGNAL) == 5*sizeof(bool)) // change this to 5*sizeof(bool) ?
-	    	return 0;
-	    else
-	    {
-		    fprintf(stderr,"Network error when sending info\r\n");
-		    return -1;
-	    }
-	    fprintf(stdout,"Connection established.\r\n");
-//	    message.type = MSG_START;
-//	    sendMessage(&message);
-    } else {
-    	fprintf(stderr,"Connection could not be established.\r\n");
-    }
-  }
-  return result;
+int CMessageClient::initServer(const char* port) {
+
+	jockey_IPC.SetCallback(addMessage, this);
+
+	jockey_IPC.Name("jockey IPC");
+
+	jockey_IPC.Start(ip, atoi(port), false);
+
+	return 0;
 }
 
-int CMessageClient::checkForInts(int data[],unsigned int len)
-{
-  int result;
-  int lengthReceived = recv(mySocket,data,len*sizeof(int),NETWORK_BLOCK);
-  if ((unsigned int)lengthReceived == len*sizeof(int)) result = 0;
-  return result;
+const CMessage & CMessageClient::getMessage() {
+   int save_ptr;
+
+   sem_wait(&dataSem);
+
+   if (mm.data!=NULL) {
+
+      delete[] mm.data;
+      mm.data = NULL;
+   }
+
+   if (last_ptr>=lastMessages.size()) {
+      last_ptr=0;
+   }
+   save_ptr = last_ptr;
+      //  fprintf(stderr, "testing message ptr %i save ptr %i lastmessages size %i\n", last_ptr, save_ptr, lastMessages.size());
+	while (last_ptr< lastMessages.size() && !lastMessages[last_ptr]->valid) {
+		last_ptr++;
+		if (last_ptr>=lastMessages.size()) {
+			last_ptr=0;
+		}
+		if (save_ptr==last_ptr) {
+			mm.type = MSG_NONE;
+         last_ptr = lastMessages.size();
+         break;
+		}
+	}
+
+	if (last_ptr< lastMessages.size()) {
+	   mm.set(lastMessages[last_ptr]);
+      lastMessages[last_ptr]->valid = false;
+	   last_ptr++;
+	   if (last_ptr>=lastMessages.size()) {
+	      last_ptr=0;
+ 	   }
+   } else {
+      mm.type = MSG_NONE;
+   }
+
+	sem_post(&dataSem);
+	return mm;
 }
 
-int CMessageClient::checkForBools(bool data[],unsigned int len)
-{
-  int result;
-  int lengthReceived = recv(mySocket,data,len*sizeof(bool),NETWORK_BLOCK);
-  if (lengthReceived == (int)(len*sizeof(bool))) result = 0;
-  return result;
+int CMessageClient::closeConnection() {
+	jockey_IPC.Stop();
+	connected = false;
+	return 0;
 }
-
-int CMessageClient::checkForDoubles(double data[],unsigned int len)
-{
-  int result;
-  int lengthReceived = recv(mySocket,data,len*sizeof(double),NETWORK_BLOCK);
-  if (lengthReceived == (int)(len*sizeof(double))) result = 0;
-  return result;
-}
-
-int CMessageClient::checkForData(double odo[],bool but[],int rotat[])
-{
-	int result = 0;
-	result +=checkForDoubles(odo,10);
-	result +=checkForBools(but,10);
-	result +=checkForInts(rotat,1);
-	return result;
-}
-

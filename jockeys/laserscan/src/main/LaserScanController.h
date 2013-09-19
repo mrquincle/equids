@@ -55,6 +55,9 @@ public:
 	//! Overload pause to also stop the motors
 	void pause();
 
+	//! Check if the controller / robot is properly initialized
+	bool initialized();
+
 	void startVideoStream(std::string port);
 
 	void stopVideoStream();

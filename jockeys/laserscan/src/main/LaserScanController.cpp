@@ -25,8 +25,10 @@
  */
 
 #include <LaserScanController.h>
+#include <CTextLog.h>
 
 #include <syslog.h> // LOG_DEBUG
+
 
 LaserScanController::LaserScanController(): scan(NULL), imageSem(new sem_t()), image_server(NULL), images(), patch(),
 mosaic_image(NULL), streaming(false), motors(NULL), create_mosaic(true), initialized_periphery(false) {
@@ -65,7 +67,17 @@ void LaserScanController::initRobotPeriphery() {
 	initialized_periphery = true;
 }
 
+bool LaserScanController::initialized() {
+	if (!initialized_robot || !initialized_periphery) {
+		std::cerr << "Robot not initialized!" << std::endl;
+		return false;
+	}
+	return true;
+}
+
 void LaserScanController::motorCommand(MotorCommand &motorCommand) {
+	if (!initialized()) return;
+
 	if (motors == NULL) {
 		std::cerr << "Motor is null, did you call initRobotPeriphery through sending MSG_INIT!?" << std::endl;
 		return;
@@ -75,6 +87,9 @@ void LaserScanController::motorCommand(MotorCommand &motorCommand) {
 }
 
 void LaserScanController::sendDetectedObject(MappedObjectPosition &position) {
+	if (!initialized()) return;
+
+	std::cout << "Detect object" << std::endl;
 
 	// overwrite position.type
 	ObjectType object;
@@ -96,6 +111,13 @@ void LaserScanController::sendDetectedObject(MappedObjectPosition &position) {
 		break;
 	}
 
+	std::cout << "Detected object" << std::endl;
+	switch (object) {
+	case O_SMALL_STEP: std::cout << small << std::endl << step << std::endl; break;
+	case O_LARGE_STEP: std::cout << large << std::endl << step << std::endl; break;
+	case O_WALL: std::cout << wall << std::endl; break;
+	}
+
 	// overwrite message type
 	CMessage msg;
 	msg.type = MSG_MAP_DATA;
@@ -109,7 +131,8 @@ void LaserScanController::sendDetectedObject(MappedObjectPosition &position) {
 	position.yPosition += std::cos(position.phiPosition) * distance;
 
 	// set payload
-	msg.len = sizeof(MappedObjectPosition);
+	msg.len = sizeof(struct MappedObjectPosition);
+	msg.data = new uint8_t[msg.len];
 	memcpy(msg.data, &position, msg.len);
 
 	// send message
@@ -119,12 +142,15 @@ void LaserScanController::sendDetectedObject(MappedObjectPosition &position) {
 	if (msg.data != NULL) {
 		delete [] msg.data;
 	}
+	std::cout << "Done with detection" << std::endl;
 }
 
 /**
  * Just prints distance to an object or anything.
  */
 void LaserScanController::tick() {
+	if (!initialized()) return;
+
 	int distance = 0;
 	scan->GetDistance(distance);
 	std::cout << "Distance: " << distance << " cm" << std::endl;

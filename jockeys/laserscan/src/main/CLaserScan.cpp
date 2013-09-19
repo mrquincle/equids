@@ -33,8 +33,6 @@
 #include "CCamera.h"
 #include "CLaser.h"
 
-#include <CTextLog.h>
-
 bool LASER_VERBOSE = false;
 bool SAVE_IMAGES_TO_DISK = false; // does not work anyway, jpeg is disabled
 
@@ -228,6 +226,8 @@ int CLaserScan::generateVector(CRawImage* laserImage, CRawImage* noLaserImage, i
 	return 0;
 }
 
+
+
 int CLaserScan::generateVector(CRawImage* laserImage, CRawImage* noLaserImage, std::vector<int> & vec) {
 
 	assert (laserImage->getwidth() == noLaserImage->getwidth());
@@ -235,12 +235,13 @@ int CLaserScan::generateVector(CRawImage* laserImage, CRawImage* noLaserImage, s
 
 	// clear the vector first
 	vec.clear();
-
+	int margin_left = 120;
+	int margin_right = 220; // 640 = 320 + 320 = 120 + 200 + 100 + 220;
 	int threshold = 20;
 	int diff_threshold = 20;
 	for (int j = 0; j < laserImage->getheight(); j++) {
 		int p = 0;
-		for (int i = 0; i < laserImage->getwidth(); i++) {
+		for (int i = margin_left; i < laserImage->getwidth() - margin_right; i++) {
 			int pos = 3*(j*laserImage->getwidth()+i);
 			bool red = imageManip.isMoreRed(*laserImage, *noLaserImage, pos, threshold, diff_threshold);
 			if (red) {
@@ -269,7 +270,7 @@ int CLaserScan::generateVector(CRawImage* laserImage, CRawImage* noLaserImage, s
  * line. If the thing portrayed on is too close, it will not be seen by the camera and the red-line will be portrayed
  * till the bottom of the visual field of the camera.
  */
-void CLaserScan::estimateParameters(std::vector<int> & vec, int & length, int & distance) {
+void CLaserScan::estimateParameters(std::vector<int> & vec, int & length, int & distance, int &start, int &end) {
 	// count the number of successive non-zeros for now (three zeros breaks the line)
 	length = 0;
 	distance = 0;
@@ -292,14 +293,28 @@ void CLaserScan::estimateParameters(std::vector<int> & vec, int & length, int & 
 		}
 	}
 #else
-	//
-	int avg = 0; int cnt = 0;
+	// just add all the non-zero entries
+	int avg = 0; int cnt = 0; start = 0; end = 0;
 	for (int i = 0; i < vec.size(); i++) {
 		if (vec[i]) {
 			avg += vec[i];
 			length++;
 		}
 	}
+	for (int i = 3; i < vec.size(); i++) {
+		if (vec[i] && vec[i-1] && vec[i-2]) {
+			start = i-2;
+			break;
+		}
+	}
+	for (int i = vec.size()-3; i > 0; i--) {
+		if (vec[i] && vec[i+1] && vec[i+2]) {
+			end = i+2;
+			break;
+		}
+	}
+
+
 	if (length)
 		distance = avg / length;
 #endif
@@ -536,13 +551,12 @@ void CLaserScan::GetRecognizedObject(ObjectType &object_type, int & distance) {
 	generateVector(image2,image1,laserVector);
 
 	distance = 0;
-	int length = 0;
-	estimateParameters(laserVector, length, distance);
+	int length = 0, start = 0, end = 0;
+	estimateParameters(laserVector, length, distance, start, end);
 
-	if (printLaser) {
-		std::cout << "Laser parameters: length=" << length << ", distance=" << distance << std::endl;
-		fprintf(stdout,"%s(): Estimated parameters length: %i pixels\n", __func__, length);
-	}
+//	if (printLaser) {
+		std::cout << "Laser parameters: length=" << length << ", distance=" << distance << ", start=" << start << ", end=" << end << std::endl;
+//	}
 
 	// used octave to fit the stuff, first array is the distance in cm, second array are the values from the laserscan
 	// x=[7,10,13,16,19,22,25,28,31,34,37];
@@ -554,29 +568,76 @@ void CLaserScan::GetRecognizedObject(ObjectType &object_type, int & distance) {
 	double coeff_c = 0.0019176;
 	distance = coeff_a + (double)distance * coeff_b + (double)distance*distance*coeff_c;
 
-	printf("Laser detected ");
+	/*
+	 * small step (very high last value):
+	 *   length distance start end
+	 *  -  99 228 381 479
+	 *  - 120 258  32 479
+	 *  -  99 229 381 479
+	 *  -  96 229 383 478
+	 *  -  98 228 381 478
+	 *  - 109 302 231 339
+	 *  - 107 302 231 338
+	 *  - 124 295 250 373
+	 *  - 123 295 251 375
+	 *  -  94 313 205 298
+	 *  - 139 247 341 479
+	 *  - 140 247 340 477
+	 *
+	 * large step (quite a low third value):
+	 *  - 231 271 216 446
+	 *  - 194 208 285 478
+	 *  - 195 208 295 479
+	 *  - 168 298 187 352
+	 *  - 179 271 178 477
+	 *  - 153 299 178 330
+	 * length=242, distance=233, start=238, end=479
+	 * length=207, distance=273, start=183, end=389
+	 *
+	 *  wall (characterized by very low value for 3):
+	 *  - 242 295 105 347
+	 *  - 337 294  11 348
+	 *  - 312 294   1 348
+	 *  - 161 320  61 268
+	 *
+	 *  length=181, distance=301, start=123, end=310
+	 *  length=304, distance=300, start=1, end=318
+	 */
+
+	printf("Laser detected: \n");
 	if (distance > 40) {
-		printf("nothing for now\n");
+		printf("* nothing for now\n");
 		object_type = O_NOTHING;
 		return;
-	} else if (length > 220) {
-		printf("wall\n");
+	} else if (length > 260) { // larger lines are definitely a wall
+		printf("* a wall because the vertical structure is very long\n");
+		object_type = O_WALL;
+		return;
+	} else if (length > 180 && (start < 150)) { // start very low means that the line goes up very high, must be a wall
+		printf("* a wall because there is something far away\n");
+		object_type = O_WALL;
+		return;
+	} else if (length > 50 && (start < 100)) { // if start is very low, it is definitely a wall, even if length is small
+		printf("* a wall because there is something very far away\n");
 		object_type = O_WALL;
 		return;
 	} else if (length < 100) {
-		printf("small step\n");
+		printf("* a small step because there is a very tiny line\n");
 		object_type = O_SMALL_STEP;
 		return;
-	} else if (length < 200) {
-		printf("large step\n");
+	} else if ((length < 150) && (start > 250)) {
+		printf("* a small step because there is a tiny line and it is nearby\n");
+		object_type = O_SMALL_STEP;
+		return;
+	} else if (length < 260) { //	 && (distance/length < 2.0) ) {
+		printf("* a large step because there is a nice line\n");
 		object_type = O_LARGE_STEP;
 		return;
 	} else {
-		printf("something, but has to decide\n");
+		printf("* something, but has to decide\n");
 		object_type = O_SOMETHING;
 		return;
 	}
-
 }
 
 /**
@@ -593,8 +654,8 @@ void CLaserScan::GetDistance(int &distance) {
 	GetData();
 
 	generateVector(image2,image1,laserVector);
-	int length = 0;
-	estimateParameters(laserVector, length, distance);
+	int length = 0, start = 0, end = 0;
+	estimateParameters(laserVector, length, distance, start, end);
 	//	if (printLaser) {
 	fprintf(stdout,"%s(): Line length: %i pixels\n", __func__, length);
 	//		fprintf(stdout,"%s(): Distance to line: %i cm\n", __func__, distance);

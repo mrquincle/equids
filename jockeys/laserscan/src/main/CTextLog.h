@@ -29,7 +29,6 @@
 
 #include <string>
 
-
 const char *wall =
 "                ____    __    ____  ___       __       __       \n"
 "                \\   \\  /  \\  /   / /   \\     |  |     |  |      \n"

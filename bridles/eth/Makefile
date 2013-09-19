@@ -12,6 +12,7 @@ OBJCC=$(patsubst %.cc,%.o,$(wildcard *.cc))
 
 # The directories that this "bridle" depends on
 CXXINCLUDE+=-I./ 
+CXXINCLUDE+=-I../../libs/wapi/include
 
 all: check-env $(OBJS) $(OBJCC)
 

@@ -1,12 +1,4 @@
 /**
- * 456789------------------------------------------------------------------------------------------------------------120
- *
- * @brief Establishing position and communicating it with others
- * @file position.cpp
- *
- * This file is created at Almende B.V. and Distributed Organisms B.V. It is open-source software and belongs to a
- * larger suite of software that is meant for research on self-organization principles and multi-agent systems where
- * learning algorithms are an important aspect.
  *
  * This software is published under the GNU Lesser General Public license (LGPL).
  *
@@ -52,6 +44,7 @@
 #include <CMessageServer.h>
 #include <CMessage.h>
 
+#define __DEBUG__
 #define UBISENCE_CHANNEL 55
 #define DEBUG NAME << '[' << getpid() << "] " << __func__ << "(): "
 
@@ -64,6 +57,7 @@ typedef enum {
 ActualUbisencePositionState actualTask = WAIT;
 CMessageServer* message_server;
 CMessage messagee;
+int error = 0;
 std::string portMS;
 bool stop;
 
@@ -86,6 +80,7 @@ void readMessages() {
 		//	fprintf(stdout,"Command: %s %i %i %i %i\n",message.getStrType(),message.value1,message.value2,message.value3,message.value4);
 		switch (messagee.type) {
 		case MSG_INIT: {
+			printf("message init\n");
 			ubisencePositionServer = new CUbisencePosition();
 			actualTask = WAIT;
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
@@ -94,14 +89,17 @@ void readMessages() {
 			break;
 		case MSG_START: {
 			actualTask = SEND_POSITION;
+			if(ubisencePositionServer->stop){
 			ubisencePositionServer->initServer(UBISENCE_CHANNEL);
+			}
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		}
 			;
 			break;
 		case MSG_STOP: {
 			actualTask = WAIT;
-			ubisencePositionServer->stopServer();
+			printf("stopping ubisence position server\n");
+			//ubisencePositionServer->stopServer();
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		}
 			;
@@ -129,8 +127,7 @@ int main(int argc, char **argv) {
 
 	if (argc > 1) {
 		portMS = std::string(argv[1]);
-	}else
-	{
+	} else {
 		std::cout << DEBUG << "Usage: message_server_port_number" << std::endl;
 		return 1;
 	}
@@ -146,10 +143,16 @@ int main(int argc, char **argv) {
 		readMessages();
 		switch (actualTask) {
 		case SEND_POSITION: {
-			if(ubisencePositionServer->validPosition){
-			UbiPosition posit = ubisencePositionServer->getPosition();
-			message_server->sendMessage(MSG_UBISENCE_POSITION,
-					&posit, sizeof(UbiPosition));
+			if (ubisencePositionServer->validPosition) {
+
+				UbiPosition posit = ubisencePositionServer->getPosition();
+#ifdef __DEBUG__
+					printf("position is %f %f %f %d \n",posit.x,posit.y,posit.z,posit.time_stamp);
+#endif
+				message_server->sendMessage(MSG_UBISENCE_POSITION, &posit,
+						sizeof(UbiPosition));
+			}else{
+				error +=1;
 			}
 		}
 			break;
@@ -161,10 +164,6 @@ int main(int argc, char **argv) {
 			break;
 		}
 		usleep(250000);
-	}
-
-	while(ubisencePositionServer->threadFinished){
-		usleep(10000);
 	}
 
 	if (ubisencePositionServer != NULL) {

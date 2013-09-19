@@ -16,14 +16,14 @@ class move_to {
 public:
 	move_to(CMotors* motors,RobotBase::RobotType robot_type);
 	virtual ~move_to();
-	int move(MoveToPosition,UbiPosition);
-	int turn(MoveToPosition);
+	int move(RobotPosition,UbiPosition);
+	int turn(RobotPosition);
 	int getTurn(float xPoc,float yPoc, float xKonc,float yKonc);
 private:
 	CMotors* motor;
 	RobotBase::RobotType typ;
 	bool alreadyTurned;
-	MoveToPosition finalPosition;
+	RobotPosition finalPosition;
 	//int lastAvoid;
 	//CTimer* timer;
 };

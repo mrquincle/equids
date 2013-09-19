@@ -50,7 +50,7 @@ int move_to::getTurn(float xPoc, float yPoc, float xKonc, float yKonc) {
 	return sign(normalaX * x + normalaY * y);
 }
 
-int move_to::move(MoveToPosition f, UbiPosition u) {
+int move_to::move(RobotPosition f, UbiPosition u) {
 
 //	if (goalSet == false) {
 	xKonc = f.x;
@@ -223,7 +223,7 @@ int move_to::move(MoveToPosition f, UbiPosition u) {
 
 }
 
-int move_to::turn(MoveToPosition f) {
+int move_to::turn(RobotPosition f) {
 	phiActual = motor->getPosition()[2];
 	if (phiActual >= M_PI)
 		phiActual -= 2 * M_PI;

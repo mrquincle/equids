@@ -201,7 +201,7 @@ void CCamera::Stop() {
  * @param convert            convert Bayer pattern to RGB, recommended!
  * @return                   success (0), failure (<0)
  */
-int CCamera::renewImage(CRawImage* image, bool convert)
+int CCamera::renewImage(CRawImage* image, bool convert, bool swap)
 {
 	if (dummy_mode) return dummyImage(image);
 
@@ -235,6 +235,9 @@ int CCamera::renewImage(CRawImage* image, bool convert)
 		fprintf(stderr, "Just realize that you copied the original YUV formatted data.\n");
 		memcpy(image->data,buffer,yuv_size);
 	}
+
+	if(swap){image->swap();}
+
 	return 0; 
 }
 

@@ -28,7 +28,8 @@
 
 #include <iostream>
 
-GrandChallenge1Scenario::GrandChallenge1Scenario(CEquids * equids): CScenario(equids) {
+GrandChallenge1Scenario::GrandChallenge1Scenario(CEquids * equids) :
+		CScenario(equids) {
 	J_MAPPING = J_LASER_EXPLORATION = J_VISUAL_EXPLORATION = J_WENGUO = -1;
 
 	quit = false;
@@ -49,15 +50,15 @@ bool GrandChallenge1Scenario::Init() {
 	J_LASER_EXPLORATION = equids->find("laser");
 
 	//! Send an error message or also quit program..
-	if (J_MAPPING==-1) {
+	if (J_MAPPING == -1) {
 		std::cout << "Not defined jockey \"mapping\"" << std::endl;
 		continue_program = false;
 	}
-	if (J_WENGUO==-1) {
+	if (J_WENGUO == -1) {
 		std::cout << "Not defined jockey \"wenguo\"" << std::endl;
 		continue_program = true;
 	}
-	if (J_LASER_EXPLORATION==-1) {
+	if (J_LASER_EXPLORATION == -1) {
 		std::cout << "Not defined jockey \"laser\"" << std::endl;
 		continue_program = true;
 	}
@@ -69,16 +70,19 @@ bool GrandChallenge1Scenario::Init() {
 
 void GrandChallenge1Scenario::Run() {
 	while (!quit) {
-		switch(state) {
+		switch (state) {
 		case S_START:
 			equids->switchToJockey(J_MAPPING);
 			state = S_MAPPING;
 			break;
-		case S_MAPPING:
-			if (equids->getMessage(J_MAPPING)->type==MSG_MAP_COMPLETE) {
+		case S_MAPPING: {
+			CMessage message = equids->getMessage(J_MAPPING);
+			if (message.type == MSG_MAP_COMPLETE) {
 				state = S_EXPLORATION;
 				equids->switchToJockey(J_LASER_EXPLORATION);
 			}
+		}
+			;
 			break;
 		case S_EXPLORATION:
 
