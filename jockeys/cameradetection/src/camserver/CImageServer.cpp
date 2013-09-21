@@ -8,7 +8,7 @@ CImageServer::CImageServer(sem_t *imsem, CRawImage* im) {
 	dataSem = imsem;
 	messageRead = 0;
 	image = im;
-	CISdebug = true;
+	CISdebug = false;
 	stop = false;
 	sem_init(&connectSem, 0, 1);
 }
@@ -104,7 +104,7 @@ void* serverLoop(void* serv) {
 		sem_wait(info.sem);
 		server->sendImage(info.socket);
 		sem_post(info.sem);
-		usleep(100000);
+		//usleep(100000);
 		if (msg == 1) {
 			connected = false;
 			fprintf(stdout, "Disconnecting.\n");

@@ -29,8 +29,8 @@
 #include <iostream>
 
 GrandChallenge1Scenario::GrandChallenge1Scenario(CEquids * equids) :
-		CScenario(equids) {
-	J_MAPPING = J_LASER_EXPLORATION = J_VISUAL_EXPLORATION = J_WENGUO = -1;
+CScenario(equids) {
+	J_MAPPING = J_LASER_RECOGNITION = J_VISUAL_EXPLORATION = J_INFRARED_EXPLORATION = J_WENGUO = -1;
 
 	quit = false;
 
@@ -46,47 +46,77 @@ bool GrandChallenge1Scenario::Init() {
 	bool continue_program = true;
 
 	J_MAPPING = equids->find("mapping");
-	J_WENGUO = equids->find("wenguo");
-	J_LASER_EXPLORATION = equids->find("laser");
+	//	J_WENGUO = equids->find("wenguo");
+	J_LASER_RECOGNITION = equids->find("laser");
+	J_INFRARED_EXPLORATION = equids->find("avoidir");
 
 	//! Send an error message or also quit program..
 	if (J_MAPPING == -1) {
 		std::cout << "Not defined jockey \"mapping\"" << std::endl;
+		continue_program = true;
+	}
+	//	if (J_WENGUO == -1) {
+	//		std::cout << "Not defined jockey \"wenguo\"" << std::endl;
+	//		continue_program = true;
+	//	}
+	if (J_LASER_RECOGNITION == -1) {
+		std::cout << "Not defined jockey \"laser\"" << std::endl;
 		continue_program = false;
 	}
-	if (J_WENGUO == -1) {
-		std::cout << "Not defined jockey \"wenguo\"" << std::endl;
-		continue_program = true;
-	}
-	if (J_LASER_EXPLORATION == -1) {
-		std::cout << "Not defined jockey \"laser\"" << std::endl;
-		continue_program = true;
+
+	if (J_INFRARED_EXPLORATION == -1) {
+		std::cout << "Not defined jockey \"avoidir\"" << std::endl;
+		continue_program = false;
 	}
 
-	equids->initJockey(J_MAPPING);
+	//equids->initJockey(J_MAPPING);
+	equids->initJockey(J_INFRARED_EXPLORATION);
 
 	return continue_program;
 }
 
 void GrandChallenge1Scenario::Run() {
+
 	while (!quit) {
 		switch (state) {
 		case S_START:
-			equids->switchToJockey(J_MAPPING);
-			state = S_MAPPING;
+			//equids->switchToJockey(J_MAPPING);
+			//state = S_MAPPING;
+			// for now go directly to exploration, mapping has to be done later
+			state = S_EXPLORATION;
 			break;
 		case S_MAPPING: {
 			CMessage message = equids->getMessage(J_MAPPING);
 			if (message.type == MSG_MAP_COMPLETE) {
 				state = S_EXPLORATION;
-				equids->switchToJockey(J_LASER_EXPLORATION);
+				equids->switchToJockey(J_LASER_RECOGNITION);
 			}
+			break;
 		}
-			;
+		case S_EXPLORATION: {
+			equids->switchToJockey(J_INFRARED_EXPLORATION);
+			CMessage message = equids->getMessage(J_INFRARED_EXPLORATION);
+			if (message.type == MSG_COLLISION_DETECTED) {
+				std::cout << "Got message: " << StrMessage[message.type] << std::endl;
+				state = S_DETECT_OBJECT;
+			} else if (message.type != MSG_NONE){
+				std::cout << "Didn't expect message " << StrMessage[message.type] << " from infrared " << std::endl;
+			}
+			//
 			break;
-		case S_EXPLORATION:
-
+		}
+		case S_DETECT_OBJECT: {
+			equids->switchToJockey(J_LASER_RECOGNITION);
+			CMessage message = equids->getMessage(J_LASER_RECOGNITION);
+			if (message.type == MSG_LASER_DETECT_STEP) {
+				std::cout << "Got message: " << StrMessage[message.type] << std::endl;
+				state = S_EXPLORATION;
+				std::cout << "Go back to exploration" << std::endl;
+			} else if (message.type != MSG_NONE){
+				std::cout << "Didn't expect message " << StrMessage[message.type] << " from laser " << std::endl;
+			}
 			break;
+		}
 		case S_QUIT:
 			quit = true;
 			break;

@@ -13,7 +13,7 @@ OBJS=$(patsubst %.cpp,%.o,$(wildcard *.cpp))
 OBJSC=$(patsubst %.c,%.o,$(wildcard *.c))
 OBJS+=$(OBJSC)
 
-CXXINCLUDE+=-I./ -I../common -I../eth -I../map -I../motor -I../motor_calibration  -I../../../../libs/gsl  -I../../../../libs/wapi/include
+CXXINCLUDE+=-I./ -I../common -I../eth -I../map -I../motor -I../filesystem -I../leds -I../motor_calibration  -I../../../../libs/gsl  -I../../../../libs/wapi/include
 CXXFLAGS+=-std=c++0x
 all: $(OBJS) 
 

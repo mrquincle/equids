@@ -44,7 +44,7 @@
 #include <CMessageServer.h>
 #include <CMessage.h>
 
-#define __DEBUG__
+//#define __DEBUG__
 #define UBISENCE_CHANNEL 55
 #define DEBUG NAME << '[' << getpid() << "] " << __func__ << "(): "
 

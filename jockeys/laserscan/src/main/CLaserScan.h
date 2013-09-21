@@ -114,6 +114,8 @@ public:
 		return image2;
 	}
 
+	inline CCamera & GetCamera() { return camera; }
+
 	//! Get recognized object type
 	void GetRecognizedObject(ObjectType &object_type, int & distance);
 protected:

@@ -90,6 +90,8 @@ void CJockey::stop(bool wait_acknow) {
 			usleep(10000);
 		}
 	}
+	this->redirectinTable.clear();
+	this->incomingMessages.clear();
 }
 
 bool CJockey::redirection(const ELolMessage *msg) {

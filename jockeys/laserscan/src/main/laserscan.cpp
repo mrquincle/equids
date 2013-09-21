@@ -160,7 +160,7 @@ int main(int argc, char **argv) {
 			std::cout << "Detect step with the laser" << std::endl;
 			int len = sizeof(struct MappedObjectPosition);
 			if (message.len != len) {
-				std::cerr << "Error, expected payload of MappedObjectPosition of size " << len << std::endl;
+				std::cerr << "Error, expected payload of MappedObjectPosition of size " << len << " while it is " << message.len << std::endl;
 			}
 			memcpy(&positionForMappedObject, message.data, message.len);
 			controller.sendDetectedObject(positionForMappedObject);

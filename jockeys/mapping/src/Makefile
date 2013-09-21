@@ -23,6 +23,8 @@ endif
 ####################################################################################
 
 SUBDIRS+=common
+SUBDIRS+=leds
+SUBDIRS+=filesystem
 SUBDIRS+=motor
 SUBDIRS+=map
 SUBDIRS+=eth

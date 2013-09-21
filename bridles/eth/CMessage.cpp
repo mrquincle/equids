@@ -48,7 +48,9 @@ const char* StrMessage[] = {
 		"MSG_DOCKED",
 		"MSG_FORCE_CHANGE_JOCKEY",
 		"MSG_REMOTE_CONTROL",
-		"MSG_INIT_ORGANISM"};
+		"MSG_INIT_ORGANISM",
+		"Collision detected with wall, step, or robot"
+};
 
 CMessage::CMessage()
 {

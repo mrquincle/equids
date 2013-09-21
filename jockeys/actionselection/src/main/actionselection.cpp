@@ -104,9 +104,9 @@ int main(int argc, char **argv) {
 	std::cout << "Run " << NAME << " compiled at time " << __TIME__ << std::endl;
 
 	Scenario scenario;
-	//	scenario = SC_GRAND_CHALLENGE1;
+	scenario = SC_GRAND_CHALLENGE1;
 //	scenario = SC_MAPPING;
-	scenario = SC_LASER_EXPLORATION;
+//	scenario = SC_LASER_EXPLORATION;
 
 	std::cout << "We will use scenario " << ScenarioStr[scenario] << std::endl;
 

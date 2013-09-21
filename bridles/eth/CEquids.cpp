@@ -142,7 +142,15 @@ void CEquids::initJockey(int j) {
 
 void CEquids::switchToJockey(int j) {
 	// do not switch if this is already the running jockey
-	if (runningJockey == j) return;
+	if (runningJockey == j) {
+		// let us just not print anything, because if we can switch to the same jockey, the FSM becomes much smaller,
+		// so it is a nice feature (and should not have a lot of debugging output).
+//		printf("Jockey %s is already running, no need to switch\n", jockeys[j].name);
+		return;
+	} else {
+		if (runningJockey>=0 && runningJockey<num_jockeys)
+			printf("Switch from jockey %s to jockey %s\n", jockeys[runningJockey].name, jockeys[j].name);
+	}
 
 	if (runningJockey>=0 && runningJockey<num_jockeys) {
 		jockeys[runningJockey].SendMessage(MSG_STOP, NULL, 0);

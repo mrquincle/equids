@@ -53,6 +53,21 @@ public:
 	//! Initialize the periphery, probably best be done when you got the control from the jockey framework
 	void initRobotPeriphery();
 
+	//! Report collision to action control
+	void reportCollision();
+
+	//! Rotate
+	void escape();
+
+	//! Go back for a while
+	void head_back();
+
+	//! Stop motors
+	void stop_motors();
+
+	//! Was there a collision?
+	inline bool collided() { return collision; }
+
 	//! Controller specific function for calibration procedure
 	void calibrate();
 
@@ -71,10 +86,13 @@ public:
 	//! Stop the controller by proper deallocation
 	void graceful_end();
 
+	inline void setStandAlone(bool standalone = true) { this->standalone = standalone; }
 private:
 	//! Specific bridles to be used
 	CMotors *motors;
 	CLeds *leds;
+	bool standalone;
+	bool collision;
 };
 
 

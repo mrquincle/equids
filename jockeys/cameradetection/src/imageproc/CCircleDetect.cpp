@@ -19,12 +19,13 @@ CCircleDetect::CCircleDetect(int wi, int he, float diamRatio) {
 	centerDistanceToleranceRatio = 1.1; //TODO
 	centerDistanceToleranceAbs = 5;
 	circularTolerance = 0.3;
-	ratioTolerance = 0.4;
+	ratioTolerance = 0.1;
 	threshold = maxThreshold / 2;
 	numFailed = maxFailed;
 	track = true;
 	//circularityTolerance = 0.02;
-	circularityTolerance = 0.1;
+	//circularityTolerance = 0.1;
+	circularityTolerance = 0.05;
 
 	//initialization - fixed params
 	width = wi;

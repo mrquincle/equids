@@ -56,7 +56,8 @@ public:
 
 	void randomSpeeds();
 
-	void reversed(bool left_right_reversed);
+	// now use an environmental variable for that, no recompilation needed in that case
+//	void reversed(bool left_right_reversed);
 
 	void halt();
 
@@ -84,6 +85,11 @@ public:
 	double* getPosition();
 	bool isMoving();
 	void calibrate(MotorCalibResult calibrationResult);
+
+	//! Set verbosity
+	inline void setVerbosity(char verbosity) {
+		log_level = verbosity;
+	}
 
 protected:
 
@@ -115,6 +121,10 @@ private:
 	int max_speed; // maximum value to be used by user of this class
 	int axle_track; // length of the axle, distance between the centerline of the two wheels on both side of an axle
 	bool left_right_reversed;
+
+	//! Debug state
+	char log_level;
+
 };
 
 #endif /* CMOTOR_H_ */

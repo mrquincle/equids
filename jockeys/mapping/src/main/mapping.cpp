@@ -16,6 +16,7 @@
 #include <CMotors.h>
 #include <Map.h>
 #include <Mapping.h>
+#include <CLeds.h>
 #include <wapi/wapi.h>
 
 using namespace wapi;
@@ -29,21 +30,22 @@ using namespace std;
 #define DEBUGODOCALIB
 #define NAME "Mapping"
 #define MINIMAL_RUNS 1
-#define WAIT_FOR_NO_MOVING 3
+#define WAIT_FOR_NO_MOVING 2
 #define DEBUG NAME << '[' << getpid() << "] " << __func__ << "(): "
 #define UBISENCE_POSITION_CHANNEL 55
 #define UBISENCE_MESSAGE_SERVER_CHANNEL 56
 #define DEBUGSTRING NAME << '[' << getpid() << "] " << __func__ << "(): "
 typedef enum {
 	WAIT = 0, MAPPING
-} ActualCalibrationState;
+} ActualMappingState;
 
 using namespace std;
 using namespace Ethernet;
 
-ActualCalibrationState actualTask = WAIT;
+ActualMappingState actualTask = WAIT;
 RobotBase::RobotType robot_type;
 RobotBase* robot;
+CLeds* leds;
 //message system
 CMessageServer* message_server;
 CMessage messagee;
@@ -109,13 +111,15 @@ printf("\n\n\n my id is: %d\n\n\n",myID);
 
 	std::cout << "Create motor object" << std::endl;
 	motor = new CMotors(robot, robot_type);
+	std::cout << "Create CLeds object" << std::endl;
+	leds = new CLeds(robot,robot_type);
 	std::cout << "init motors" << std::endl;
 	motor->init();
 	std::cout << "after motor init" << std::endl;
 	motor->setSpeeds(0, 0);
 	std::cout << "after motor init" << std::endl;
 	usleep(20000);
-	slamMap = new Map(motor->getPosition(), robot_type);
+	slamMap = new Map(motor->getPosition(), robot_type,myID);
 }
 bool isPossible(DetectedBlob* detectedBlob) {
 	return (detectedBlob->x < 8 && detectedBlob->x > -8 && detectedBlob->y < 8
@@ -150,6 +154,7 @@ void readMessages() {
 				usleep(10000);
 			}
 			//	actualTask = MAPPING;
+
 			if (robot_type == RobotBase::ACTIVEWHEEL) {
 				ActiveWheel *bot = (ActiveWheel*) robot;
 				printf("changing hinge \n");
@@ -158,6 +163,8 @@ void readMessages() {
 				usleep(500000);
 
 			}
+			leds->color(LC_OFF);
+			leds->color(LC_ORANGE);
 			actualTask = MAPPING;
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		}
@@ -165,6 +172,7 @@ void readMessages() {
 			break;
 		case MSG_STOP: {
 			motor->setSpeeds(0, 0);
+			leds->color(LC_RED);
 			robot->pauseSPI(true);
 			while (!robot->isSPIPaused()) {
 				usleep(10000);
@@ -215,11 +223,14 @@ void readMessages() {
 			;
 			break;
 		case MSG_MOTOR_CALIBRATION_RESULT: {
-			//	printf("calibrating mapping motor......\n");
-			MotorCalibResult* calibrationResult = new MotorCalibResult();
-			memcpy(calibrationResult, messagee.data, sizeof(MotorCalibResult));
-			motor->calibrate(*calibrationResult);
-			delete calibrationResult;
+				printf("calibrating mapping motor......\n");
+			MotorCalibResult calib;
+						memcpy(&calib,messagee.data,messagee.len);
+						printf("calibration succesfully readed: %e %e %e %d\n",
+								calib.odometry_koef1, calib.odometry_koef2,
+								calib.odometry_koef3,calib.calibratedSpeed);
+			motor->calibrate(calib);
+
 		}
 			;
 			break;
@@ -239,20 +250,77 @@ void readMessages() {
 		case MSG_MAP_DATA: {
 			MappedObjectPosition mapedObject;
 			memcpy(&mapedObject, messagee.data, sizeof(MappedObjectPosition));
+			printf("received object type %d pos %f %f %f %f id %d robid %d\n",mapedObject.type,mapedObject.xPosition,
+					mapedObject.yPosition,	mapedObject.phiPosition,mapedObject.zPosition,mapedObject.map_id,mapedObject.mappedBy);
 			printf("received map data from %d of type %d\n",mapedObject.mappedBy,mapedObject.type);
 			if(mapedObject.mappedBy==myID){
-				slamMap->saveObjectToMap(&mapedObject,NULL);
+				printf("save object to map\n");
+				slamMap->saveObjectToMap(mapedObject);
 			}else{
-				slamMap->addOtherRobotsObjects(messagee);
+				printf("add other objects\n");
+				slamMap->addOtherRobotsObjects(mapedObject);
 			}
 		}
 			;
 			break;
+		case MSG_GET_ALL_MAPPED_OBJS: {
+				for (int var = 0; var < slamMap->mapSize; ++var) {
+					MappedObjectPosition mapedObject = slamMap->getMappedPosition(var);
+					message_server->sendMessage(MSG_MAP_DATA,&mapedObject,sizeof(MappedObjectPosition));
+				}
+				}
+					;
+					break;
+		case MSG_GET_NEAREST_MAPPED_OBJECT_OF_TYPE_TO_POS: {
+					NearestObjectOfTypeToThisPosition nearestTo;
+					memcpy(&nearestTo, messagee.data, sizeof(NearestObjectOfTypeToThisPosition));
+					printf("want to know nearest object to %f %f of type %d \n",nearestTo.xPosition,nearestTo.yPosition,nearestTo.type);
+					int num =slamMap->nearestTypeID(nearestTo);
+					if(num != -1){
+						MappedObjectPosition mapedObject =  slamMap->getMappedPosition(num);
+						message_server->sendMessage(MSG_MAP_DATA,&mapedObject,sizeof(MappedObjectPosition));
+					}
+				}
+					;
+					break;
 		default:
 			break;
 		}
 	}
 
+}
+
+void doColisionMotion(){
+leds->color(LC_RED);
+motor->setSpeeds(0,0);
+usleep(50000);
+double positionBesf[]={motor->getPosition()[0],motor->getPosition()[1],motor->getPosition()[2]};
+double actualPos[]={motor->getPosition()[0],motor->getPosition()[1],motor->getPosition()[2]};
+//drive back
+printf("driving back \n");
+while(euclideanDistance(positionBesf,actualPos)<0.3){
+	readMessages();
+	motor->setSpeeds(-motor->calibratedSpeed,0);
+	usleep(50000);
+	actualPos[0]=motor->getPosition()[0];
+	actualPos[1]=motor->getPosition()[1];
+	actualPos[2]=motor->getPosition()[2];
+}
+motor->setSpeeds(0,0);
+usleep(50000);
+//turn around
+printf("turn around \n");
+while(fabs(normalizeAngle(actualPos[2])-normalizeAngle(positionBesf[2]))<2.5 ){
+readMessages();
+motor->setSpeeds(0,motor->calibratedSpeed);
+usleep(50000);
+actualPos[0]=motor->getPosition()[0];
+actualPos[1]=motor->getPosition()[1];
+actualPos[2]=motor->getPosition()[2];
+}
+motor->setSpeeds(0,0);
+usleep(50000);
+printf("collision procedure ended \n");
 }
 
 /**
@@ -287,6 +355,7 @@ int main(int argc, char **argv) {
 		switch (actualTask) {
 		case MAPPING: {
 			// detect only when motor is stopped
+			leds->colorToggle(LC_ORANGE);
 			if (ubiposition == NULL) {
 				//wait until usbisence postion is present to initialize position of motors
 				break;
@@ -298,14 +367,19 @@ int main(int argc, char **argv) {
 					motor->setMotorPosition(ubiposition->x, ubiposition->y, 0);
 					printf("after motor: %f %f ..........",
 							motor->getPosition()[0], motor->getPosition()[1]);
+					if(mapProcedure == NULL){
 					mapProcedure = new Mapping(motor);
+					}
+
 					if(slamMap!=NULL){
 						delete slamMap;
 						slamMap= NULL;
 					}
 					usleep(10000);
-					slamMap = new Map(motor->getPosition(), robot_type);
+					slamMap = new Map(motor->getPosition(), robot_type,myID);
+					if(initialUbiPosition == NULL){
 					initialUbiPosition = new UbiPosition();
+					}
 					memcpy(initialUbiPosition, ubiposition,
 							sizeof(UbiPosition));
 
@@ -316,12 +390,11 @@ int main(int argc, char **argv) {
 					float actualposition[2] = { ubiposition->x, ubiposition->y };
 					float initialposition[2] = { initialUbiPosition->x,
 							initialUbiPosition->y };
-
-					if (euclideanDistancef(actualposition, initialposition)
-							> 0.2) {
+					float drivenDist=euclideanDistancef(actualposition, initialposition);
+					if (drivenDist > 0.4) {
 						motor->setSpeeds(0, 0);
 						//wait for true position
-						for (int var = 0; var < 30; ++var) {
+						for (int var = 0; var < 50; ++var) {
 							usleep(100000);
 							readMessages();
 						}
@@ -341,6 +414,28 @@ int main(int argc, char **argv) {
 
 					} else {
 						motor->setSpeeds(motor->calibratedSpeed, 0);
+						double motorInitial[]={initialUbiPosition->x,initialUbiPosition->y};
+						printf("motorintial %f %f \n",motorInitial[0],motorInitial[1]);
+						double motorDriven = euclideanDistance(motor->getPosition(),motorInitial);
+						printf("motorDriven %f\n",motorDriven);
+						printf("drivenDist %f \n",drivenDist);
+						if(drivenDist+0.4 < motorDriven){
+							motor->setSpeeds(0 , 0);
+							for (int var = 0; var < 30; ++var) {
+								usleep(100000);
+								readMessages();
+							}
+							actualposition[0] = ubiposition->x;
+							actualposition[1] = ubiposition->y;
+							drivenDist=euclideanDistancef(actualposition, initialposition);
+							//colision
+							if(drivenDist+0.4 < motorDriven){
+							doColisionMotion();
+							delete initialUbiPosition;
+							initialUbiPosition = NULL;
+							}
+						}
+					//	printf("driving with %d\n",motor->calibratedSpeed);
 					}
 				} else {
 
@@ -350,57 +445,66 @@ int main(int argc, char **argv) {
 
 						if (detectedBlob != NULL
 								&& (isPossible(detectedBlob))) {
+							if(wait_no_moving<1){
+								//if counts wait_no_moving to null from WAIT_FOR_NO_MOVING
 							float measuredCirclePos[4] = { detectedBlob->x,
 									detectedBlob->y, detectedBlob->phi,
 									detectedBlob->z };
 							slamMap->filter(motor->getPosition(),
 									measuredCirclePos);
 							seeBlob = true;
+							}else{
+							wait_no_moving -= 1; //deduct from waiting if see for first WAIT_FOR_NO_MOVING after moving
+							mapProcedure->wait_stopped += 10; //add to mapping motion to wait longer if robot see something and want stabilized image
+							}
 						} else {
+							wait_no_moving = WAIT_FOR_NO_MOVING; //set to max if robot do not see anthing
 							slamMap->odometryChange(motor->getPosition());
 						}
 					} else {
+						wait_no_moving = WAIT_FOR_NO_MOVING; //set to max if robot is moving again
 						slamMap->odometryChange(motor->getPosition());
 					}
 
 					//test whether map is enough sized
-					if (mapProcedure->runs < MINIMAL_RUNS
-							|| mapProcedure->wait_stopped > 0) {
+					if ((mapProcedure->runs < MINIMAL_RUNS
+							|| mapProcedure->wait_stopped > 0) || (!mapProcedure->closedLoop)) {
 						if (slamMap->newDetected) {
 							slamMap->newDetected = false;
-							mapProcedure->wait_stopped += 30;
+							mapProcedure->wait_stopped += 40;
 						}
 						if (slamMap->seeAfterLongTime) {
 							slamMap->seeAfterLongTime = false;
-							mapProcedure->wait_stopped += 20;
+							mapProcedure->wait_stopped += 100;
 						}
 
-						mapProcedure->doMappingMotion(seeBlob);
-						printf("%d\n", mapProcedure->wait_stopped);
+						mapProcedure->doMappingMotion(seeBlob,slamMap);
+				//		printf("%d\n", mapProcedure->wait_stopped);
 					} else {
 
 						//send map
 						actualTask = WAIT;
 						motor->setSpeeds(0, 0);
-						MapData data = { slamMap->state, slamMap->P };
+						MapData data = { slamMap->state, slamMap->P ,slamMap->mappedObjectTypes};
 						slamMap->writeToFile("/flash/map.map", data);
 						if (myID != -1) {
-							uint64_t convMYID;
-							memcpy(&convMYID, &myID, sizeof(Ubitag));
 
 							for (int var = 0; var < slamMap->mapSize; ++var) {
-								slamMap->getMappedPosition(var)->mappedBy =
-										(int) convMYID;
+								MappedObjectPosition pos = slamMap->getMappedPosition(var);
+								pos.mappedBy = myID;
+
 								CMessage packedMessage;
 								uint64_t broadcast = Ubitag::BROADCAST;
+								printf("packing object num %d \n",var);
 								packedMessage = CMessage::packToZBMessage(
 										broadcast, MSG_MAP_DATA,
-										slamMap->getMappedPosition(var),
+										&pos,
 										sizeof(MappedObjectPosition));
+								printf("sending object num %d \n",var);
 
 								message_server->sendMessage(MSG_ZIGBEE_MSG,
 										packedMessage.data, packedMessage.len);
-
+								usleep(100000);
 							}
 
 						} else {
@@ -409,6 +513,30 @@ int main(int argc, char **argv) {
 						}
 						message_server->sendMessage(MSG_MAP_COMPLETE, NULL, 0);
 						std::cout << " Map sended " << std::endl;
+						slamMap->mappingEnded = true;
+						slamMap->mergeMap();
+						std::cout << " Map after merging " << std::endl;
+						printf("ROBPOS=[ROBPOS [%2.7f ; %2.7f ; %2.7f ; 1 ]]; \n",
+										slamMap->getRobotPosition()[0],
+										slamMap->getRobotPosition()[1],
+										slamMap->getRobotPosition()[0]);
+						for (int var = 0; var < slamMap->mapSize ; ++var) {
+							MappedObjectPosition object = slamMap->getMappedPosition(var);
+							printf("LM%d=[LM%d [%2.7f ; %2.7f ; %2.7f ; %2.7f ]]; \n", var, var,
+									object.xPosition,
+									object.yPosition,
+									object.phiPosition,
+									object.zPosition);
+							printf(
+									"LM%dUNCERT=[LM%dUNCERT [%2.7f ; %2.7f ; %2.7f ; %2.7f ]]; \n",
+									var, var, object.xUncertainty,
+									object.yUncertainty,
+									object.phiUncertainty,
+									object.zUncertainty);
+						}
+
+
+						std::cout << " Map end " << std::endl;
 					}
 				}
 			}

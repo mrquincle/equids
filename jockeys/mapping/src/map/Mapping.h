@@ -9,6 +9,7 @@
 #define MAPPING_H_
 #include "../motor/CMotors.h"
 #include "../common/cmath.h"
+#include "./Map.h"
 
 class Mapping {
 public:
@@ -21,19 +22,22 @@ public:
 	};
 	Mapping(CMotors* motors);
 	virtual ~Mapping();
-	void doMappingMotion(bool seeBlob);
+	void doMappingMotion(bool seeBlob,Map* slamMap);
 	int wait_stopped; // wait stopped until wait_stopped==0
 	int seedSameBlob;
 	int image_wait_count;
 	int runs;
+
+
 	MappingState actualState; //switching between robot motion behavior
+	bool closedLoop;
 private:
 	CMotors* motor;
 	double lastPosition[5]; //for storing position of robot in previous important position
 
 	int stai_in_motion; // continue turning until ==0
 	double turnToDirectionAngle;
-
+	int time;
 	CTimer* timer;
 };
 

@@ -79,9 +79,17 @@ public:
 		return histograms[i]->average();
 	}
 
+	R variance(int i) {
+		return histograms[i]->variance();
+	}
+
 	//! Get sum of histogram i
 	T sum(int i) {
 		return histograms[i].sum();
+	}
+
+	void clear(int i) {
+		histograms[i]->clear();
 	}
 
 	/**

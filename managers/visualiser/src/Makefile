@@ -13,6 +13,7 @@ COPY_ETC_SRC=../etc
 COPY_ETC_DST=../bin
 
 visualizer: all obj
+	mkdir -p ../bin
 	$(CXX) $(CXXDEFINE) -o ../bin/$@  $(OBJS)  $(CXXFLAGS) $(LXXLIBS) 
 
 cameraminoru:
@@ -37,6 +38,7 @@ all:
 	done
 
 obj: all
+	mkdir -p ../obj
 	echo "Copy objs"
 	@for i in $(SUBDIRS) ;\
 	do \

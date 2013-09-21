@@ -11,6 +11,7 @@
 #include <math.h>
 #include <unistd.h>
 #include "CCircleDetect.h"
+#include "IRobot.h"
 
 typedef enum {
 	TRANSFORM_NONE, TRANSFORM_2D, TRANSFORM_3D, TRANSFORM_NUMBER
@@ -26,7 +27,7 @@ typedef struct {
 
 class CTransformation {
 public:
-	CTransformation(int widthi, int heighti, float diam, bool fullUnbarreli =
+	CTransformation(int widthi, int heighti, float diam, RobotBase::RobotType robot_type, bool fullUnbarreli =
 			false);
 	~CTransformation();
 

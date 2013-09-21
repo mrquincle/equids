@@ -85,6 +85,8 @@ bool CRawImage::loadBmp(const char* inName)
 	if (file!=NULL)
 	{
 		fread(data,54,1,file);
+		int offset = data[10]+data[11]*256;
+		if (offset-54 > 0 && fread(data,offset-54,1,file)!=1) fprintf(stderr,"Warning! Image header could not be read.\n");;
 		bpp = 3;
 		size = height*width*bpp;
 		fread(data,size,1,file);
@@ -92,6 +94,7 @@ bool CRawImage::loadBmp(const char* inName)
 		swap();
 		return true;
 	}
+	printf("Warning: file %s not found.\n",inName);
 	return false;
 }
 

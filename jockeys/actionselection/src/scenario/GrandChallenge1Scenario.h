@@ -47,6 +47,7 @@ public:
 		S_START,
 		S_MAPPING,
 		S_EXPLORATION,
+		S_DETECT_OBJECT,
 		S_RECRUITING,
 		S_ASSEMBLE,
 		S_MACROLOCOMOTION,
@@ -69,8 +70,9 @@ public:
 
 	// Define the jockeys for this scenario
 	jockey_id J_MAPPING;
-	jockey_id J_LASER_EXPLORATION;
+	jockey_id J_LASER_RECOGNITION;
 	jockey_id J_VISUAL_EXPLORATION;
+	jockey_id J_INFRARED_EXPLORATION;
 	jockey_id J_WENGUO; // for self-assembly
 
 private:

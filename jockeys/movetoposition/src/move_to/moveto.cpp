@@ -51,7 +51,7 @@ int move_to::getTurn(float xPoc, float yPoc, float xKonc, float yKonc) {
 }
 
 int move_to::move(RobotPosition f, UbiPosition u) {
-
+	int toReturn=0;
 //	if (goalSet == false) {
 	xKonc = f.x;
 	yKonc = f.y;
@@ -68,7 +68,7 @@ int move_to::move(RobotPosition f, UbiPosition u) {
 		phiActual += 2 * M_PI;
 	printf("cil: %f %f %f aktual: %f %f phi aktual %f beta %f\n", xKonc, yKonc,
 			phiKonc, u.x, u.y, phiActual, beta);
-	motor->setMotorPosition(u.x, u.y, phiActual);
+	//motor->setMotorPosition(u.x, u.y, phiActual);
 
 	if (std::abs(u.x - f.x) > 0.15 || std::abs(u.y - f.y) > 0.15) {
 		//int smer = getTurn(xPoc, yPoc, xKonc, yKonc);
@@ -78,7 +78,7 @@ int move_to::move(RobotPosition f, UbiPosition u) {
 			rUhel -= 2 * M_PI;
 		if (rUhel < -M_PI)
 			rUhel += 2 * M_PI;
-		P = (int) 55 * rUhel;
+		P = (int) 80 * rUhel;
 		if (P > 60)
 			P = 60;
 		if (P < -60)
@@ -86,30 +86,36 @@ int move_to::move(RobotPosition f, UbiPosition u) {
 		printf("setspeeeeeed: %i uhel: %f \n", P, rUhel);
 		switch (typ) {
 		case RobotBase::ACTIVEWHEEL: {
-			if (abs(P) > 20) {
-				motor->setSpeeds(0, -P*1.3);
+			if (abs(P) > 40) {
+				motor->setSpeeds(0, -P*1.6);
+				toReturn = 2;
+				printf("tunrning on position \n");
 			} else {
-				motor->setSpeeds(40, -P*1.3);
+            if (abs(P)>20) {
+				  motor->setSpeeds(60, -P*1.6);
+            } else {
+              motor->setSpeeds(60, -P*3);
+            }               
+				toReturn = 0;
 			}
 
 		}
 			break;
 		case RobotBase::SCOUTBOT: {
 			P = 1.3*P;
-			motor->setSpeeds(40, P);
+			motor->setSpeeds(60, P);
+			toReturn= 0;
 
 		}
 			break;
 		}
-		if (abs(P) < 15) {
-			return 0;
-		} else {
-			return 2;
-		}
+
 	} else {
 		motor->setSpeeds(0, 0);
-		return 1;
+		toReturn = 1;
 	}
+
+	return toReturn;
 
 //
 //	float beta = std::atan2(y - motor->getPosition()[1],

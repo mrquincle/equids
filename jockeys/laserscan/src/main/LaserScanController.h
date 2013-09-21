@@ -62,6 +62,8 @@ public:
 
 	void stopVideoStream();
 
+	void setSemaphore(sem_t *cap_sem);
+
 	void testCamera();
 
 	void sendDetectedObject(MappedObjectPosition &position);
@@ -87,6 +89,10 @@ private:
 	bool create_mosaic;
 
 	bool initialized_periphery;
+
+	bool semaphore_set;
+
+	sem_t *capture_sem;
 };
 
 

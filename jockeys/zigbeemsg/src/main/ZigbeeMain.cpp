@@ -16,8 +16,8 @@
 #define ZIGBEE_CHANNEL 60
 
 using namespace wapi;
-
-static bool stopJockey=false;
+CMessageServer *server;
+static bool stopJockey = false;
 
 /**
  * If the user presses Ctrl+C, this can be used to do memory deallocation or a last communication with the MSPs.
@@ -56,25 +56,27 @@ int zigbeeInit(WAPI *wapi)
 	   return wapi_error==WAPI::WAPI_OK;
 }
 
+int zigbeeSend(WAPI *wapi, const uint8_t *data, int len) {
+	int wapi_error;
 
-int zigbeeSend(WAPI *wapi, const char *data, int len) {
-   int wapi_error;
-   
-   if (len>0) {
-      Message send_msg;
-      Ubitag ubi_brd;
-      if (len>sizeof(Ubitag)) {
-         memcpy(&ubi_brd, data, sizeof(Ubitag));
-   
-         send_msg.SetDestination(ubi_brd);
-         send_msg.SetHops(0);
-         send_msg.SetSignalStrength(0);
-         send_msg.SetChannel(ZIGBEE_CHANNEL);
-         send_msg.SetData(data, (len>60) ? 60 : len);
-         wapi_error = wapi->send(send_msg);
-      }
-   }
-   return wapi_error==WAPI::WAPI_OK;
+	if (len > 0) {
+		Message send_msg;
+		Ubitag* ubi_brd;
+		uint64_t ubi_destination;
+		if (len > sizeof(uint64_t)) {
+			memcpy(&ubi_destination, data, sizeof(uint64_t));
+
+			ubi_brd = new Ubitag(ubi_destination);
+			printf("sending message to: %lld\n", (long long)ubi_destination);
+			send_msg.SetDestination(*ubi_brd);
+			send_msg.SetHops(0);
+			send_msg.SetSignalStrength(0);
+			send_msg.SetChannel(ZIGBEE_CHANNEL);
+			send_msg.SetData((const char*)data, len);
+			wapi_error = wapi->send(send_msg);
+		}
+	}
+	return wapi_error == WAPI::WAPI_OK;
 }
 
 int main(int argc, char **argv) {
@@ -84,89 +86,94 @@ int main(int argc, char **argv) {
    bool wapi_init;
    int wapi_error;
 
-   fprintf(stdout, "Ubisence position starting %s\n",argv[1]);
-   
-   a.sa_handler = &interrupt_signal_handler;
-   sigaction(SIGINT, &a, NULL);
-   
-   if (argc <=1) {
-      fprintf(stderr, "Usage: port_number\n");
-      return 1;
-   }
-   
-   printf("Create receiving message server on port %s\n", argv[1]);
-   
-   CMessageServer *server;
-   server = new CMessageServer();
-   server->initServer(argv[1]);
-   
-   fprintf(stderr,"Init server finished\n");
-   
-   wapi_init = zigbeeInit(&wapi);
-   
-   CMessage message;
-   message.type = MSG_NONE;
-   while (!stopJockey){
-      //fprintf(stderr,"Get message\n");
-      message = server->getMessage();
-      
-      if (message.type != MSG_NONE) {
-         printf("Command: %s\n",message.getStrType());
-      }
-      
-      switch (message.type){
-         case MSG_INIT:
-            // init WAPI
-            server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
-            break;
-            
-         case MSG_START: {
-            break;
-         }
-         case MSG_STOP: {
-            break;
-         }
-         case MSG_QUIT: {
-            stopJockey = true;
-            break;
-         }
-         case MSG_NONE: {
-            break;
-         }
-         case MSG_ZIGBEE_MSG: {
-            if (!wapi_init) {
-               wapi_init = zigbeeInit(&wapi);
-            }
-            if (wapi_init) {
-               if (!zigbeeSend(&wapi, (char *)message.data, message.len)) {
-                  fprintf(stderr, "WAPI error sending message len %i\n", message.len);
-               }
-            }
-            break;
-         }
-         default: {
-            fprintf(stderr, "Did not understand message %i\n",message.type);
-            break;
-         }
-      }
-      
-      if (!wapi_init) {
-         wapi_init = zigbeeInit(&wapi);
-      }
-      if (wapi_init) {
-         wapi_error = wapi.receive(receive_msg, 1);
-         if (WAPI::WAPI_OK == wapi_error) {
-            server->sendMessage(MSG_ZIGBEE_MSG, receive_msg.Data(), receive_msg.Size());
-         }
-      }
-      
-      if (message.type == MSG_NONE && wapi_error!=WAPI::WAPI_OK) {
-         usleep(50000); // check every 0.02 second or do something usefull
-      }
-   }
-   
-   printf("Stopping Zigbee Messenger\n");
-   return 0;
-}
+	fprintf(stdout, "Ubisence position starting %s\n", argv[1]);
 
+	a.sa_handler = &interrupt_signal_handler;
+	sigaction(SIGINT, &a, NULL);
+
+	if (argc <= 1) {
+		fprintf(stderr, "Usage: port_number\n");
+		return 1;
+	}
+
+	printf("Create receiving message server on port %s\n", argv[1]);
+
+	server = new CMessageServer();
+	server->initServer(argv[1]);
+
+	fprintf(stderr, "Init server finished\n");
+
+	wapi_init = zigbeeInit(&wapi);
+
+	CMessage message;
+	message.type = MSG_NONE;
+	while (!stopJockey) {
+		//fprintf(stderr,"Get message\n");
+		message = server->getMessage();
+
+		if (message.type != MSG_NONE) {
+			printf("Command: %s\n", message.getStrType());
+		}
+
+		switch (message.type) {
+		case MSG_INIT:{
+			// init WAPI
+			server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
+		};
+			break;
+
+		case MSG_START: {
+			break;
+		}
+		case MSG_STOP: {
+			break;
+		}
+		case MSG_QUIT: {
+			stopJockey = true;
+			break;
+		}
+		case MSG_NONE: {
+			break;
+		}
+		case MSG_ZIGBEE_MSG: {
+			if (!wapi_init) {
+				wapi_init = zigbeeInit(&wapi);
+			}
+			if (wapi_init) {
+
+				CMessage unpacked = CMessage::unpackZBMessage(message);
+				printf("try to send message %d over zigbee with size %d\n", unpacked.type,message.len);
+
+				if (!zigbeeSend(&wapi, message.data, message.len)) {
+					fprintf(stderr, "WAPI error sending message len %i\n",
+							message.len);
+				}
+			}
+
+		};break;
+		default: {
+			fprintf(stderr, "Did not understand message %i\n", message.type);
+			break;
+		}
+		}
+
+		if (!wapi_init) {
+			wapi_init = zigbeeInit(&wapi);
+		}
+		if (wapi_init) {
+			wapi_error = wapi.receive(receive_msg, 1);
+			if (WAPI::WAPI_OK == wapi_error) {
+				server->sendMessage(MSG_ZIGBEE_MSG, (void*) receive_msg.Data(),
+						receive_msg.Size());
+			}
+		}
+
+		if (message.type == MSG_NONE && wapi_error != WAPI::WAPI_OK) {
+			usleep(50000); // check every 0.02 second or do something usefull
+		}
+	}
+
+	printf("Stopping Zigbee Messenger\n");
+	return 0;
+}
 

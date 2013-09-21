@@ -111,15 +111,45 @@ void CRawImage::setValue(int x, int y, VALUE_TYPE value) {
 
 
 Pixel CRawImage::getPixel(int x, int y) {
+#ifdef EXTREMELY_CAREFUL
 	assert (bpp == 3);
 	assert (x >= 0 && x < width);
 	assert (y >= 0 && y < height);
-	int base = (y*width+x)*3;
+#endif
+	int base = (y*width+x)*bpp;
 	Pixel pixel;
 	pixel.b = data[base+0];
 	pixel.r = data[base+1];
 	pixel.g = data[base+2];
 	return pixel;
+}
+
+void CRawImage::swap(int x0, int y0, int x1, int y1) {
+#ifdef EXTREMELY_CAREFUL
+	assert (bpp == 3);
+	assert (x0 >= 0 && x0 < width);
+	assert (y0 >= 0 && y0 < height);
+	assert (x1 >= 0 && x1 < width);
+	assert (y1 >= 0 && y1 < height);
+#endif
+	int base0 = (y0*width+x0)*bpp;
+	int base1 = (y1*width+x1)*bpp;
+	Pixel temp;
+	temp.b = data[base0+0];
+	temp.r = data[base0+1];
+	temp.g = data[base0+2];
+	data[base0+0] = data[base1+0];
+	data[base0+1] = data[base1+1];
+	data[base0+2] = data[base1+2];
+	data[base1+0] = temp.b;
+	data[base1+1] = temp.r;
+	data[base1+2] = temp.g;
+}
+
+void CRawImage::swap(Pixel p0, Pixel p1) {
+	Pixel temp = p0;
+	p0 = p1;
+	p1 = temp;
 }
 
 Pixel CRawImage::getPixel(int x, int y, Patch & patch) {
@@ -334,7 +364,7 @@ void CRawImage::makeMonochrome() {
 	assert (data != NULL);
 	assert (width > 0);
 	//	printf("%s(): Size is %i\n", __func__, size);
-	swap();
+	swap(CC_RED, CC_BLUE);
 
 	VALUE_TYPE* newData = (VALUE_TYPE*)calloc(width*height,sizeof(VALUE_TYPE));
 	for (int i = 0; i < width*height; ++i) {
@@ -367,11 +397,12 @@ void CRawImage::makeMonochrome(CRawImage *result) {
 }
 
 /**
- * Swap the first and third bytes of an YUV or RGB array. This is done in a very blunt manner, namely by making an
- * entire copy of the image, copying the channels into the different positions, copying everything to the data array,
- * and deallocating the temporary copy.
+ * Swap channels in an RGB array. In the Replicator bots you probably want to switch the C_RED and C_BLUE channel.
+ *
+ * This is done in a very blunt manner, namely by making an entire copy of the image, copying the channels into the
+ * different positions, copying everything to the data array, and deallocating the temporary copy.
  */
-void CRawImage::swap()
+void CRawImage::swap(const ColorChannel channel1, const ColorChannel channel2)
 {
 	if (bpp != 3) {
 		return;
@@ -388,21 +419,47 @@ void CRawImage::swap()
 	for (int j = 0;j<height;j++){
 		memcpy(&newData[span*j],&data[span*(height-1-j)],span);
 		for (int i = 0;i<width;i++){
-			VALUE_TYPE a = newData[(width*j+i)*3];
-			newData[(width*j+i)*3] = newData[(width*j+i)*3+2];
-			newData[(width*j+i)*3+2] = a;
+			VALUE_TYPE temp = newData[(width*j+i)*3+channel1];
+			newData[(width*j+i)*3+channel1] = newData[(width*j+i)*3+channel2];
+			newData[(width*j+i)*3+channel2] = temp;
 		}
 	}
 	memcpy(data,newData,size);
 	if (newData != NULL) free(newData);
 }
 
+//! Flip vertically or horizontally
+void CRawImage::flip(const Orientation orientation) {
+	if (bpp != 3) return;
+
+	switch (orientation) {
+	case O_VERTICAL: {
+		VALUE_TYPE* newData = (VALUE_TYPE*)calloc(size,sizeof(VALUE_TYPE));
+		int span = width*bpp;
+		for (int j = 0; j < height; j++){
+			memcpy(&newData[span*j],&data[span*(height-1-j)],span);
+		}
+		memcpy(data,newData,size);
+		if (newData != NULL) free(newData);
+		break;
+	} case O_HORIZONTAL: {
+		for (int j = 0; j < height; j++) {
+			for (int i = 0; i < width; i++) {
+				swap(i,j, width-1-i,j);
+			}
+		}
+		break;
+	}
+	}
+}
+
+
 void CRawImage::saveBmp(const char* inName)
 {
 	ASSERT(size > 0);
 //	updateHeader();
 	FILE* file = fopen(inName, "wb");
-	swap();
+	swap(CC_RED, CC_BLUE);
 	fwrite(header,54,1,file);
 	if (bpp == 1) {
 		VALUE_TYPE *temp_palette = (VALUE_TYPE*)calloc(PALETTE_SIZE, sizeof(VALUE_TYPE));
@@ -415,7 +472,7 @@ void CRawImage::saveBmp(const char* inName)
 		if (temp_palette != NULL) free(temp_palette);
 	}
 	fwrite(data,size,1,file);
-	swap();
+	swap(CC_RED, CC_BLUE);
 	fclose(file);
 	std::cout << __func__ << ": saved \"" << inName << "\"" << std::endl;
 }
@@ -461,7 +518,7 @@ bool CRawImage::loadBmp(const char* inName)
 			return false;
 		}
 		fclose(file);
-		swap();
+		swap(CC_RED, CC_BLUE);
 		fprintf(stdout, "Read %i bytes from %s\n", size, inName);
 		return true;
 	} else {

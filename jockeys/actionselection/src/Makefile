@@ -24,6 +24,10 @@ endif
 
 SUBDIRS+=main
 SUBDIRS+=eth
+SUBDIRS+=common
+SUBDIRS+=motor
+SUBDIRS+=filesystem
+SUBDIRS+=leds
 SUBDIRS+=scenario
 
 ####################################################################################

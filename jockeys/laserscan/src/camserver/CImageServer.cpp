@@ -12,6 +12,7 @@ CImageServer::CImageServer(sem_t *imsem, CRawImage* im)
 	CISdebug = true;
 	stop=false;
 	sem_init(&connectSem,0,1);	
+	sem_init(&captureSem,0,1);
 }
 
 CImageServer::~CImageServer()
@@ -87,16 +88,18 @@ void* serverLoop(void* serv)
 	bool connected = true;
 	while (connected && !server->stop){
 		dataOk = 0;
-		if (CISdebug) fprintf(stdout,"CImageServer: Waiting to receive a message.\n",info.socket);
+		if (CISdebug) fprintf(stdout,"CImageServer: Wait for a message.\n");
 		int msg = server->checkForMessage(info.socket);
 		if (CISdebug) fprintf(stdout,"CImageServer: Message received from %i.\n",info.socket);
 		sem_wait(info.sem);
 		server->sendImage(info.socket);
-//		sem_post(info.sem);
-//remove this so "the other" can send sem_post
+		if (CISdebug) fprintf(stdout,"CImageServer: Post to capturing semaphore.\n");
+		sem_post(&server->captureSem);
+		//		sem_post(info.sem);
+		//remove this so "the other" can send sem_post
 		usleep(100000);
 		if (msg == 1){
-		       	connected = false;
+			connected = false;
 			fprintf(stdout,"CImageServer: Disconnecting.\n");
 		}
 	}
@@ -125,7 +128,7 @@ int CImageServer::sendImage(int socket)
 	if (send(socket,image->data,image-> getsize(),MSG_NOSIGNAL) == image->getsize()){
 		if (CISdebug) fprintf(stdout,"CImageServer: Image sent.\n");
 		return 0; 
-		}
+	}
 	else
 	{
 		if (CISdebug) fprintf(stdout,"CImageServer: Network error.\n");

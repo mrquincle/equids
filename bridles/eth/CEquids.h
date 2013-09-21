@@ -32,7 +32,7 @@ public:
 	void sendMessage(int jockey, int type, void *data, int len);
 	void sendMessageToALL(int type, void *data, int len);
 	CMessage getMessage(int j);
-
+	int getNum_jockeys(){return num_jockeys;};
    int  find(const char *name);
    void quit();
 };

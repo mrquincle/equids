@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <sys/syslog.h>
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -32,7 +33,10 @@
  *
  */
 CMotors::CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type) {
-	printf("Create motors object\n");
+	log_level = LOG_EMERG;
+	if (log_level >= LOG_INFO) {
+		printf("Create motors object\n");
+	}
 	if (robot_base == NULL) {
 		fprintf(stderr, "robot_base is null, error in instantiation!\n");
 	}
@@ -48,17 +52,22 @@ CMotors::CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 	axle_track = 10;
 
 	// use an environmental variable REVERSE_TRACKS, by default reverse tracks is false
+	left_right_reversed = false;
 	char *reverse_tracks = getenv("REVERSE_TRACKS");
 	if (reverse_tracks) {
 		std::string rev = std::string(reverse_tracks);
 		std::transform(rev.begin(), rev.end(), rev.begin(), ::tolower);
 		if (rev == "true") {
 			left_right_reversed = true;
-		} else {
-			left_right_reversed = false;
 		}
 	}
-	printf("setting buf\n");
+
+	if (left_right_reversed) {
+		printf("Left and right wheel will be reversed\n");
+	} else {
+		printf("Left and right wheel will be at default, not reversed\n");
+	}
+
 	buf[0]=0;
 	buf[1]=0;
 	buf[2]=0;
@@ -82,7 +91,6 @@ CMotors::CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 
 	switch (robot_type) {
 	case RobotBase::ACTIVEWHEEL: {
-		printf("AW\n");
 		odometry_koef1 = 1.186562e-06;
 		odometry_koef2 = 1.436724e-06;
 		odometry_koef3 = 8.650865e-01;
@@ -90,14 +98,12 @@ CMotors::CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 		break;
 	}
 	case RobotBase::KABOT: {
-		printf("Kabot\n");
 		odometry_koef1 = 0.000000152;
 		odometry_koef2 = 0.65;
 		odometry_koef3 = 0.3713;
 		break;
 	}
 	case RobotBase::SCOUTBOT: {
-		printf("scout\n");
 		odometry_koef1=0.000001253;
 		odometry_koef2=0.000001253;
 		odometry_koef3=0.12;
@@ -107,7 +113,6 @@ CMotors::CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 		fprintf(stderr, "can not set odometry coefficients\n");
 		break;
 	}
-	fprintf(stdout, "time\n");
 	timer = new CTimer();
 	timer->start();
 	lastTime=timer->getTime();
@@ -121,13 +126,11 @@ CMotors::~CMotors() {
  * Initialize the motors. Enable high-power voltage that is required to drive the motors.
  */
 void CMotors::init() {
-	printf("Enable motors, this turns on the high voltage circuitry on the robot\n");
+	if (log_level >= LOG_INFO) {
+		printf("Enable motors, this turns on the high voltage circuitry on the robot\n");
+	}
 	this->go();
 	srand(time(NULL));
-}
-
-void CMotors::reversed(bool left_right_reversed) {
-	this->left_right_reversed = left_right_reversed;
 }
 
 void CMotors::calibrate(MotorCalibResult calibrationResult){
@@ -135,7 +138,9 @@ void CMotors::calibrate(MotorCalibResult calibrationResult){
 	this->odometry_koef2=calibrationResult.odometry_koef2;
 	this->odometry_koef3=calibrationResult.odometry_koef3;
 	this->calibratedSpeed=calibrationResult.calibratedSpeed;
-	printf("calibrating on %d\n",calibratedSpeed);
+	if (log_level >= LOG_INFO) {
+		printf("calibrating on %d\n",calibratedSpeed);
+	}
 }
 
 /**
@@ -161,7 +166,9 @@ int CMotors::cmd_to_ctrl(unsigned int abs_speed) {
 void CMotors::translate(int speed, int radius, int & left, int & right) {
 	dobots::cap_range(radius, -max_radius, max_radius);
 	dobots::cap_range(speed, -max_speed, max_speed);
-	std::cout << "Cap [speed,radius] to [" << speed << ',' << radius << ']' << std::endl;
+	if (log_level >= LOG_INFO) {
+		std::cout << "Cap [speed,radius] to [" << speed << ',' << radius << ']' << std::endl;
+	}
 
 	int abs_radius = abs(radius);
 	int abs_speed = abs(speed);
@@ -173,7 +180,9 @@ void CMotors::translate(int speed, int radius, int & left, int & right) {
 	} else {
 		// map absolute speed to velocity
 		int wheel_velocity = cmd_to_ctrl(abs_speed);
-		std::cout << "Wheel velocity is " << wheel_velocity << std::endl;
+		if (log_level >= LOG_INFO) {
+			std::cout << "Wheel velocity is " << wheel_velocity << std::endl;
+		}
 
 		left = (int) (wheel_velocity * (abs_radius + axle_track) / (abs_radius + axle_track / 2.0));
 		right = (int) (wheel_velocity * abs_radius / (abs_radius + axle_track / 2.0));
@@ -181,7 +190,6 @@ void CMotors::translate(int speed, int radius, int & left, int & right) {
 		// now we have a problem if we have both full forwards and full turn, we extend 100 for one of the wheels
 		// hence if one of them exceeds 100, we scale both by the most excessive value
 		dobots::cap_scale<int,double>(left, right, min_wheel_velocity, max_wheel_velocity);
-
 	}
 
 	// for the ScoutBot, the right "wheel" is inverted
@@ -200,8 +208,10 @@ void CMotors::translate(int speed, int radius, int & left, int & right) {
 		right = temp;
 	}
 
-	std::cout << "Translated [speed,radius]=[" << speed << ',' << radius << ']' << " into " <<
+	if (log_level >= LOG_INFO) {
+		std::cout << "Translated [speed,radius]=[" << speed << ',' << radius << ']' << " into " <<
 			"[left,right]=[" << left << ',' << right << ']' << std::endl;
+	}
 }
 
 /**
@@ -226,10 +236,50 @@ void CMotors::translate(int speed, int radius, int & left, int & right) {
 void CMotors::setRadianSpeeds(int forward, int radius) {
 	switch (robot_type) {
 	case RobotBase::ACTIVEWHEEL: {
-		fprintf(stderr, "To be implemented\n");
-		ActiveWheel *bot = (ActiveWheel*)robot_base;
-		//		bot->moveForward(forward);
-		//		bot->moveRight(turn);
+		if (log_level >= LOG_INFO) {
+			std::cout << "Got command [forward,radius]=[" << forward << ',' << radius << ']' << std::endl;
+		}
+		int turn = 0;
+		if (forward == 0) {
+			if (log_level >= LOG_INFO) {
+				std::cout << "Stop the wheels" << std::endl;
+			}
+//			set_to_zero();
+			setSpeeds(0,0);
+		} else {
+			if (radius == -1) {
+				turn = -50;
+				forward = 0;
+			} else if (radius == +1) {
+				turn = 50;
+				forward = 0;
+			} else if (radius == -111) {
+				if (forward > 0)
+					turn = -50;
+				else
+					turn = +50;
+			} else if (radius == +111) {
+				if (forward > 0)
+					turn = +50;
+				else
+					turn = -50;
+			} else if (radius == 1000) { // go forward / backward (w.r.t. camera)
+				turn = 0;
+			}
+			if (log_level >= LOG_INFO) {
+				std::cout << "Send command to the wheels [forward,turn]=[" << forward << ',' << turn << ']' << std::endl;
+			}
+			setSpeeds(forward, turn);
+		}
+//		fprintf(stderr, "To be implemented\n");
+//		int turn = radius / 10;
+//		dobots::cap_range(turn, -100, 100);
+//		ActiveWheel *bot = (ActiveWheel*)robot_base;
+//		int left, right;
+//		translate(forward, radius, left, right);
+//		std::cout << "Send command to the wheels [left,right]=[" << left << ',' << right << ']' << std::endl;
+//		bot->MoveWheelsFront(left, right);
+//		bot->MoveWheelsRear(left, right);
 		break;
 	}
 	case RobotBase::KABOT: {
@@ -274,7 +324,9 @@ void CMotors::rotate(int degrees) {
 		int right = left_right_reversed ? left : -left;
 		std::cout << "Send command to the wheels [left,right]=[" << left << ',' << right << ']' << std::endl;
 		bot->Move(left, right);
-		sleep(degrees / 60);
+		// rotations per second, in case left and right are +/- 40
+		static const int us_per_degree = 20000; //25000;
+		usleep(us_per_degree * degrees);
 		bot->Move(0,0);
 		break;
 	}
@@ -296,9 +348,9 @@ void CMotors::setSpeeds(int forward, int turn) {
 	//printf("robot type is %d\n",this->robot_type);
 	switch (robot_type) {
 	case RobotBase::ACTIVEWHEEL: {
-		//drive diferentially - means two down wheel speeds are equal
-		//can not turn and forward 100% and 100% - therefore count ekvivalent
-		//max turn is on place turnning
+		//drive differentially - means two down wheel speeds are equal
+		//can not turn and forward 100% and 100% - therefore count equivalent
+		//max turn is on place turning
 		int speedtop;
 		int speeddown;
 		float curving_factor=1-(abs(turn)/100.0);

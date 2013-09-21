@@ -6,11 +6,12 @@
  */
 
 #include "CMotorsCalib.h"
+#include "../../../mapping/src/map/Map.h"
 #define FILTER_CAUNT 20
 #define MIN_DISTANCE 0.2
 #define PI 3.141592654
 //#define DEBUGODOCALIB
-#define MAX_NOT_SEE 5
+#define MAX_NOT_SEE 8
 #define TURNING_COUNT 6
 #define WAIT_STOPPED 20
 #define DEBUGODOCALIB_RESULTS
@@ -38,7 +39,9 @@ CMotorsCalib::CMotorsCalib(RobotBase *robot_base,
 	//gsl_matrix_set(Q, 2, 2, 0.02);
 	gsl_matrix_set(Q, 2, 2, 0.04);
 	gsl_matrix_set(Q, 3, 3, 0.0005);
-
+	timer = new CTimer();
+	timer->start();
+	time = timer->getTime();
 	switch (robotype) {
 	case KABOT:
 		calibspeed = 40;
@@ -96,8 +99,7 @@ void CMotorsCalib::calibrateAW(DetectedBlob* detectedBlob) {
 
 		float measured[4] = { detectedBlob->x, detectedBlob->y,
 				detectedBlob->phi, detectedBlob->z };
-		CMotorsCalib::convertCameraMeasurementAW(measured,
-				motor->getPosition()[5]);
+		Map::convertCameraMeasurementAW(measured, motor->getPosition()[5]);
 #if defined(DEBUGODOCALIB)
 		printf("measured=[measured [ %f ; %f ; %f ; %f ]] \n", measured[0],
 				measured[1], measured[2], measured[3]);
@@ -139,6 +141,9 @@ void CMotorsCalib::calibrateAW(DetectedBlob* detectedBlob) {
 			;
 			break;
 		case 2: {											    //drive forward
+			double distance = this->euclideanDistance(motor->getPosition(),
+					firstodometry);
+			printf("distance: %f \n", distance);
 			if (this->euclideanDistance(motor->getPosition(),
 					firstodometry) > MIN_DISTANCE) {
 				//enought distance to resolve or lost in less distance
@@ -230,16 +235,20 @@ void CMotorsCalib::calibrateAW(DetectedBlob* detectedBlob) {
 							euclideanDistancefd(thirdmeasured,
 									motor->getPosition())
 									- euclideanDistancefd(measured,
-											motor->getPosition())) > 0.3) ) {
+											motor->getPosition())) > 0.3)) {
 				//if do not travel enough or measured landmark is not the same
 				if ((motor->isMoving() || this->wasmoving > 0)
 						&& stai_in_motion < 1) {	//wait two times
+
 					motor->setSpeeds(0, 0);
+					int motionTime = timer->getTime() - time;
+					printf("Stayed in motion for %d \n",motionTime);
 					this->wasmoving -= 1;
 					if (this->wasmoving < 1) {
 						this->stai_in_motion = TURNING_COUNT;
 					}
 				} else {
+					time = timer->getTime();
 					motor->setSpeeds(0, calibspeed);
 					this->wasmoving = WAIT_STOPPED;
 					this->stai_in_motion -= 1;
@@ -349,12 +358,15 @@ void CMotorsCalib::calibrateAW(DetectedBlob* detectedBlob) {
 				if ((motor->isMoving() || this->wasmoving > 0)
 						&& stai_in_motion < 1) {	//wait two times
 					motor->setSpeeds(0, 0);
+					int motionTime = timer->getTime() - time;
+					printf("Stayed in motion for %d \n",motionTime);
 					this->wasmoving -= 1;
 					if (this->wasmoving < 1) {
 						this->stai_in_motion = TURNING_COUNT;
 					}
 				} else {
 					motor->setSpeeds(0, calibspeed);
+					time = timer->getTime();
 					this->wasmoving = WAIT_STOPPED;
 					this->stai_in_motion -= 1;
 				}
@@ -389,177 +401,229 @@ void CMotorsCalib::calibrateKB(DetectedBlob* detectedBlob) {
 	//renew image
 
 	if (detectedBlob != NULL) {
-		if (detectedBlob->x > -12 && detectedBlob->x < 12
-				&& detectedBlob->y > -12 && detectedBlob->y < 12
-				&& detectedBlob->phi > -2 && detectedBlob->phi < 2
-				&& detectedBlob->z > -10 && detectedBlob->z < 10) {
+		notsee = MAX_NOT_SEE;
+#if defined(DEBUGODOCALIB)
+		printf("valid segment\n");
+#endif
+		float measured[4] = { detectedBlob->x, detectedBlob->y,
+				detectedBlob->phi, detectedBlob->z };
+		Map::convertCameraMeasurementKB(measured);
+#if defined(DEBUGODOCALIB)
+		printf("measured=[measured [ %f ; %f ; %f ; %f ]] \n", measured[0],
+				measured[1], measured[2], measured[3]);
+#endif
+		switch (calibstate) {
+		case 0: {							//camera see blob for first time
+			calibstate = 1;
+			motor->setMotorSpeedsKB(0, 0);
 
-			float measured[4] = { detectedBlob->x, detectedBlob->y,
-					detectedBlob->phi, detectedBlob->z };
-			CMotorsCalib::convertCameraMeasurementKB(measured);
-			switch (calibstate) {
-			case 0: {							//camera see blob for first time
-				calibstate = 1;
-				motor->setMotorSpeedsKB(0, 0);
-				memcpy(firstmeasured, measured, 4 * sizeof(float));
-				initializeCovariance();
-			}
-				;
-				break;
-			case 1: {								//see first landmark
-													//wait until enough measurements
-
-				if (filteriteration < FILTER_CAUNT) {
-					filteriteration += 1;
+		}
+			;
+			break;
+		case 1: {								//see first landmark
+												//wait until enough measurements
+			motor->setMotorSpeedsKB(0, 0);
+			if (filteriteration < FILTER_CAUNT) {
+				if (filteriteration > 0) {
+					CMotorsCalib::filter(firstmeasured, measured);
 				} else {
-					calibstate = 2;
-					filteriteration = 0;
-					memcpy(firstodometry, motor->getPosition(),
-							5 * sizeof(double));
+					memcpy(firstmeasured, measured, 4 * sizeof(float));
+					initializeCovariance();
+					already_see = true;
+#if defined(DEBUGODOCALIB)
+					printf("first measured: [ %f ; %f ; %f ; %f ]] \n",
+							measured[0], measured[1], measured[2], measured[3]);
+#endif
 				}
+
+				filteriteration += 1;
+			} else {
 				CMotorsCalib::filter(firstmeasured, measured);
-				motor->setMotorSpeedsKB(0, 0);
-			}
-				;
-				break;
-			case 2: {						//sliding left until 10cm distance
-				if (motor->getPosition()[1] - firstodometry[1] > MIN_DISTANCE
-						|| (motor->actualspeed1 == 50
-								&& motor->actualspeed2 == -50)) {
-					//enought distance to resolve or lost in less distance
-					calibstate = 3;
-					motor->setMotorSpeedsKB(0, 0);
-					memcpy(secondmeasured, measured, 4 * sizeof(float));
-					initializeCovariance();
-				} else {
-					//if see landmark and do not travel enough distance -> continue
-					motor->setMotorSpeedsKB(-50, 50);
-				}
-
-			}
-				;
-				break;
-			case 3: {							//see first landmark second time
-
-				if (filteriteration < FILTER_CAUNT) {
-					filteriteration += 1;
-				} else {
-					calibstate = 4;
-					filteriteration = 0;
-					memcpy(secondodometry, motor->getPosition(),
-							5 * sizeof(double));
-				}
-				CMotorsCalib::filter(secondmeasured, measured);
-				motor->setMotorSpeedsKB(0, 0);
-
-			}
-				;
-				break;
-			case 4: {						//sliding right until 10cm distance
-				if (motor->getPosition()[1] - secondodometry[1] < -MIN_DISTANCE
-						|| (motor->actualspeed1 == -50
-								&& motor->actualspeed2 == 50)) {
-					calibstate = 5;
-					memcpy(thirdmeasured, measured, 4 * sizeof(float));
-					initializeCovariance();
-					motor->setMotorSpeedsKB(0, 0);
-				} else {
-					//if see second landmark continue
-					motor->setMotorSpeedsKB(50, -50);
-				}
-
-			}
-				;
-				break;
-			case 5: {							//see first landmark third time
-				CMotorsCalib::filter(thirdmeasured, measured);
-				motor->setMotorSpeedsKB(0, 0);
-				if (filteriteration < FILTER_CAUNT) {
-					filteriteration += 1;
-				} else {
-					calibstate = 6;
-					filteriteration = 0;
-					memcpy(thirdodometry, motor->getPosition(),
-							5 * sizeof(double));
-
-				}
-
-			}
-				;
-				break;
-			case 6: {						//sliding back until 10cm distance
-				if (motor->getPosition()[0] - thirdodometry[0] > MIN_DISTANCE
-						|| (motor->actualspeed1 == 50
-								&& motor->actualspeed2 == 50)) {
-					//enought distance to resolve or lost in less distance
-					calibstate = 7;
-					motor->setMotorSpeedsKB(0, 0);
-					memcpy(fourthmeasured, measured, 4 * sizeof(float));
-					initializeCovariance();
-				} else {
-					//if see landmark and do not travel enough distance -> continue
-					motor->setMotorSpeedsKB(-50, -50);
-				}
-
-			}
-				;
-				break;
-			case 7: {							//see first landmark second time
-
-				if (filteriteration < FILTER_CAUNT) {
-					filteriteration += 1;
-				} else {
-					calibstate = 8;
-					filteriteration = 0;
-					memcpy(fourthodometry, motor->getPosition(),
-							5 * sizeof(double));
-				}
-				CMotorsCalib::filter(fourthmeasured, measured);
-				motor->setMotorSpeedsKB(0, 0);
-
-			}
-				;
-				break;
-			case 8: {					//sliding forward until 10cm distance
-				if (motor->getPosition()[0] - fourthodometry[0] > MIN_DISTANCE
-						|| (motor->actualspeed1 == -50
-								&& motor->actualspeed2 == -50)) {
-					calibstate = 9;
-					memcpy(fifthmeasured, measured, 4 * sizeof(float));
-					initializeCovariance();
-					motor->setMotorSpeedsKB(0, 0);
-				} else {
-					//if see second landmark continue
-					motor->setMotorSpeedsKB(50, 50);
-				}
-
-			}
-				;
-				break;
-			case 9: {							//see first landmark last time
-				CMotorsCalib::filter(fifthmeasured, measured);
-				if (filteriteration < FILTER_CAUNT) {
-					filteriteration += 1;
-				} else {
-					successful = true;
-					filteriteration = 0;
-					memcpy(fifthodometry, motor->getPosition(),
-							5 * sizeof(double));
-					evaluateCalibrationKB();
-				}
-				motor->setMotorSpeedsKB(0, 0);
-
-			}
-				;
-				break;
+				calibstate = 2;
+				already_see = false;
+				filteriteration = 0;
+				memcpy(firstodometry, motor->getPosition(), 5 * sizeof(double));
 			}
 
 		}
-	} else {
-		switch (calibstate) {
-		case 0: {									  //before calibration start
-													  //implement random walk
+			;
+			break;
+		case 2: {						//sliding left until 10cm distance
+			double distance = this->euclideanDistance(motor->getPosition(),
+					firstodometry);
+		//	printf("distance: %f", distance);
+			if (this->euclideanDistance(motor->getPosition(),
+					firstodometry) > MIN_DISTANCE/3) {
+				//enought distance to resolve or lost in less distance
+				calibstate = 3;
+				motor->setMotorSpeedsKB(0, 0);
+			} else {
+				//if see landmark and do not travel enough distance -> continue
+				motor->setMotorSpeedsKB(-50, 50);
+			}
+
+		}
+			;
+			break;
+		case 3: {							//see first landmark second time
+
+			if (filteriteration < FILTER_CAUNT) {
+				if (filteriteration > 0) {
+					CMotorsCalib::filter(secondmeasured, measured);
+				} else {
+					memcpy(secondmeasured, measured, 4 * sizeof(float));
+					initializeCovariance();
+					already_see = true;
+#if defined(DEBUGODOCALIB)
+					printf("second: [ %f ; %f ; %f ; %f ]] \n", measured[0],
+							measured[1], measured[2], measured[3]);
+#endif
+				}
+				filteriteration += 1;
+			} else {
+				CMotorsCalib::filter(secondmeasured, measured);
+				calibstate = 4;
+				already_see = false;
+				filteriteration = 0;
+				memcpy(secondodometry, motor->getPosition(),
+						5 * sizeof(double));
+			}
+
 			motor->setMotorSpeedsKB(0, 0);
+
+		}
+			;
+			break;
+		case 4: {						//sliding right until 10cm distance
+			if (this->euclideanDistance(motor->getPosition(),
+					secondodometry) > MIN_DISTANCE/3) {
+				calibstate = 5;
+				motor->setMotorSpeedsKB(0, 0);
+			} else {
+				//if see second landmark continue
+				motor->setMotorSpeedsKB(50, -50);
+			}
+
+		}
+			;
+			break;
+		case 5: {							//see first landmark third time
+
+			motor->setMotorSpeedsKB(0, 0);
+			if (filteriteration < FILTER_CAUNT) {
+				if (filteriteration > 0) {
+					CMotorsCalib::filter(thirdmeasured, measured);
+				} else {
+					memcpy(thirdmeasured, measured, 4 * sizeof(float));
+					initializeCovariance();
+					already_see = true;
+#if defined(DEBUGODOCALIB)
+					printf("third: [ %f ; %f ; %f ; %f ]] \n", measured[0],
+							measured[1], measured[2], measured[3]);
+#endif
+				}
+				filteriteration += 1;
+			} else {
+				CMotorsCalib::filter(thirdmeasured, measured);
+				calibstate = 6;
+				already_see = false;
+				filteriteration = 0;
+				memcpy(thirdodometry, motor->getPosition(), 5 * sizeof(double));
+
+			}
+
+		}
+			;
+			break;
+		case 6: {						//sliding back until 10cm distance
+			if (this->euclideanDistance(motor->getPosition(),
+					thirdodometry) > MIN_DISTANCE) {
+				//enought distance to resolve or lost in less distance
+				calibstate = 7;
+				motor->setMotorSpeedsKB(0, 0);
+			} else {
+				//if see landmark and do not travel enough distance -> continue
+				motor->setMotorSpeedsKB(-50, -50);
+			}
+
+		}
+			;
+			break;
+		case 7: {							//see first landmark second time
+			motor->setMotorSpeedsKB(0, 0);
+			if (filteriteration < FILTER_CAUNT) {
+				if (filteriteration > 0) {
+					CMotorsCalib::filter(fourthmeasured, measured);
+				} else {
+					memcpy(fourthmeasured, measured, 4 * sizeof(float));
+					initializeCovariance();
+					already_see = true;
+#if defined(DEBUGODOCALIB)
+					printf("fourth: [ %f ; %f ; %f ; %f ]] \n", measured[0],
+							measured[1], measured[2], measured[3]);
+#endif
+
+				}
+				filteriteration += 1;
+			} else {
+				CMotorsCalib::filter(fourthmeasured, measured);
+				calibstate = 8;
+				filteriteration = 0;
+				memcpy(fourthodometry, motor->getPosition(),
+						5 * sizeof(double));
+			}
+
+		}
+			;
+			break;
+		case 8: {					//sliding forward until 10cm distance
+			if (this->euclideanDistance(motor->getPosition(),
+					fourthodometry) > MIN_DISTANCE) {
+				calibstate = 9;
+				motor->setMotorSpeedsKB(0, 0);
+			} else {
+				//if see second landmark continue
+				motor->setMotorSpeedsKB(50, 50);
+			}
+
+		}
+			;
+			break;
+		case 9: {							//see first landmark last time
+			motor->setMotorSpeedsKB(0, 0);
+			if (filteriteration < FILTER_CAUNT) {
+				if (filteriteration > 0) {
+					CMotorsCalib::filter(fifthmeasured, measured);
+				} else {
+					memcpy(fifthmeasured, measured, 4 * sizeof(float));
+					initializeCovariance();
+					already_see = true;
+#if defined(DEBUGODOCALIB)
+					printf("fifth: [ %f ; %f ; %f ; %f ]] \n", measured[0],
+							measured[1], measured[2], measured[3]);
+#endif
+				}
+				filteriteration += 1;
+			} else {
+				CMotorsCalib::filter(fifthmeasured, measured);
+				successful = true;
+				filteriteration = 0;
+				already_see = false;
+				memcpy(fifthodometry, motor->getPosition(), 5 * sizeof(double));
+				evaluateCalibrationKB();
+			}
+
+		}
+			;
+			break;
+		}
+
+	} else {
+		notsee -= 1;
+		switch (calibstate) {
+		case 0: {								//before calibration start
+												//implement random walk
+
 
 		}
 			;
@@ -569,8 +633,16 @@ void CMotorsCalib::calibrateKB(DetectedBlob* detectedBlob) {
 		}
 			;
 			break;
-		case 2: {					   //lost first landmark - return back right
-			motor->setMotorSpeedsKB(50, -50);
+		case 2: {				//lost first landmark - return back right
+			if (notsee > 0) {
+				//nothink to be done
+			} else if (already_see && wasmoving > 0) {
+				motor->setMotorSpeedsKB(50, -50);
+				wasmoving = wasmoving + 1;
+			} else {
+				wasmoving = 0;
+				motor->setSpeeds(0, 0);
+			}
 
 		}
 			;
@@ -580,8 +652,17 @@ void CMotorsCalib::calibrateKB(DetectedBlob* detectedBlob) {
 		}
 			;
 			break;
-		case 4: {					   //lost first landmark - return back right
-			motor->setMotorSpeedsKB(-50, 50);
+		case 4: {				//lost first landmark - return back right
+
+			if (notsee > 0) {
+				//nothink to be done
+			} else if (already_see && wasmoving > 0) {
+				motor->setMotorSpeedsKB(-50, 50);
+				wasmoving = wasmoving + 1;
+			} else {
+				wasmoving = 0;
+				motor->setSpeeds(0, 0);
+			}
 
 		}
 			;
@@ -591,9 +672,17 @@ void CMotorsCalib::calibrateKB(DetectedBlob* detectedBlob) {
 		}
 			;
 			break;
-		case 6: {					//lost first landmark - return back forward
-			motor->setMotorSpeedsKB(50, 50);
+		case 6: {				//lost first landmark - return back forward
 
+			if (notsee > 0) {
+				//nothink to be done
+			} else if (already_see && wasmoving > 0) {
+				motor->setMotorSpeedsKB(50, 50);
+				wasmoving = wasmoving + 1;
+			} else {
+				wasmoving = 0;
+				motor->setSpeeds(0, 0);
+			}
 		}
 			;
 			break;
@@ -602,9 +691,17 @@ void CMotorsCalib::calibrateKB(DetectedBlob* detectedBlob) {
 		}
 			;
 			break;
-		case 8: {					    //lost first landmark - return back back
-			motor->setMotorSpeedsKB(-50, -50);
+		case 8: {					//lost first landmark - return back back
 
+			if (notsee > 0) {
+				//nothink to be done
+			} else if (already_see && wasmoving > 0) {
+				motor->setMotorSpeedsKB(-50, -50);
+				wasmoving = wasmoving + 1;
+			} else {
+				wasmoving = 0;
+				motor->setSpeeds(0, 0);
+			}
 		}
 			;
 			break;
@@ -628,214 +725,206 @@ void CMotorsCalib::calibrateScout(DetectedBlob* detectedBlob) {
 		printf("valid segment\n");
 #endif
 
-		if (detectedBlob->x > -12 && detectedBlob->x < 12
-				&& detectedBlob->y > -12 && detectedBlob->y < 12
-				&& detectedBlob->phi > -2 && detectedBlob->phi < 2
-				&& detectedBlob->z > -10 && detectedBlob->z < 10) {
-			printf("inside\n");
-
-			float measured[4] = { detectedBlob->x, detectedBlob->y,
-					detectedBlob->phi, detectedBlob->z };
-			CMotorsCalib::convertCameraMeasurementS(measured);
+		float measured[4] = { detectedBlob->x, detectedBlob->y,
+				detectedBlob->phi, detectedBlob->z };
+		Map::convertCameraMeasurementS(measured);
 #if defined(DEBUGODOCALIB)
-			printf("measured=[measured [ %f ; %f ; %f ; %f ]] \n", measured[0],
-					measured[1], measured[2], measured[3]);
+		printf("measured=[measured [ %f ; %f ; %f ; %f ]] \n", measured[0],
+				measured[1], measured[2], measured[3]);
 #endif
-			switch (calibstate) {
-			case 0: {						//camera see blob for first time
-				//jed na pozici pred blobem
-				//this->driveToCalibrationPosition();
-				calibstate = 1;
-				motor->setMotorSpeedsS(0, 0);
+		switch (calibstate) {
+		case 0: {						//camera see blob for first time
+			//jed na pozici pred blobem
+			//this->driveToCalibrationPosition();
+			calibstate = 1;
+			motor->setMotorSpeedsS(0, 0);
 
-			}
-				;
-				break;
-			case 1: {						//see first landmark
-											//wait until enough measurements
-				motor->setMotorSpeedsS(0, 0);
-				if (filteriteration < FILTER_CAUNT) {
-					if (filteriteration > 0) {
-						CMotorsCalib::filter(firstmeasured, measured);
-					} else {					//first measurement after stop
-						memcpy(firstmeasured, measured, 4 * sizeof(float));
-						initializeCovariance();
-						already_see = true;
-#if defined(DEBUGODOCALIB)
-						printf("first measured: [ %f ; %f ; %f ; %f ]] \n",
-								measured[0], measured[1], measured[2],
-								measured[3]);
-#endif
-					}
-
-					filteriteration += 1;
-				} else {
+		}
+			;
+			break;
+		case 1: {						//see first landmark
+										//wait until enough measurements
+			motor->setMotorSpeedsS(0, 0);
+			if (filteriteration < FILTER_CAUNT) {
+				if (filteriteration > 0) {
 					CMotorsCalib::filter(firstmeasured, measured);
-					calibstate = 2;
-					already_see = false;
-					filteriteration = 0;
-					memcpy(firstodometry, motor->getPosition(),
-							5 * sizeof(double));
-				}
-
-			}
-				;
-				break;
-			case 2: {								    //driving forvard
-				if (this->euclideanDistance(motor->getPosition(),
-						firstodometry) > MIN_DISTANCE) {
-					calibstate = 3;
-					motor->setMotorSpeedsS(0, 0);
-
-				} else {
-					//if see second landmark continue
-					motor->setMotorSpeedsS(calibspeed, -calibspeed);
-
-				}
-
-			}
-				;
-				break;
-			case 3: {							//see first landmark second time
-				motor->setMotorSpeedsS(0, 0);
-				if (filteriteration < FILTER_CAUNT) {
-					if (filteriteration > 0) {
-						CMotorsCalib::filter(secondmeasured, measured);
-					} else {					//first measurement after stop
-						memcpy(secondmeasured, measured, 4 * sizeof(float));
-						initializeCovariance();
-						already_see = true;
+				} else {				//first measurement after stop
+					memcpy(firstmeasured, measured, 4 * sizeof(float));
+					initializeCovariance();
+					already_see = true;
 #if defined(DEBUGODOCALIB)
-						printf("second: [ %f ; %f ; %f ; %f ]] \n", measured[0],
-								measured[1], measured[2], measured[3]);
+					printf("first measured: [ %f ; %f ; %f ; %f ]] \n",
+							measured[0], measured[1], measured[2],
+							measured[3]);
 #endif
-					}
-					filteriteration += 1;
-				} else {
-					CMotorsCalib::filter(secondmeasured, measured);
-					calibstate = 4;
-					already_see = false;
-					filteriteration = 0;
-					memcpy(secondodometry, motor->getPosition(),
-							5 * sizeof(double));
 				}
 
-			}
-				;
-				break;
-			case 4: {								    //driving back
-				if (this->euclideanDistance(motor->getPosition(),
-						secondodometry) > MIN_DISTANCE) {
-					motor->setMotorSpeedsS(0, 0);
-					calibstate = 5;
-				} else {
-					//if see second landmark continue
-					motor->setMotorSpeedsS(-calibspeed, calibspeed);
-				}
-
-			}
-				;
-				break;
-			case 5: {							//see first landmark third time
-
-				motor->setMotorSpeedsS(0, 0);
-				if (filteriteration < FILTER_CAUNT) {
-					if (filteriteration > 0) {
-						CMotorsCalib::filter(thirdmeasured, measured);
-					} else {					//first measurement after stop
-						memcpy(thirdmeasured, measured, 4 * sizeof(float));
-						already_see = true;
-						initializeCovariance();
-#if defined(DEBUGODOCALIB)
-						printf("third: [ %f ; %f ; %f ; %f ]] \n", measured[0],
-								measured[1], measured[2], measured[3]);
-#endif
-					}
-					filteriteration += 1;
-				} else {
-					CMotorsCalib::filter(thirdmeasured, measured);
-					calibstate = 6;
-					already_see = false;
-					filteriteration = 0;
-					memcpy(thirdodometry, motor->getPosition(),
-							5 * sizeof(double));
-				}
-
-			}
-				;
-				break;
-
-			case 6: {								    //turn around
-
-				if ((motor->getPosition()[2] - secondodometry[2] < 4.71238898)
-						|| (std::abs(
-								euclideanDistancefd(thirdmeasured,
-										motor->getPosition())
-										- euclideanDistancefd(measured,
-												motor->getPosition())) > 0.3) ) {
-					//if do not travel enough or measured landmark is not the same
-					if ((motor->isMoving() || this->wasmoving > 0)
-							&& stai_in_motion < 1) {	//wait two times
-						motor->setSpeeds(0, 0);
-						this->wasmoving -= 1;
-						if (this->wasmoving < 1) {
-							this->stai_in_motion = TURNING_COUNT;
-						}
-					} else {
-						motor->setSpeeds(0, calibspeed);
-						this->wasmoving = WAIT_STOPPED;
-						this->stai_in_motion -= 1;
-					}
-				} else {
-					//detected same landmark again
-					motor->setSpeeds(0, 0);
-					calibstate = 7;
-				}
-
-			}
-				;
-				break;
-			case 7: {							//see first landmark third time
-
-				motor->setMotorSpeedsS(0, 0);
-				if (filteriteration < FILTER_CAUNT) {
-					if (filteriteration > 0) {	//first measurement after stop
-						CMotorsCalib::filter(fourthmeasured, measured);
-					} else {
-						memcpy(fourthmeasured, measured, 4 * sizeof(float));
-						already_see = true;
-						initializeCovariance();
-#if defined(DEBUGODOCALIB)
-						printf("fourth: [ %f ; %f ; %f ; %f ]] \n", measured[0],
-								measured[1], measured[2], measured[3]);
-#endif
-					}
-					filteriteration += 1;
-				} else {
-					CMotorsCalib::filter(fourthmeasured, measured);
-					successful = true;
-					already_see = false;
-					filteriteration = 0;
-					memcpy(fourthodometry, motor->getPosition(),
-							5 * sizeof(double));
-					this->evaluateCalibrationS();
-
-				}
-
-			}
-				;
-				break;
+				filteriteration += 1;
+			} else {
+				CMotorsCalib::filter(firstmeasured, measured);
+				calibstate = 2;
+				already_see = false;
+				filteriteration = 0;
+				memcpy(firstodometry, motor->getPosition(), 5 * sizeof(double));
 			}
 
 		}
+			;
+			break;
+		case 2: {								    //driving forvard
+			if (this->euclideanDistance(motor->getPosition(),
+					firstodometry) > MIN_DISTANCE) {
+				calibstate = 3;
+				motor->setMotorSpeedsS(0, 0);
+
+			} else {
+				//if see second landmark continue
+				motor->setMotorSpeedsS(calibspeed, -calibspeed);
+
+			}
+
+		}
+			;
+			break;
+		case 3: {						//see first landmark second time
+			motor->setMotorSpeedsS(0, 0);
+			if (filteriteration < FILTER_CAUNT) {
+				if (filteriteration > 0) {
+					CMotorsCalib::filter(secondmeasured, measured);
+				} else {				//first measurement after stop
+					memcpy(secondmeasured, measured, 4 * sizeof(float));
+					initializeCovariance();
+					already_see = true;
+#if defined(DEBUGODOCALIB)
+					printf("second: [ %f ; %f ; %f ; %f ]] \n", measured[0],
+							measured[1], measured[2], measured[3]);
+#endif
+				}
+				filteriteration += 1;
+			} else {
+				CMotorsCalib::filter(secondmeasured, measured);
+				calibstate = 4;
+				already_see = false;
+				filteriteration = 0;
+				memcpy(secondodometry, motor->getPosition(),
+						5 * sizeof(double));
+			}
+
+		}
+			;
+			break;
+		case 4: {								    //driving back
+			if (this->euclideanDistance(motor->getPosition(),
+					secondodometry) > MIN_DISTANCE) {
+				motor->setMotorSpeedsS(0, 0);
+				calibstate = 5;
+			} else {
+				//if see second landmark continue
+				motor->setMotorSpeedsS(-calibspeed, calibspeed);
+			}
+
+		}
+			;
+			break;
+		case 5: {						//see first landmark third time
+
+			motor->setMotorSpeedsS(0, 0);
+			if (filteriteration < FILTER_CAUNT) {
+				if (filteriteration > 0) {
+					CMotorsCalib::filter(thirdmeasured, measured);
+				} else {				//first measurement after stop
+					memcpy(thirdmeasured, measured, 4 * sizeof(float));
+					already_see = true;
+					initializeCovariance();
+#if defined(DEBUGODOCALIB)
+					printf("third: [ %f ; %f ; %f ; %f ]] \n", measured[0],
+							measured[1], measured[2], measured[3]);
+#endif
+				}
+				filteriteration += 1;
+			} else {
+				CMotorsCalib::filter(thirdmeasured, measured);
+				calibstate = 6;
+				already_see = false;
+				filteriteration = 0;
+				memcpy(thirdodometry, motor->getPosition(), 5 * sizeof(double));
+			}
+
+		}
+			;
+			break;
+
+		case 6: {								    //turn around
+
+			if ((motor->getPosition()[2] - secondodometry[2] < 4.71238898)
+					|| (std::abs(
+							euclideanDistancefd(thirdmeasured,
+									motor->getPosition())
+									- euclideanDistancefd(measured,
+											motor->getPosition())) > 0.3)) {
+				//if do not travel enough or measured landmark is not the same
+				if ((motor->isMoving() || this->wasmoving > 0)
+						&& stai_in_motion < 1) {	//wait two times
+					motor->setSpeeds(0, 0);
+					this->wasmoving -= 1;
+					if (this->wasmoving < 1) {
+						this->stai_in_motion = TURNING_COUNT;
+					}
+				} else {
+					motor->setSpeeds(0, calibspeed);
+					this->wasmoving = WAIT_STOPPED;
+					this->stai_in_motion -= 1;
+				}
+			} else {
+				//detected same landmark again
+				motor->setSpeeds(0, 0);
+				calibstate = 7;
+			}
+
+		}
+			;
+			break;
+		case 7: {						//see first landmark third time
+
+			motor->setMotorSpeedsS(0, 0);
+			if (filteriteration < FILTER_CAUNT) {
+				if (filteriteration > 0) {	//first measurement after stop
+					CMotorsCalib::filter(fourthmeasured, measured);
+				} else {
+					memcpy(fourthmeasured, measured, 4 * sizeof(float));
+					already_see = true;
+					initializeCovariance();
+#if defined(DEBUGODOCALIB)
+					printf("fourth: [ %f ; %f ; %f ; %f ]] \n", measured[0],
+							measured[1], measured[2], measured[3]);
+#endif
+				}
+				filteriteration += 1;
+			} else {
+				CMotorsCalib::filter(fourthmeasured, measured);
+				successful = true;
+				already_see = false;
+				filteriteration = 0;
+				memcpy(fourthodometry, motor->getPosition(),
+						5 * sizeof(double));
+				this->evaluateCalibrationS();
+
+			}
+
+		}
+			;
+			break;
+		}
+
 	} else {
+		notsee -= 1;
 		switch (calibstate) {
-		case 0: {								    //before calibration start
+		case 0: {								  //before calibration start
 			//	otacej();										//until no blob in camera vision turning slow left
 
 			//	motor->randomSpeeds();
 			//insert here random walk if after turning full circle no detection!!
-
+	//		motor->setSpeeds(0, 0);
 			//
 
 		}
@@ -847,12 +936,14 @@ void CMotorsCalib::calibrateScout(DetectedBlob* detectedBlob) {
 			;
 			break;
 		case 2: {			    	//must go back
-			if (!already_see && wasmoving > 0) {
-				motor->setMotorSpeedsS(-calibspeed, calibspeed);
+			if (notsee > 0) {
+				//nothink to be done
+			} else if (!already_see && wasmoving > 0) {
+				motor->setSpeeds(calibspeed, 0);
 				wasmoving = wasmoving + 1;
 			} else {
 				wasmoving = 0;
-				motor->setMotorSpeedsS(0, 0);
+				motor->setSpeeds(0, 0);
 			}
 		}
 			;
@@ -863,12 +954,14 @@ void CMotorsCalib::calibrateScout(DetectedBlob* detectedBlob) {
 			;
 			break;
 		case 4: {				    //must go forward
-			if (!already_see && wasmoving > 0) {
-				motor->setMotorSpeedsS(calibspeed, -calibspeed);
+			if (notsee > 0) {
+				//nothink to be done
+			} else if (!already_see && wasmoving > 0) {
+				motor->setSpeeds(-calibspeed, 0);
 				wasmoving = wasmoving + 1;
 			} else {
 				wasmoving = 0;
-				motor->setMotorSpeedsS(0, 0);
+				motor->setSpeeds(0, 0);
 			}
 		}
 			;
@@ -884,34 +977,34 @@ void CMotorsCalib::calibrateScout(DetectedBlob* detectedBlob) {
 				motor->getPosition()[2] - thirdodometry[2],
 				(already_see) ? "true" : "false", this->wasmoving);
 #endif
-		if (!already_see) {
-			//before see same landmark
-			if ((motor->isMoving() || this->wasmoving > 0)
-					&& stai_in_motion < 1) {	//wait two times
-				motor->setSpeeds(0, 0);
-				this->wasmoving -= 1;
-				if (this->wasmoving < 1) {
-					this->stai_in_motion = TURNING_COUNT;
+			if (!already_see) {
+				//before see same landmark
+				if ((motor->isMoving() || this->wasmoving > 0)
+						&& stai_in_motion < 1) {	//wait two times
+					motor->setSpeeds(0, 0);
+					this->wasmoving -= 1;
+					if (this->wasmoving < 1) {
+						this->stai_in_motion = TURNING_COUNT;
+					}
+				} else {
+					motor->setSpeeds(0, calibspeed);
+					this->wasmoving = WAIT_STOPPED;
+					this->stai_in_motion -= 1;
+				}
+			} else if (already_see) {
+				//already see same landmark
+				if ((motor->isMoving() || this->wasmoving < 10)
+						&& stai_in_motion < 1) {	//wait two times
+					motor->setSpeeds(0, 0);
+					this->wasmoving = this->wasmoving + 1;
+				} else {
+					motor->setSpeeds(0, -calibspeed);
+					this->wasmoving = 0;
 				}
 			} else {
-				motor->setSpeeds(0, calibspeed);
-				this->wasmoving = WAIT_STOPPED;
-				this->stai_in_motion -= 1;
-			}
-		} else if (already_see) {
-			//already see same landmark
-			if ((motor->isMoving() || this->wasmoving < 10)
-					&& stai_in_motion < 1) {	//wait two times
 				motor->setSpeeds(0, 0);
-				this->wasmoving = this->wasmoving + 1;
-			} else {
-				motor->setSpeeds(0, -calibspeed);
-				this->wasmoving = 0;
+				printf("no moving\n");
 			}
-		} else {
-			motor->setSpeeds(0, 0);
-			printf("no moving\n");
-		}
 
 		}
 			;
@@ -954,30 +1047,33 @@ void CMotorsCalib::evaluateCalibrationS() {
 	printf("angle error: %e \n", angle_error1);
 	printf("angle error: %e \n", angle_error2);
 #endif
-	float null[3]={0,0,0};
+	float null[3] = { 0, 0, 0 };
 
+	double alfa = atan2(firstmeasured[0], firstmeasured[1]);
+	double beta = atan2(secondmeasured[0], secondmeasured[1]);
+	float b = euclideanDistancef(firstmeasured, null);
+	float c = euclideanDistancef(secondmeasured, null);
+	double delta = abs(-beta + alfa + angle_error1);
+	float a = sqrtf(b * b + c * c - 2 * b * c * cos(delta)); //cosine theorem, a is distance between center of robot
 
-	double alfa=atan2(firstmeasured[0],firstmeasured[1]);
-	double beta=atan2(secondmeasured[0],secondmeasured[1]);
-	float b=euclideanDistancef(firstmeasured,null);
-	float c=euclideanDistancef(secondmeasured,null);
-	double delta = abs(-beta+alfa+angle_error1);
-	float a = sqrtf(b*b + c*c - 2*b*c*cos(delta));  //cosine theorem, a is distance between center of robot
-
-	double r=0;		//circular path radius
+	double r = 0; //circular path radius
 
 	float traveled_LT1;
 	float traveled_RT1;
-	if(angle_error1>0){
-		r = (a/2.0)/tan(abs(angle_error1)/2.0);
-		traveled_LT1= (r+sin(0.5 * motor->getPosition()[5]) * 0.1375)*angle_error1;
-		traveled_RT1= (r-sin(0.5 * motor->getPosition()[5]) * 0.1375)*angle_error1;
-	}else if(angle_error1<0){
-		r = (a/2.0)/tan(abs(angle_error1)/2.0);
-		traveled_LT1= (r-sin(0.5 * motor->getPosition()[5]) * 0.1375)*angle_error1;
-		traveled_RT1= (r+sin(0.5 * motor->getPosition()[5]) * 0.1375)*angle_error1;
-	}else{
-		traveled_LT1=traveled_RT1=a;
+	if (angle_error1 > 0) {
+		r = (a / 2.0) / tan(abs(angle_error1) / 2.0);
+		traveled_LT1 = (r + 0.044)
+				* angle_error1;
+		traveled_RT1 = (r - 0.044)
+				* angle_error1;
+	} else if (angle_error1 < 0) {
+		r = (a / 2.0) / tan(abs(angle_error1) / 2.0);
+		traveled_LT1 = (r - 0.044)
+				* angle_error1;
+		traveled_RT1 = (r + 0.044)
+				* angle_error1;
+	} else {
+		traveled_LT1 = traveled_RT1 = a;
 	}
 
 #if defined(DEBUGODOCALIB_RESULTS)
@@ -993,26 +1089,30 @@ void CMotorsCalib::evaluateCalibrationS() {
 #endif
 
 //for traveling back:
-	alfa=atan2(thirdmeasured[0],thirdmeasured[1]);
-	beta=atan2(secondmeasured[0],secondmeasured[1]);
-	b=euclideanDistancef(thirdmeasured,null);
-	c=euclideanDistancef(secondmeasured,null);
-	delta = abs(-beta+alfa+angle_error2);
-	a = sqrtf(b*b + c*c - 2*b*c*cos(delta));
+	alfa = atan2(thirdmeasured[0], thirdmeasured[1]);
+	beta = atan2(secondmeasured[0], secondmeasured[1]);
+	b = euclideanDistancef(thirdmeasured, null);
+	c = euclideanDistancef(secondmeasured, null);
+	delta = abs(-beta + alfa + angle_error2);
+	a = sqrtf(b * b + c * c - 2 * b * c * cos(delta));
 
 	float traveled_LT2;
 	float traveled_RT2;
-		if(angle_error1>0){
-			r = (a/2.0)/tan(abs(angle_error2)/2.0);
-			traveled_LT2= (r+sin(0.5 * motor->getPosition()[5]) * 0.1375)*angle_error1;
-			traveled_RT2= (r-sin(0.5 * motor->getPosition()[5]) * 0.1375)*angle_error1;
-		}else if(angle_error1<0){
-			r = (a/2.0)/tan(abs(angle_error2)/2.0);
-			traveled_LT2= (r-sin(0.5 * motor->getPosition()[5]) * 0.1375)*angle_error1;
-			traveled_RT2= (r+sin(0.5 * motor->getPosition()[5]) * 0.1375)*angle_error1;
-		}else{
-			traveled_LT2=traveled_RT1=a;
-		}
+	if (angle_error2 > 0) {
+		r = (a / 2.0) / tan(abs(angle_error2) / 2.0);
+		traveled_LT2 = (r + 0.044)
+				* angle_error2;
+		traveled_RT2 = (r - 0.044)
+				* angle_error2;
+	} else if (angle_error2 < 0) {
+		r = (a / 2.0) / tan(abs(angle_error2) / 2.0);
+		traveled_LT2 = (r - 0.044)
+				* angle_error2;
+		traveled_RT2 = (r + 0.044)
+				* angle_error2;
+	} else {
+		traveled_LT2 = traveled_RT1 = a;
+	}
 
 #if defined(DEBUGODOCALIB_RESULTS)
 	printf("alfa2: %f \n", alfa);
@@ -1026,40 +1126,51 @@ void CMotorsCalib::evaluateCalibrationS() {
 	printf("traveled_RT2: %f \n", traveled_RT2);
 #endif
 
-
 	double odometryTraveled_dist1 = this->euclideanDistance(secondodometry,
 			firstodometry);
-	double odometry_angle_error1 =firstodometry[2]-secondodometry[2];
+	double odometry_angle_error1 = firstodometry[2] - secondodometry[2];
 	double odometry_LT1;
 	double odometry_RT1;
-	if(odometry_angle_error1>0){
-			r = (odometryTraveled_dist1/2.0)/tan(abs(odometry_angle_error1)/2.0);
-			odometry_LT1= (r+sin(0.5 * motor->getPosition()[5]) * 0.1375)*odometry_angle_error1;
-			odometry_RT1= (r-sin(0.5 * motor->getPosition()[5]) * 0.1375)*odometry_angle_error1;
-		}else if(odometry_angle_error1<0){
-			r = (odometryTraveled_dist1/2.0)/tan(abs(odometry_angle_error1)/2.0);
-			odometry_LT1= (r-sin(0.5 * motor->getPosition()[5]) * 0.1375)*odometry_angle_error1;
-			odometry_RT1= (r+sin(0.5 * motor->getPosition()[5]) * 0.1375)*odometry_angle_error1;
-		}else{
-			odometry_RT1=odometry_LT1=odometryTraveled_dist1;
-		}
+	if (odometry_angle_error1 > 0) {
+		r = (odometryTraveled_dist1 / 2.0)
+				/ tan(abs(odometry_angle_error1) / 2.0);
+		odometry_LT1 = (r + 0.044)
+				* odometry_angle_error1;
+		odometry_RT1 = (r - 0.044)
+				* odometry_angle_error1;
+	} else if (odometry_angle_error1 < 0) {
+		r = (odometryTraveled_dist1 / 2.0)
+				/ tan(abs(odometry_angle_error1) / 2.0);
+		odometry_LT1 = (r - 0.044)
+				* odometry_angle_error1;
+		odometry_RT1 = (r + 0.044)
+				* odometry_angle_error1;
+	} else {
+		odometry_RT1 = odometry_LT1 = odometryTraveled_dist1;
+	}
 
 	double odometryTraveled_dist2 = this->euclideanDistance(secondodometry,
-				thirdodometry);
-	double odometry_angle_error2 =thirdodometry[2]-secondodometry[2];
+			thirdodometry);
+	double odometry_angle_error2 = thirdodometry[2] - secondodometry[2];
 	double odometry_LT2;
 	double odometry_RT2;
-	if(odometry_angle_error2>0){
-				r = (odometryTraveled_dist2/2.0)/tan(abs(odometry_angle_error2)/2.0);
-				odometry_LT2= (r+sin(0.5 * motor->getPosition()[5]) * 0.1375)*odometry_angle_error2;
-				odometry_RT2= (r-sin(0.5 * motor->getPosition()[5]) * 0.1375)*odometry_angle_error2;
-			}else if(odometry_angle_error2<0){
-				r = (odometryTraveled_dist2/2.0)/tan(abs(odometry_angle_error2)/2.0);
-				odometry_LT2= (r-sin(0.5 * motor->getPosition()[5]) * 0.1375)*odometry_angle_error2;
-				odometry_RT2= (r+sin(0.5 * motor->getPosition()[5]) * 0.1375)*odometry_angle_error2;
-			}else{
-				odometry_RT2=odometry_LT1=odometryTraveled_dist2;
-			}
+	if (odometry_angle_error2 > 0) {
+		r = (odometryTraveled_dist2 / 2.0)
+				/ tan(abs(odometry_angle_error2) / 2.0);
+		odometry_LT2 = (r + 0.044)
+				* odometry_angle_error2;
+		odometry_RT2 = (r - 0.044)
+				* odometry_angle_error2;
+	} else if (odometry_angle_error2 < 0) {
+		r = (odometryTraveled_dist2 / 2.0)
+				/ tan(abs(odometry_angle_error2) / 2.0);
+		odometry_LT2 = (r - 0.044)
+				* odometry_angle_error2;
+		odometry_RT2 = (r + 0.044)
+				* odometry_angle_error2;
+	} else {
+		odometry_RT2 = odometry_LT2 = odometryTraveled_dist2;
+	}
 
 #if defined(DEBUGODOCALIB_RESULTS)
 	printf("odometryTraveled_dist1: %e \n", odometryTraveled_dist1);
@@ -1099,9 +1210,9 @@ void CMotorsCalib::evaluateCalibrationS() {
 	printf("kalib_param_track: %f \n", kalib_param_track);
 #endif
 	//adjust mean values
-	motor->odometry_koef1 = motor->odometry_koef1 * kalib_paramLT;	//left track
-	motor->odometry_koef2 = motor->odometry_koef2 * kalib_paramRT;//right track
-	motor->odometry_koef3 = motor->odometry_koef3 / kalib_param_track;//change track parameter
+	motor->odometry_koef1 = motor->odometry_koef1 * kalib_paramLT; //left track
+	motor->odometry_koef2 = motor->odometry_koef2 * kalib_paramRT; //right track
+	motor->odometry_koef3 = motor->odometry_koef3 / kalib_param_track; //change track parameter
 
 #if defined(DEBUGODOCALIB_RESULTS)
 	printf("motor calibrated\n");
@@ -1119,23 +1230,43 @@ void CMotorsCalib::evaluateCalibrationKB() {
 	double supTravAngle = this->euclideanDistance(firstodometry,
 			secondodometry);
 	double measuredTravAngle = -secondmeasured[1] + firstmeasured[1];
-	this->calibParam1 = measuredTravAngle / supTravAngle;//kolikrát je reálná větší(tímto přenásobit konstantu)
+	float sideParam = measuredTravAngle / supTravAngle; //kolikrát je reálná větší(tímto přenásobit konstantu)
 	//movement right
 	supTravAngle = this->euclideanDistance(thirdodometry, secondodometry);
 	measuredTravAngle = -thirdmeasured[1] + secondmeasured[1];
 	//konečná hodnota je průměrem pohybu doleva a doprava
-	this->calibParam1 = (this->calibParam1 + measuredTravAngle / supTravAngle)
-			/ 2;
+	sideParam = (sideParam + measuredTravAngle / supTravAngle) / 2;
 
 	//movement back
 	supTravAngle = this->euclideanDistance(fourthodometry, secondodometry);
 	measuredTravAngle = fourthmeasured[0] - thirdmeasured[0];
-	this->calibParam2 = measuredTravAngle / supTravAngle;
+	float frontParam = measuredTravAngle / supTravAngle;
 	//movement forward
 	supTravAngle = this->euclideanDistance(fourthodometry, fifthodometry);
 	measuredTravAngle = -fifthmeasured[0] + fourthmeasured[0];
-	this->calibParam2 = (this->calibParam2 + measuredTravAngle / supTravAngle)
-			/ 2;
+	frontParam = (frontParam + measuredTravAngle / supTravAngle) / 2;
+	float diagonala = sqrt(sideParam * sideParam + frontParam * frontParam);
+	float delta = atan(frontParam / sideParam);
+
+	/*
+	 double odo_angle_ch_ef_by_kalib_p = (fourthodometry[2] - thirdodometry[2])
+	 * (kalib_param_down + kalib_param_top) / 2;
+	 double kalib_param_track = measured_angle_change
+	 / odo_angle_ch_ef_by_kalib_p;
+	 motor->odometry_koef3 = motor->odometry_koef3 / kalib_param_track; //
+	 */
+
+	motor->odometry_koef1 = diagonala;
+	motor->odometry_koef2 = frontParam;
+
+#if defined(DEBUGODOCALIB_RESULTS)
+	printf("motor calibrated\n");
+	printf("new koeficients: %e , %e , %e\n", motor->odometry_koef1,
+			motor->odometry_koef2, motor->odometry_koef3);
+#endif
+
+	this->saveCalibResult(motor->odometry_koef1, motor->odometry_koef2,
+			motor->odometry_koef3);
 	//param1 do stran
 	//param2 dopredu
 }
@@ -1172,30 +1303,33 @@ void CMotorsCalib::evaluateCalibrationAW() {
 	printf("angle error: %e \n", angle_error1);
 	printf("angle error: %e \n", angle_error2);
 #endif
-	float null[3]={0,0,0};
+	float null[3] = { 0, 0, 0 };
 
+	double alfa = atan2(firstmeasured[0], firstmeasured[1]);
+	double beta = atan2(secondmeasured[0], secondmeasured[1]);
+	float b = euclideanDistancef(firstmeasured, null);
+	float c = euclideanDistancef(secondmeasured, null);
+	double delta = abs(-beta + alfa + angle_error1);
+	float a = sqrtf(b * b + c * c - 2 * b * c * cos(delta)); //cosine theorem, a is distance between center of robot
 
-	double alfa=atan2(firstmeasured[0],firstmeasured[1]);
-	double beta=atan2(secondmeasured[0],secondmeasured[1]);
-	float b=euclideanDistancef(firstmeasured,null);
-	float c=euclideanDistancef(secondmeasured,null);
-	double delta = abs(-beta+alfa+angle_error1);
-	float a = sqrtf(b*b + c*c - 2*b*c*cos(delta));  //cosine theorem, a is distance between center of robot
-
-	double r=0;		//circular path radius
+	double r = 0; //circular path radius
 
 	float traveled_LT1;
 	float traveled_RT1;
-	if(angle_error1>0){
-		r = (a/2.0)/tan(abs(angle_error1)/2.0);
-		traveled_LT1= (r+sin(0.5 * motor->getPosition()[5]) * 0.1375)*angle_error1;
-		traveled_RT1= (r-sin(0.5 * motor->getPosition()[5]) * 0.1375)*angle_error1;
-	}else if(angle_error1<0){
-		r = (a/2.0)/tan(abs(angle_error1)/2.0);
-		traveled_LT1= (r-sin(0.5 * motor->getPosition()[5]) * 0.1375)*angle_error1;
-		traveled_RT1= (r+sin(0.5 * motor->getPosition()[5]) * 0.1375)*angle_error1;
-	}else{
-		traveled_LT1=traveled_RT1=a;
+	if (angle_error1 > 0) {
+		r = (a / 2.0) / tan(abs(angle_error1) / 2.0);
+		traveled_LT1 = (r + sin(0.5 * motor->getPosition()[5]) * 0.1375)
+				* angle_error1;
+		traveled_RT1 = (r - sin(0.5 * motor->getPosition()[5]) * 0.1375)
+				* angle_error1;
+	} else if (angle_error1 < 0) {
+		r = (a / 2.0) / tan(abs(angle_error1) / 2.0);
+		traveled_LT1 = (r - sin(0.5 * motor->getPosition()[5]) * 0.1375)
+				* angle_error1;
+		traveled_RT1 = (r + sin(0.5 * motor->getPosition()[5]) * 0.1375)
+				* angle_error1;
+	} else {
+		traveled_LT1 = traveled_RT1 = a;
 	}
 
 #if defined(DEBUGODOCALIB_RESULTS)
@@ -1211,26 +1345,30 @@ void CMotorsCalib::evaluateCalibrationAW() {
 #endif
 
 //for traveling back:
-	alfa=atan2(thirdmeasured[0],thirdmeasured[1]);
-	beta=atan2(secondmeasured[0],secondmeasured[1]);
-	b=euclideanDistancef(thirdmeasured,null);
-	c=euclideanDistancef(secondmeasured,null);
-	delta = abs(-beta+alfa+angle_error2);
-	a = sqrtf(b*b + c*c - 2*b*c*cos(delta));
+	alfa = atan2(thirdmeasured[0], thirdmeasured[1]);
+	beta = atan2(secondmeasured[0], secondmeasured[1]);
+	b = euclideanDistancef(thirdmeasured, null);
+	c = euclideanDistancef(secondmeasured, null);
+	delta = abs(-beta + alfa + angle_error2);
+	a = sqrtf(b * b + c * c - 2 * b * c * cos(delta));
 
 	float traveled_LT2;
 	float traveled_RT2;
-		if(angle_error1>0){
-			r = (a/2.0)/tan(abs(angle_error2)/2.0);
-			traveled_LT2= (r+sin(0.5 * motor->getPosition()[5]) * 0.1375)*angle_error1;
-			traveled_RT2= (r-sin(0.5 * motor->getPosition()[5]) * 0.1375)*angle_error1;
-		}else if(angle_error1<0){
-			r = (a/2.0)/tan(abs(angle_error2)/2.0);
-			traveled_LT2= (r-sin(0.5 * motor->getPosition()[5]) * 0.1375)*angle_error1;
-			traveled_RT2= (r+sin(0.5 * motor->getPosition()[5]) * 0.1375)*angle_error1;
-		}else{
-			traveled_LT2=traveled_RT1=a;
-		}
+	if (angle_error2 > 0) {
+		r = (a / 2.0) / tan(abs(angle_error2) / 2.0);
+		traveled_LT2 = (r + sin(0.5 * motor->getPosition()[5]) * 0.1375)
+				* angle_error2;
+		traveled_RT2 = (r - sin(0.5 * motor->getPosition()[5]) * 0.1375)
+				* angle_error2;
+	} else if (angle_error2 < 0) {
+		r = (a / 2.0) / tan(abs(angle_error2) / 2.0);
+		traveled_LT2 = (r - sin(0.5 * motor->getPosition()[5]) * 0.1375)
+				* angle_error2;
+		traveled_RT2 = (r + sin(0.5 * motor->getPosition()[5]) * 0.1375)
+				* angle_error2;
+	} else {
+		traveled_LT2 = traveled_RT1 = a;
+	}
 
 #if defined(DEBUGODOCALIB_RESULTS)
 	printf("alfa2: %f \n", alfa);
@@ -1244,40 +1382,51 @@ void CMotorsCalib::evaluateCalibrationAW() {
 	printf("traveled_RT2: %f \n", traveled_RT2);
 #endif
 
-
 	double odometryTraveled_dist1 = this->euclideanDistance(secondodometry,
 			firstodometry);
-	double odometry_angle_error1 =firstodometry[2]-secondodometry[2];
+	double odometry_angle_error1 = firstodometry[2] - secondodometry[2];
 	double odometry_LT1;
 	double odometry_RT1;
-	if(odometry_angle_error1>0){
-			r = (odometryTraveled_dist1/2.0)/tan(abs(odometry_angle_error1)/2.0);
-			odometry_LT1= (r+sin(0.5 * motor->getPosition()[5]) * 0.1375)*odometry_angle_error1;
-			odometry_RT1= (r-sin(0.5 * motor->getPosition()[5]) * 0.1375)*odometry_angle_error1;
-		}else if(odometry_angle_error1<0){
-			r = (odometryTraveled_dist1/2.0)/tan(abs(odometry_angle_error1)/2.0);
-			odometry_LT1= (r-sin(0.5 * motor->getPosition()[5]) * 0.1375)*odometry_angle_error1;
-			odometry_RT1= (r+sin(0.5 * motor->getPosition()[5]) * 0.1375)*odometry_angle_error1;
-		}else{
-			odometry_RT1=odometry_LT1=odometryTraveled_dist1;
-		}
+	if (odometry_angle_error1 > 0) {
+		r = (odometryTraveled_dist1 / 2.0)
+				/ tan(abs(odometry_angle_error1) / 2.0);
+		odometry_LT1 = (r + sin(0.5 * motor->getPosition()[5]) * 0.1375)
+				* odometry_angle_error1;
+		odometry_RT1 = (r - sin(0.5 * motor->getPosition()[5]) * 0.1375)
+				* odometry_angle_error1;
+	} else if (odometry_angle_error1 < 0) {
+		r = (odometryTraveled_dist1 / 2.0)
+				/ tan(abs(odometry_angle_error1) / 2.0);
+		odometry_LT1 = (r - sin(0.5 * motor->getPosition()[5]) * 0.1375)
+				* odometry_angle_error1;
+		odometry_RT1 = (r + sin(0.5 * motor->getPosition()[5]) * 0.1375)
+				* odometry_angle_error1;
+	} else {
+		odometry_RT1 = odometry_LT1 = odometryTraveled_dist1;
+	}
 
 	double odometryTraveled_dist2 = this->euclideanDistance(secondodometry,
-				thirdodometry);
-	double odometry_angle_error2 =thirdodometry[2]-secondodometry[2];
+			thirdodometry);
+	double odometry_angle_error2 = thirdodometry[2] - secondodometry[2];
 	double odometry_LT2;
 	double odometry_RT2;
-	if(odometry_angle_error2>0){
-				r = (odometryTraveled_dist2/2.0)/tan(abs(odometry_angle_error2)/2.0);
-				odometry_LT2= (r+sin(0.5 * motor->getPosition()[5]) * 0.1375)*odometry_angle_error2;
-				odometry_RT2= (r-sin(0.5 * motor->getPosition()[5]) * 0.1375)*odometry_angle_error2;
-			}else if(odometry_angle_error2<0){
-				r = (odometryTraveled_dist2/2.0)/tan(abs(odometry_angle_error2)/2.0);
-				odometry_LT2= (r-sin(0.5 * motor->getPosition()[5]) * 0.1375)*odometry_angle_error2;
-				odometry_RT2= (r+sin(0.5 * motor->getPosition()[5]) * 0.1375)*odometry_angle_error2;
-			}else{
-				odometry_RT2=odometry_LT1=odometryTraveled_dist2;
-			}
+	if (odometry_angle_error2 > 0) {
+		r = (odometryTraveled_dist2 / 2.0)
+				/ tan(abs(odometry_angle_error2) / 2.0);
+		odometry_LT2 = (r + sin(0.5 * motor->getPosition()[5]) * 0.1375)
+				* odometry_angle_error2;
+		odometry_RT2 = (r - sin(0.5 * motor->getPosition()[5]) * 0.1375)
+				* odometry_angle_error2;
+	} else if (odometry_angle_error2 < 0) {
+		r = (odometryTraveled_dist2 / 2.0)
+				/ tan(abs(odometry_angle_error2) / 2.0);
+		odometry_LT2 = (r - sin(0.5 * motor->getPosition()[5]) * 0.1375)
+				* odometry_angle_error2;
+		odometry_RT2 = (r + sin(0.5 * motor->getPosition()[5]) * 0.1375)
+				* odometry_angle_error2;
+	} else {
+		odometry_RT2 = odometry_LT2 = odometryTraveled_dist2;
+	}
 
 #if defined(DEBUGODOCALIB_RESULTS)
 	printf("odometryTraveled_dist1: %e \n", odometryTraveled_dist1);
@@ -1290,7 +1439,6 @@ void CMotorsCalib::evaluateCalibrationAW() {
 	printf("odometry_RT2: %f \n", odometry_RT2);
 
 #endif
-
 
 #if defined(DEBUGODOCALIB_RESULTS)
 	printf("old koeficients: %e , %e , %e\n", motor->odometry_koef1,
@@ -1319,9 +1467,9 @@ void CMotorsCalib::evaluateCalibrationAW() {
 	printf("kalib_param_track: %f \n", kalib_param_top);
 #endif
 	//adjust mean values
-	motor->odometry_koef1 = motor->odometry_koef1 * kalib_param_down;//left down wheel , right down wheel
-	motor->odometry_koef2 = motor->odometry_koef2 * kalib_param_top;//top wheel
-	motor->odometry_koef3 = motor->odometry_koef3 / kalib_param_track;	//
+	motor->odometry_koef1 = motor->odometry_koef1 * kalib_param_down; //left down wheel , right down wheel
+	motor->odometry_koef2 = motor->odometry_koef2 * kalib_param_top; //top wheel
+	motor->odometry_koef3 = motor->odometry_koef3 / kalib_param_track; //
 
 #if defined(DEBUGODOCALIB_RESULTS)
 	printf("motor calibrated\n");
@@ -1331,25 +1479,6 @@ void CMotorsCalib::evaluateCalibrationAW() {
 
 	this->saveCalibResult(motor->odometry_koef1, motor->odometry_koef2,
 			motor->odometry_koef3);
-}
-
-void CMotorsCalib::convertCameraMeasurementS(float* measuredpos) {
-	measuredpos[0] = measuredpos[0] + 0.049;
-	measuredpos[1] = measuredpos[1] - 0.018;
-}
-
-void CMotorsCalib::convertCameraMeasurementAW(float* measuredpos, float hinge) {
-	measuredpos[0] = measuredpos[0] + 0.04;
-	measuredpos[1] = sin(hinge / 2) * 0.05
-			+ (-cos((PI / 2) - (hinge / 2)) * measuredpos[1]
-					+ sin((PI / 2) - (hinge / 2)) * measuredpos[3]);
-	measuredpos[2] = -measuredpos[2];
-}
-
-void CMotorsCalib::convertCameraMeasurementKB(float* measuredpos) {
-	//domer
-	measuredpos[0] = measuredpos[0] + 0.04;
-	measuredpos[1] = measuredpos[1] + 0.018;
 }
 
 void CMotorsCalib::filter(float* tofilter, float measuredpos[]) {

@@ -77,7 +77,7 @@ public:
 	~CLeds();
 
 	//! Initialize the leds, calibrate the MSP stuff
-	void init();
+	bool init();
 
 	//! Do the calibration now, if turn_around use the wheels to turn around
 	void calibrate(bool turn_around = true);
@@ -99,6 +99,9 @@ public:
 
 	//! Get the proximity led with index i
 	int proximity(int i, bool offset=true);
+
+	//! Clear all histogram info
+	void reset();
 
 	//! Update all sensors (includes waiting time)
 	void update();
@@ -166,11 +169,11 @@ private:
 
 	std::vector<int32_t> offset_proximity;
 
-	float variance_reflective;
+	std::vector<int32_t> variance_reflective;
 
-	float variance_ambient;
+	std::vector<int32_t> variance_ambient;
 
-	float variance_proximity;
+	std::vector<int32_t> variance_proximity;
 
 	//! Store the ir-values
 	std::vector<IRValues> ir_values;
@@ -191,6 +194,11 @@ private:
 
     pthread_t ircomm_rx_thread;
 
+    bool enable_reflective;
+
+    bool enable_ambient;
+
+    bool enable_proximity;
 public:
 	pthread_mutex_t ir_rx_mutex;
 

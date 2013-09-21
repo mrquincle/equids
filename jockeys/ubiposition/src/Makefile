@@ -18,9 +18,6 @@ endif
 # Optional global makefile overriding (cross)compiler settings etc.
 -include /etc/robot/overwrite.mk
 
-# Optional local jockey file for specific options for this jockey
--include jockey.mk
-
 ####################################################################################
 # List the directories you want to include from the "bridles" 
 ####################################################################################
@@ -29,74 +26,75 @@ SUBDIRS+=ubisencePosition
 SUBDIRS+=eth
 SUBDIRS+=main
 
-####################################################################################
-# Name of the final binary
-####################################################################################
-
-TARGET=ubiposition
-
-####################################################################################
-# Content of Makefile
-####################################################################################
-
-# Make temporary targets for cleaning and copying
-CLEAN_SUBDIRS=$(addsuffix .clean,$(SUBDIRS))
-COPY_SUBDIRS=$(addsuffix .copy,$(SUBDIRS))
-
-# Blob for all object files
 OBJS=$(wildcard ../obj/*.o)
 
-# Target to build
-$(TARGET): check-env all
+
+# Expects now an IROBOTPATH that is set globally or in the /etc/robot/overwrite.mk directory
+CXXFLAGS+=-DBOOST_NO_INTRINSIC_WCHAR_T -DBLACKFIN
+LDFLAGS+=-DBOOST_NO_INTRINSIC_WCHAR_T -DBLACKFIN -s -L$(WAPI_PATH) -lWAPI
+COPY_ETC_CMD=../etc/copy.sh
+COPY_ETC_SRC=../etc
+COPY_ETC_DST=../bin
+
+ifeq ($(MULTI_CONTROLLER),true)
+LXXMULTI=-lrt
+endif
+
+ubiposition: all obj
 	$(CXX) $(CXXDEFINE) -o ../bin/$@ $(OBJS) $(CXXFLAGS) $(LDFLAGS) 
 	$(STRIP) ../bin/$@
 	$(CSIZE) ../bin/$@
 
-# Check the environmental variable EQUID_PATH
-check-env:
-ifndef EQUID_PATH
-	$(warning Warning: EQUID_PATH is undefined.)
-endif
-
-# Upload target to robot, strips it and cats it over port 7878
+#	$(CXX) $(CXXDEFINE) -o ../bin/$@ $(OBJS) $(CXXFLAGS) $(LXXLIBS) -lpthread -Ldrive 
+#	/opt/uClinux12/bfin-linux-uclibc/bin/bfin-linux-uclibc-strip ../bin/$@
+#	cp ../bin/$@ ../../../poslat/$@
+#	rcp ../bin/$@ root@192.168.2.15:/flash/
 #	rcp ../bin/$@ root@192.168.0.205:/flash/
 upload: all obj
-	$(STRIP) ../bin/$(TARGET)
-	cat ../bin/$(TARGET) | netcat -l -p 7878 
+	cat ../bin/robotServer|netcat -l -p  10000 
 
-# Default build target
-all: clean create-dirs build-subdirs copy-subdirs
 
-# Default clean target
-clean: clean-subdirs
-	@echo "Cleaning all objects and binaries in parent directory"
+all:
+	echo $(OPSYS)
+	@for i in $(SUBDIRS) ;\
+	do \
+	echo "making" all "in $(CURRENT_DIR)/$$i..."; \
+	$(MAKE) -C $$i all; \
+	done
+
+obj: all
+	echo "Copy objs"
+	@for i in $(SUBDIRS) ;\
+	do \
+	echo "coping all in $(CURRENT_DIR)/$$i..."; \
+	cp $$i/*.o ../obj; \
+	done
+
+etc: ../bin/.etc
+
+	#cp -r ../etc/$$i ../bin; \
+	#
+../bin/.etc:
+	echo "Copy dirs from etc"
+	$(COPY_ETC_CMD) $(COPY_ETC_SRC) $(COPY_ETC_DST)
+	touch ../bin/.etc
+
+cleanetc:
+	rm -f ../bin/.etc	
+
+	#cp -r ../etc/$$i ../bin; 
+forceetc:
+	echo "Copy dirs from etc"
+	$(COPY_ETC_CMD) $(COPY_ETC_SRC) $(COPY_ETC_DST)
+	touch ../bin/.etc
+
+clean:
+	echo $(OPSYS)
+	@for i in $(SUBDIRS) ;\
+	do \
+	echo "cleaning" all "in $(CURRENT_DIR)/$$i..."; \
+	$(MAKE) -C $$i clean; \
+	done
+	echo "cleaning all objs"
 	rm -f ../obj/*.o
-	rm -f ../bin/$(TARGET)
-
-# Create directories where binaries and objects are stored
-create-dirs:
-	@echo "Create target directories"
-	mkdir -p ../obj
-	mkdir -p ../bin
-
-# Collect build, clean, and copy targets
-build-subdirs: $(SUBDIRS)
-clean-subdirs: $(CLEAN_SUBDIRS)
-copy-subdirs: $(COPY_SUBDIRS)
-
-# What to do on make:
-$(SUBDIRS):
-	@echo "make $@"
-	$(MAKE) -C $@
-
-# What to do on make clean:
-$(CLEAN_SUBDIRS): %.clean:
-	$(MAKE) -C $* clean 
-
-# What to do on make copy:
-$(COPY_SUBDIRS): %.copy:
-	@echo "Copy objects from $* to \"obj\" directory"
-	cp $*/*.o ../obj;
-
-.PHONY: $(TARGET) all $(SUBDIRS) clean clean-subdirs $(CLEAN_SUBDIRS) copy-subdirs $(COPY_SUBDIRS)
-
+	rm -f ../bin/*

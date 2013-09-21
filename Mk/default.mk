@@ -18,6 +18,8 @@ SELF_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 # Overwrite them in paths.local.mk and do not commit that file
 include $(SELF_DIR)/paths.mk
 
+include $(SELF_DIR)/local.mk
+
 ####################################################################################
 # Define your target
 ####################################################################################
@@ -27,14 +29,14 @@ include $(SELF_DIR)/paths.mk
 # be propagated to the compiler, so you can use #ifdef TARGET_PLATFORM==HOST in your
 # code to distinguish the robot use case from the one running on your laptop.
 #TARGET_PLATFORM=RASPBERRY, BLACKFIN, or HOST
-TARGET_PLATFORM?=BLACKFIN
+TARGET_PLATFORM=BLACKFIN
 #TARGET_PLATFORM=HOST
 
 # There are currently only two types of middleware targets supported, there is the
 # IROBOT middleware from Stuttgart and there is the HDMR middleware from Karlsruhe.
 # The IROBOT middleware has nothing with the iRobot / Roomba robot.
 #TARGET_MIDDLEWARE=HDMR
-TARGET_MIDDLEWARE?=IROBOT
+TARGET_MIDDLEWARE=IROBOT
 
 ####################################################################################
 # Specific macros for the academic Replicator robots
@@ -50,7 +52,7 @@ COMPILER_PREFIX=
 TARGET=
 
 ####################################################################################
-# When just compiling for host
+# Defined for includes of other libraries
 ####################################################################################
 
 ifeq ($(TARGET_PLATFORM),HOST)
@@ -81,8 +83,8 @@ CROSS_COMPILER_INCLUDE_PATH:=$(GENERAL_SOFTWARE_PATH)/uClinux/$(COMPILER)/$(COMP
 RUNTIME_PATH=$(RUNTIME_PATH_ROOT)/blackfin/usr
 
 # Target the (dual-core) Blackfin 561 architecture
-CXXFLAGS=-mcpu=bf561
-CFLAGS=-mcpu=bf561 
+CXXFLAGS=-mcpu=bf561 -std=c++0x
+CFLAGS=-mcpu=bf561 -std=c++0x
 
 # Special stack-size options, default size is 128k (0x20000), double it to 256k
 # http://docs.blackfin.uclinux.org/doku.php?id=uclinux-dist:debugging_applications
@@ -130,11 +132,13 @@ endif
 MIDDLEWARE_INCLUDES=
 MIDDLEWARE_LIBS=
 
+WAPI_PATH=$(MIDDLEWARE_PATH_ROOT)/equids/libs/wapi
+
 ifeq ($(TARGET_MIDDLEWARE),HDMR)
 
 HDMR_PATH=$(MIDDLEWARE_PATH_ROOT)/hdmrplus_install
 SOAP_PATH=$(MIDDLEWARE_PATH_ROOT)/gsoap-2.8.7
-WAPI_PATH=/data/blackfin/usr
+
 
 MIDDLEWARE_INCLUDES=-I$(HDMR_PATH)/include -I$(SOAP_PATH)/gsoap 
 MIDDLEWARE_LIBS=-L$(HDMR_PATH)/lib -L$(SOAP_PATH)/gsoap -lirobot_app \
@@ -154,6 +158,11 @@ IROBOT_PATH=$(MIDDLEWARE_PATH_ROOT)/irobot
 
 MIDDLEWARE_INCLUDES=-I$(IROBOT_PATH)/include #-I$(LIBCAM_PATH)/include 
 MIDDLEWARE_LIBS=-L$(IROBOT_PATH)/lib -lirobot
+endif
+
+ifeq ($(ZIGBEE),true)
+MIDDLEWARE_INCLUDES+=-I$(WAPI_PATH)/include
+MIDDLEWARE_LIBS+=-L$(WAPI_PATH) -lWAPI
 endif
 
 ####################################################################################

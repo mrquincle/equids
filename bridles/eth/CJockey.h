@@ -50,6 +50,7 @@ public:
 	void stop(bool wait_acknow);
 	void addRedirection(int redirectTo, TMessageType redirectedMessT);
 	void removeRedirection(int redirectTo, TMessageType redirectedMessT);
+	void removeAllRedirections(){redirectinTable.clear();};
 	bool started;
 	CMessage getMessage();
 private:

@@ -17,12 +17,13 @@
 
 #ifndef __CCAMERA_H__
 #define __CCAMERA_H__
+
 #include "CRawImage.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-
+#include <semaphore.h>
 
 class CCamera {
 public:
@@ -32,6 +33,9 @@ public:
 
 	//! If you want to initialize a real camera
 	int Init(const char *deviceName, int &devfd, int width, int height);
+
+	//! Set semaphore if you want to get only a new image if e.g. streaming is successful
+	void setSemaphore(sem_t *cap_sem);
 
 	//! If you want to load images from a directory use this "dummy" camera
 	int dummyInit(const char *directoryName, const char *prefixImage);
@@ -82,6 +86,12 @@ private:
 
 	int pixel_format;
 	bool print_debug;
+
+	bool flip_camera;
+
+	bool semaphore_set;
+
+	sem_t *capture_sem;
 };
 
 #endif

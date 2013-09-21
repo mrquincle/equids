@@ -27,7 +27,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cassert>
-
+#include <algorithm>
 #include <iostream>
 
 //! Declare the following as unmangled C functions
@@ -39,17 +39,17 @@ extern "C" {
 #include <CCamera.h>
 
 #define ASSERT(condition) { \
-	if(!(condition)){ \
-		std::cerr << "ASSERT FAILED: " << #condition << " @ " << __FILE__ << " (" << __LINE__ << ")" << std::endl; \
-		assert(condition); \
-	} \
-	}
+		if(!(condition)){ \
+			std::cerr << "ASSERT FAILED: " << #condition << " @ " << __FILE__ << " (" << __LINE__ << ")" << std::endl; \
+			assert(condition); \
+		} \
+}
 
 #define ASSERT_EQUAL(x,y) \
-	if (x != y) { \
-		std::cout << #x << " != " << #y ", specifically: " << x << " != " << y << std::endl; \
-		assert(x == y); \
-	}
+		if (x != y) { \
+			std::cout << #x << " != " << #y ", specifically: " << x << " != " << y << std::endl; \
+			assert(x == y); \
+		}
 
 
 //-----------------------------------------------------------------------------
@@ -109,6 +109,8 @@ CCamera::CCamera(): width(DEFAULT_IMAGE_WIDTH), height(DEFAULT_IMAGE_HEIGHT),
 	camdevfd = -1;
 	pixel_format = V4L2_PIX_FMT_YUYV;
 	print_debug = false;
+	semaphore_set = false;
+	flip_camera = false;
 	ASSERT_EQUAL(defaultImage.getwidth(), width);
 }
 
@@ -146,6 +148,23 @@ int CCamera::Init(const char *deviceName, int &devfd, int width, int height)
 	start_capturing(devfd);
 #endif
 
+	// use an environmental variable FLIP_CAMERA, by default flip camera is false
+	flip_camera = false;
+	char *str_flip_camera = getenv("FLIP_CAMERA");
+	if (str_flip_camera) {
+		std::string s = std::string(str_flip_camera);
+		std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+		if (s == "true") {
+			flip_camera = true;
+		}
+	}
+
+	if (flip_camera) {
+		printf("Camera will be flipped\n");
+	} else {
+		printf("Camera will not be flipped\n");
+	}
+
 	// we will need to capture a few images to get rid of the greenish pictures in the beginning
 	printf("We capture 10 images to get rid of greenish pictures in the beginning\n");
 	for (int i = 0; i < 10; ++i) {
@@ -153,6 +172,11 @@ int CCamera::Init(const char *deviceName, int &devfd, int width, int height)
 	}
 	printf("Finished capturing\n");
 	return 0;
+}
+
+void CCamera::setSemaphore(sem_t *cap_sem) {
+	capture_sem = cap_sem;
+	semaphore_set = true;
 }
 
 /**
@@ -203,6 +227,11 @@ void CCamera::Stop() {
  */
 int CCamera::renewImage(CRawImage* image, bool convert, bool swap)
 {
+	if (semaphore_set) {
+		std::cout << "Wait for semaphore (from e.g. streaming thread)" << std::endl;
+		sem_wait(capture_sem);
+	}
+
 	if (dummy_mode) return dummyImage(image);
 
 	size_t yuv_size = width*height*2;
@@ -223,10 +252,10 @@ int CCamera::renewImage(CRawImage* image, bool convert, bool swap)
 	if (save_images) {
 		char fileName[256];
 		sprintf(fileName, "%s%04i.jpg", "image", ++saveFileIndex);
-//		yuyv_to_uyvy((unsigned char*)b.start, width, height); // jpeg function does not read YUYV format properly
+		//		yuyv_to_uyvy((unsigned char*)b.start, width, height); // jpeg function does not read YUYV format properly
 		fprintf(stderr, "Removed jpeg support. Seems overkill on a robot.\n");
-//		save_jpeg_image((unsigned char*)b.start, height, width, fileName);
-//		yuyv_to_uyvy((unsigned char*)b.start, width, height); // transform back
+		//		save_jpeg_image((unsigned char*)b.start, height, width, fileName);
+		//		yuyv_to_uyvy((unsigned char*)b.start, width, height); // transform back
 	}
 
 	if (convert) {
@@ -236,7 +265,9 @@ int CCamera::renewImage(CRawImage* image, bool convert, bool swap)
 		memcpy(image->data,buffer,yuv_size);
 	}
 
-	if(swap){image->swap();}
+	if(swap){
+		image->swap(CC_RED, CC_BLUE);
+	}
 
 	return 0; 
 }
@@ -320,8 +351,15 @@ void CCamera::yuv422_to_rgb(unsigned char * output_ptr, unsigned char * input_pt
 	unsigned char Y0, Y1, U, V;
 	unsigned char *buff = input_ptr;
 	unsigned char *output_pt = output_ptr;
+
 	size = width_times_height / 4;  // make the size 640x480 / 2 and fill output with buffer of size 6x
+
+	if (flip_camera) {
+		output_pt += 6*size - 1;
+	}
+
 	for (i = 0; i < size; ++i) {
+		// pick the Y, Y, U, V pixels from the right places
 		if (pixel_format == V4L2_PIX_FMT_YUYV) {
 			Y0 = buff[0];
 			U  = buff[1];
@@ -340,18 +378,35 @@ void CCamera::yuv422_to_rgb(unsigned char * output_ptr, unsigned char * input_pt
 		}
 		buff += 4;
 
-		*output_pt++ = YUV2R(Y0, U, V); // red is at the right place, does have nothing to do with "U", only with Y0 and V
-		*output_pt++ = YUV2G(Y0, U, V); // too green
-		*output_pt++ = YUV2B(Y0, U, V); // too yellow
+		if (flip_camera) {
+			*output_pt-- = YUV2B(Y0, U, V);
+			*output_pt-- = YUV2G(Y0, U, V);
+			*output_pt-- = YUV2R(Y0, U, V);
 
-		*output_pt++ = YUV2R(Y1, U, V);
-		*output_pt++ = YUV2G(Y1, U, V);
-		*output_pt++ = YUV2B(Y1, U, V);
+			*output_pt-- = YUV2B(Y1, U, V);
+			*output_pt-- = YUV2G(Y1, U, V);
+			*output_pt-- = YUV2R(Y1, U, V);
+
+		} else {
+			// make two RGB pixels from the YYUV values
+
+			*output_pt++ = YUV2R(Y0, U, V); // red is at the right place, does have nothing to do with "U", only with Y0 and V
+			*output_pt++ = YUV2G(Y0, U, V); // too green
+			*output_pt++ = YUV2B(Y0, U, V); // too yellow
+
+			*output_pt++ = YUV2R(Y1, U, V);
+			*output_pt++ = YUV2G(Y1, U, V);
+			*output_pt++ = YUV2B(Y1, U, V);
+		}
 	}
 
-	if (print_debug)
-		printf("Compare %i with %i\n", (int)(output_pt - output_ptr), (int)(height*width*3));
-	assert((output_pt - output_ptr) == height*width*3);
+	if (flip_camera) {
+		assert((output_pt - output_ptr) == -1);
+	} else {
+		if (print_debug)
+			printf("Compare %i with %i\n", (int)(output_pt - output_ptr), (int)(height*width*3));
+		assert((output_pt - output_ptr) == height*width*3);
+	}
 }
 
 void swap(unsigned char *x, unsigned char *y) {

@@ -60,8 +60,15 @@ void LaserScanController::initRobotPeriphery() {
 	motors = new CMotors(robot, robot_type);
 	motors->init();
 
-	if (robot_id == 217) {
-		motors->reversed(true);
+	// use an environmental variable STREAM_ONLY_CAMERA, by default flip camera it is false
+	create_mosaic = true;
+	char *str_stream_only_camera = getenv("STREAM_ONLY_CAMERA");
+	if (str_stream_only_camera) {
+		std::string s = std::string(str_stream_only_camera);
+		std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+		if (s == "true") {
+			create_mosaic = false;
+		}
 	}
 
 	initialized_periphery = true;
@@ -73,6 +80,11 @@ bool LaserScanController::initialized() {
 		return false;
 	}
 	return true;
+}
+
+void LaserScanController::setSemaphore(sem_t *cap_sem) {
+	capture_sem = cap_sem;
+	semaphore_set = true;
 }
 
 void LaserScanController::motorCommand(MotorCommand &motorCommand) {
@@ -95,7 +107,24 @@ void LaserScanController::sendDetectedObject(MappedObjectPosition &position) {
 	ObjectType object;
 	int distance;
 
+	//	if (streaming) {
+	//		if (sem_wait(imageSem) == -1) {
+	//			std::cerr << "Fail to sem_wait image semaphore" << std::endl;
+	//		} else {
+	//			if (log_level >= LOG_DEBUG) std::cout << "Waited for CImageServer through semaphore" << std::endl;
+	//		}
+	//	}
+
 	scan->GetRecognizedObject(object, distance);
+
+	//	if (streaming) {
+	//		if (sem_post(imageSem) == -1) {
+	//			std::cerr << "Fail to sem_post image semaphore" << std::endl;
+	//		} else {
+	//			if (log_level >= LOG_DEBUG) std::cout << "Signaled CImageServer through semaphore" << std::endl;
+	//		}
+	//	}
+
 	switch(object) {
 	case O_WALL:
 		position.type = WALL;
@@ -113,8 +142,9 @@ void LaserScanController::sendDetectedObject(MappedObjectPosition &position) {
 
 	std::cout << "Detected object" << std::endl;
 	switch (object) {
-	case O_SMALL_STEP: std::cout << small << std::endl << step << std::endl; break;
-	case O_LARGE_STEP: std::cout << large << std::endl << step << std::endl; break;
+	case O_SMALL_STEP: case O_LARGE_STEP: std::cout << step << std::endl; break;
+//	case O_SMALL_STEP: std::cout << small << std::endl << step << std::endl; break;
+	//case O_LARGE_STEP: std::cout << large << std::endl << step << std::endl; break;
 	case O_WALL: std::cout << wall << std::endl; break;
 	}
 
@@ -152,12 +182,19 @@ void LaserScanController::tick() {
 	if (!initialized()) return;
 
 	int distance = 0;
+
+	if (semaphore_set) {
+		std::cout << "Wait for semaphore (from e.g. streaming thread)" << std::endl;
+		sem_wait(capture_sem);
+	}
+
 	scan->GetDistance(distance);
 	std::cout << "Distance: " << distance << " cm" << std::endl;
 
 	if (streaming) {
 
 		if (create_mosaic) {
+			assert(mosaic_image != NULL);
 
 			if (log_level >= LOG_DEBUG) std::cout << "Compress images so they fit one mosaic image" << std::endl;
 			// fill for patches
@@ -180,7 +217,10 @@ void LaserScanController::tick() {
 		if (sem_post(imageSem) == -1) {
 			std::cerr << "Fail to sem_post image semaphore" << std::endl;
 		} else {
-			if (log_level >= LOG_DEBUG) std::cout << "Signalled CImageServer through semaphore" << std::endl;
+			//			if (log_level >= LOG_DEBUG)
+			int value;
+			sem_getvalue(imageSem, &value);
+			std::cout << "Signaled CImageServer through incrementing semaphore to " << value << std::endl;
 		}
 	}
 
@@ -192,7 +232,7 @@ void LaserScanController::pause() {
 	if (motors != NULL) {
 		if (log_level >= LOG_DEBUG) std::cout << "Stop motors" << std::endl;
 		motors->set_to_zero();
-//		motors->halt();
+		//		motors->halt();
 		sleep(1);
 	}
 	CController::pause();
@@ -201,13 +241,18 @@ void LaserScanController::pause() {
 void LaserScanController::startVideoStream(std::string port) {
 	if (log_level >= LOG_DEBUG) printf("%s(): configure streaming of images...\n", __func__);
 
-	mosaic_image = new CRawImage(640,480,3);
 
 	assert (scan != NULL);
 	images[0] = scan->getRedDiffImg();
 	images[1] = scan->getRGBDiffImg();
 	images[2] = scan->getImg1();
 	images[3] = scan->getImg2();
+
+	if (create_mosaic) {
+		mosaic_image = new CRawImage(640,480,3);
+	} else {
+		mosaic_image = images[2];
+	}
 
 	for (int i = 0; i < 4; i++)
 		assert (images[i] != NULL);
@@ -218,13 +263,14 @@ void LaserScanController::startVideoStream(std::string port) {
 		for (int i = 0; i < 4; i++) {
 			patch[i].init(640/2, 480/2);
 		}
-
 	}
 
 	sem_init(imageSem, 0, 0); // do not send first image, only at sem_post, see below
 
 	image_server = new CImageServer(imageSem, mosaic_image);
 	image_server->initServer(port.c_str());
+	//scan->GetCamera().setSemaphore(&image_server->captureSem); // does not work, there are multiple images
+	setSemaphore(&image_server->captureSem);
 
 	if (log_level >= LOG_DEBUG) printf("%s(): create semaphore for streaming images at the right moment...\n", __func__);
 

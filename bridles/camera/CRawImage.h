@@ -23,6 +23,10 @@
  */
 typedef unsigned char VALUE_TYPE;
 
+enum ColorChannel { CC_RED = 0, CC_GREEN = 1, CC_BLUE = 2};
+
+enum Orientation { O_VERTICAL, O_HORIZONTAL };
+
 /**
  * This is a very basic implementation of an image. It just uses three char's, one for each of the color channels.
  * Nothing fancy, no padding. Moreover, this struct is only used for communication with the user. The internal structure
@@ -34,6 +38,10 @@ struct Pixel {
 	VALUE_TYPE b;
 	Pixel(): r(0), g(0), b(0) {};
 	Pixel(VALUE_TYPE r, VALUE_TYPE g, VALUE_TYPE b): r(r), g(g), b(b) {};
+
+	Pixel operator=(const Pixel & other) {
+		return Pixel((other.r),(other.g),(other.b));
+	}
 
 	Pixel operator+(const Pixel & other) {
 		return Pixel((r+other.r),(g+other.g),(b+other.b));
@@ -116,6 +124,12 @@ public:
 	//! Set a pixel in the picture
 	void setPixel(int x, int y, Pixel pixel);
 
+	//! Swap pixel(!) at [x0,y0] with [x1,y1], only valid if bpp=3!
+	void swap(int x0, int y0, int x1, int y1);
+
+	//! Swap pixel p0 with p1
+	void swap(Pixel p0, Pixel p1);
+
 	//! Set the patch
 	void setPatch(int p_x, int p_y, Patch &patch);
 
@@ -156,7 +170,10 @@ public:
 	bool loadBmp(const char* name);
 
 	//! Swap the R and B channel if the image contains RGB values
-	void swap();
+	void swap(const ColorChannel channel1, const ColorChannel channel2);
+
+	//! Flip vertically or horizontally
+	void flip(const Orientation orientation);
 
 	//! Set the right BMP header, depends on dimensions, bpp, etc.
 	void updateHeader();

@@ -6,16 +6,37 @@
 #include <gsl/gsl_linalg.h>
 #include <stdio.h>
 #include <iostream>
+#include <string>
+
 CTransformation::CTransformation(int widthi, int heighti, float diam,
-		bool fullUnbarreli) {
+		RobotBase::RobotType robot_type, bool fullUnbarreli) {
 	transformType = TRANSFORM_NONE;
 	fullUnbarrel = fullUnbarreli;
 	width = widthi;
 	height = heighti;
 	char dummy[1000];
 	FILE* file;
-	if (!(file = fopen("./Calib_Results.m", "r"))) {
-		std::cout << "CANNOT FIND CALIBRESULTS" << std::endl;
+	std::string filename;
+	switch (robot_type) {
+	case RobotBase::ACTIVEWHEEL: {
+		filename = "/flash/cameraCalibration/Calib_ResultsAW.m";
+	}
+		;
+		break;
+	case RobotBase::KABOT: {
+		filename = "/flash/cameraCalibration/Calib_ResultsKIT.m";
+	}
+		;
+		break;
+	default: {
+		filename = "/flash/cameraCalibration/Calib_ResultsSC.m";
+	}
+		;
+		break;
+	}
+
+	if (!(file = fopen(filename.c_str(), "r"))) {
+		std::cout << "CANNOT FIND CALIBRESULTS IN " << filename << std::endl;
 	}
 	trackedObjectDiameter = diam;
 

@@ -31,6 +31,7 @@
 #include <inttypes.h>
 #include <IRobot.h>
 #include <CLeds.h>
+#include "../common/cmath.h"
 
 #define VIDEOSTREAM
 #define NAME "ActionSelection"
@@ -41,10 +42,11 @@ MappingScenario::MappingScenario(CEquids * equids) :
 		CScenario(equids) {
 	J_CAMERADETECTION = J_POSITION = J_MOTORCALIBRATION = J_MAPPING =
 			J_DRIVE_TO_POSITION = J_DOCK_SOCKET = J_ZBMESSENGER =
-					J_REMOTE_CONTROL = J_ORGANISM_CONTROL = -1;
+					J_REMOTE_CONTROL = J_ORGANISM_CONTROL = lastActiveJockey =
+							-1;
 
 	quit = false;
-
+	sleepTime = 100000;
 	// set initial state
 	state = S_START;
 }
@@ -136,8 +138,8 @@ void MappingScenario::Run() {
 	while (!robot->isSPIPaused()) {
 		usleep(10000);
 	}
-	delete leds;
-	delete robot;
+	//delete leds;
+	//delete robot;
 
 	printf("wait for starting message\n");
 
@@ -170,7 +172,7 @@ void MappingScenario::Run() {
 
 		switch (state) {
 		case S_START: {
-			state = S_ORGANISM_DOCKING;
+			state = S_CALIBRATE_ODOMETRY;
 			break;
 
 			if (zigbMessage.type == MSG_ZIGBEE_MSG) {
@@ -235,8 +237,12 @@ void MappingScenario::Run() {
 				equids->getJockey(J_CAMERADETECTION)->stop(true);
 
 				std::cout << "motor calibration succesfull" << std::endl;
-
-				state = S_BUILD_MAP;
+				if (robot_type == RobotBase::ACTIVEWHEEL) {
+					state = S_BUILD_MAP;
+				} else {
+					state = S_WAIT_FOR_MAP_FROM_OTHERS;
+					break;
+				}
 			}
 
 		}
@@ -265,6 +271,7 @@ void MappingScenario::Run() {
 					std::cout << "init Ubisence position" << std::endl;
 					equids->initJockey(J_POSITION);
 				}
+
 				equids->getJockey(J_POSITION)->addRedirection(J_MAPPING,
 						MSG_UBISENCE_POSITION);
 				equids->getJockey(J_CAMERADETECTION)->addRedirection(J_MAPPING,
@@ -310,7 +317,8 @@ void MappingScenario::Run() {
 						MSG_UBISENCE_POSITION);
 				equids->getJockey(J_CAMERADETECTION)->stop(true);
 				equids->getJockey(J_MAPPING)->stop(true);
-				//	equids->getJockey(J_POSITION)->stop(true);
+				lastActiveJockey = J_MAPPING;
+				equids->getJockey(J_POSITION)->stop(true);
 				state = S_DOCK_SOCKET;
 			}
 			//	printf("mapping\n");
@@ -319,26 +327,34 @@ void MappingScenario::Run() {
 		case S_DOCK_SOCKET: {
 			//first drive to to front of docking
 			if (!equids->getJockey(J_DRIVE_TO_POSITION)->started) {
-				//get nearest position of socket
-				equids->getRunningJockey()->SendMessage(MSG_GET_POSITION, NULL,
-						0);
-				usleep(100000);
-				CMessage messageLastPos =
-						equids->getRunningJockey()->getMessage();
+				//get nearest position of socket from actual ubisence position
 				int iter = 0;
-				while (messageLastPos.type != MSG_SET_POSITION && iter < 20) {
+				CMessage messageLastPos;
+				if (!equids->getJockey(J_POSITION)->started) {
+					equids->initJockey(J_POSITION);
+				} else {
+					equids->getJockey(J_POSITION)->stop(true);
+					equids->initJockey(J_POSITION);
+				}
+				usleep(100000);
+				messageLastPos = equids->getJockey(J_POSITION)->getMessage();
+
+				while (messageLastPos.type != MSG_UBISENCE_POSITION && iter < 20) {
 					iter += 1;
 					usleep(100000);
-					messageLastPos = equids->getJockey(J_MAPPING)->getMessage();
+					messageLastPos =
+							equids->getJockey(J_POSITION)->getMessage();
 				}
+
 				NearestObjectOfTypeToThisPosition req;
 				req.type = DOCK_CIRCLE;
 				if (iter < 20) {
-					RobotPosition pos;
+					std::cout << "last robot position determined" << std::endl;
+					UbiPosition pos;
 					memcpy(&pos, messageLastPos.data, sizeof(RobotPosition));
 					req.xPosition = pos.x;
 					req.yPosition = pos.y;
-					req.phiPosition = pos.phi;
+					req.phiPosition = 0;
 				} else {
 					std::cout << "can not determine last robot position"
 							<< std::endl;
@@ -366,21 +382,25 @@ void MappingScenario::Run() {
 					printf("received docking pos %f %f \n", dockPos.xPosition,
 							dockPos.yPosition);
 					driveTo.phi = dockPos.phiPosition;
+					//
+					driveTo.phi = normalizeAngle(driveTo.phi);
 					float phi_to = dockPos.phiPosition + M_PI;
 					if (phi_to > 2 * M_PI) {
 						phi_to -= 2 * M_PI;
 					}
-					float distance_from_dock = 0.2;
+					float distance_from_dock = 0.3;
 					driveTo.x = dockPos.xPosition
-							- distance_from_dock * cos(phi_to);
+							+ distance_from_dock * cos(phi_to);
 					driveTo.y = dockPos.yPosition
 							+ distance_from_dock * sin(phi_to);
+					driveTo.phi = driveTo.phi - 30.0 / 180.0 * M_PI;
 
 					if (!equids->getJockey(J_POSITION)->started) {
-						equids->getJockey(J_POSITION)->SendMessage(MSG_START,
-								NULL, 0);
-						equids->getJockey(J_POSITION)->started = true;
+						equids->initJockey(J_POSITION);
 						printf("starting Jposition\n");
+					}else{
+						equids->getJockey(J_POSITION)->stop(true);
+						equids->initJockey(J_POSITION);
 					}
 					printf("driving to %f %f %f \n", driveTo.x, driveTo.y,
 							driveTo.phi);
@@ -389,6 +409,7 @@ void MappingScenario::Run() {
 							MSG_MOVETOPOSITION, &driveTo,
 							sizeof(RobotPosition));
 					equids->initJockey(J_DRIVE_TO_POSITION);
+					printf("adding redirection to J_DRIVE_TO_POSITION \n");
 					equids->getJockey(J_POSITION)->addRedirection(
 							J_DRIVE_TO_POSITION, MSG_UBISENCE_POSITION);
 				} else {
@@ -402,7 +423,8 @@ void MappingScenario::Run() {
 
 			CMessage drive_message =
 					equids->getJockey(J_DRIVE_TO_POSITION)->getMessage();
-			if (drive_message.type == MSG_MOVETOPOSITION_DONE) {
+			switch (drive_message.type) {
+			case MSG_MOVETOPOSITION_DONE: {
 				std::cout
 						<< "postion reached - received MSG_MOVETOPOSITION_DONE"
 						<< std::endl;
@@ -423,16 +445,22 @@ void MappingScenario::Run() {
 				if (!equids->getJockey(J_DOCK_SOCKET)->started) {
 					std::cout << "sending init to J_DOCK_SOCKET" << std::endl;
 					equids->initJockey(J_DOCK_SOCKET);
+					state = S_DOCK_NOW;
 				}
 			}
-
-			if (equids->getJockey(J_DOCK_SOCKET)->started) {
-				//preforming docking procedure
-				CMessage dockMessage =
-						equids->getJockey(J_DOCK_SOCKET)->getMessage();
-				if (dockMessage.type == MSG_SOCKET_DOCKING_DONE) {
-					state = S_DOCKED;
-				}
+				;
+				break;
+			case MSG_COLLISION_DETECTED: {
+				RobotPosition collisionPos;
+				memcpy(&collisionPos, drive_message.data,
+						sizeof(RobotPosition));
+				printf("collision on %f %f %f\n", collisionPos.x,
+						collisionPos.y, collisionPos.phi);
+			}
+				;
+				break;
+			default:
+				break;
 			}
 
 		}
@@ -440,6 +468,11 @@ void MappingScenario::Run() {
 			break;
 		case S_DOCKED: {
 			printf("docked\n");
+			robot->pauseSPI(false);
+			while (robot->isSPIPaused()) {
+				usleep(10000);
+			}
+			leds->color(LC_GREEN);
 			usleep(500000);
 		}
 			;
@@ -459,7 +492,62 @@ void MappingScenario::Run() {
 			CMessage dockmess = equids->getJockey(J_DOCK_SOCKET)->getMessage();
 			if (dockmess.type == MSG_SOCKET_DOCKING_DONE) {
 				state = S_DOCKED;
+				equids->getJockey(J_DOCK_SOCKET)->stop(true);
+				equids->getJockey(J_CAMERADETECTION)->removeRedirection(
+						J_DOCK_SOCKET, MSG_CAM_DETECTED_BLOB_ARRAY);
+				equids->getJockey(J_CAMERADETECTION)->stop(true);
 			}
+		}
+			;
+			break;
+		case S_WAIT_FOR_MAP_FROM_OTHERS: {
+			int iter;
+			if (!equids->getJockey(J_POSITION)->started) {
+				equids->initJockey(J_POSITION);
+			}else{
+				equids->getJockey(J_POSITION)->removeAllRedirections();
+
+			}
+			robot->pauseSPI(false);
+			while (robot->isSPIPaused()) {
+				usleep(10000);
+			}
+			leds->colorToggle(LC_YELLOW);
+			robot->pauseSPI(true);
+			while (!robot->isSPIPaused()) {
+				usleep(10000);
+			}
+			CMessage pos_message = equids->getJockey(J_POSITION)->getMessage();
+			if (pos_message.type == MSG_UBISENCE_POSITION) {
+				UbiPosition posit;
+				memcpy(&posit, pos_message.data, pos_message.len);
+				NearestObjectOfTypeToThisPosition req;
+				req.type = DOCK_CIRCLE;
+				req.xPosition = posit.x;
+				req.yPosition = posit.y;
+				req.phiPosition = 0;
+				equids->getJockey(J_MAPPING)->SendMessage(
+						MSG_GET_NEAREST_MAPPED_OBJECT_OF_TYPE_TO_POS, &req,
+						sizeof(NearestObjectOfTypeToThisPosition));
+				usleep(100000);
+				CMessage messageDockPos =
+						equids->getJockey(J_MAPPING)->getMessage();
+				iter = 0;
+				while (messageDockPos.type != MSG_MAP_DATA && iter < 5) {
+					iter += 1;
+					usleep(100000);
+					messageDockPos = equids->getJockey(J_MAPPING)->getMessage();
+				}
+				if(iter<5){
+					//succes to get position of nearest dock
+					robot->pauseSPI(true);
+								while (!robot->isSPIPaused()) {
+									usleep(10000);
+								}
+					state = S_DOCK_SOCKET;
+				}
+			}
+
 		}
 			;
 			break;
@@ -617,7 +705,6 @@ void MappingScenario::Run() {
 				std::cout << "sending MSG_INIT_ORGANISM" << std::endl;
 				equids->getJockey(J_ORGANISM_CONTROL)->SendMessage(
 						MSG_INIT_ORGANISM, ipcka, 2 * sizeof(IP_rob));
-				usleep(5000000);
 				std::cout << "initJockey" << std::endl;
 				equids->initJockey(J_ORGANISM_CONTROL);
 
@@ -638,7 +725,10 @@ void MappingScenario::Run() {
 						J_DOCK_SOCKET, MSG_CAM_DETECTED_BLOB_ARRAY);
 				equids->getJockey(J_CAMERADETECTION)->SendMessage(
 						MSG_CAM_DETECT_DOCKING, NULL, 0);
-				equids->getJockey(J_DOCK_SOCKET)->SendMessage(MSG_DOCK_ORGANISM,NULL,0);
+				equids->getJockey(J_DOCK_SOCKET)->addRedirection(
+						J_ORGANISM_CONTROL, MSG_REMOTE_CONTROL);
+				equids->getJockey(J_DOCK_SOCKET)->SendMessage(MSG_DOCK_ORGANISM,
+						NULL, 0);
 				if (!equids->getJockey(J_DOCK_SOCKET)->started) {
 					std::cout << "sending init to J_DOCK_SOCKET" << std::endl;
 					equids->initJockey(J_DOCK_SOCKET);
@@ -660,14 +750,11 @@ void MappingScenario::Run() {
 				CMessage dockMessage =
 						equids->getJockey(J_DOCK_SOCKET)->getMessage();
 				switch (dockMessage.type) {
-					case MSG_SOCKET_DOCKING_DONE:
-						state = S_DOCKED;
-						break;
-					case MSG_REMOTE_CONTROL:
-						equids->getJockey(J_REMOTE_CONTROL)->SendMessage(dockMessage);
-						break;
-					default:
-						break;
+				case MSG_SOCKET_DOCKING_DONE:
+					state = S_DOCKED;
+					break;
+				default:
+					break;
 				}
 			}
 
@@ -691,7 +778,9 @@ void MappingScenario::Run() {
 			if (!equids->getJockey(J_REMOTE_CONTROL)->started) {
 				printf("switching to remote controll \n");
 				equids->initJockey(J_REMOTE_CONTROL);
+				sleepTime = 1000;
 			}
+
 			CMessage message =
 					equids->getJockey(J_ORGANISM_CONTROL)->getMessage();
 			equids->getJockey(J_REMOTE_CONTROL)->SendMessage(message);
@@ -702,7 +791,7 @@ void MappingScenario::Run() {
 			quit = true;
 			break;
 		}
-		usleep(100000);
+		usleep(sleepTime);
 	}
 }
 

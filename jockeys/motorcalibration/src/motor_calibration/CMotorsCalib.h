@@ -17,18 +17,14 @@
 
 using namespace std;
 using namespace std;
-enum RobotType
-  {
-      UNKNOWN,
-      KABOT,
-      ACTIVEWHEEL,
-      SCOUTBOT
-  };
-
+enum RobotType {
+	UNKNOWN, KABOT, ACTIVEWHEEL, SCOUTBOT
+};
 
 class CMotorsCalib {
 public:
-	CMotorsCalib(RobotBase *robot_base, RobotBase::RobotType robot_type, CMotors* motor);
+	CMotorsCalib(RobotBase *robot_base, RobotBase::RobotType robot_type,
+			CMotors* motor);
 	virtual ~CMotorsCalib();
 	void calibrate(DetectedBlob* detectedBlob);
 	bool successful;
@@ -45,15 +41,15 @@ private:
 	void evaluateCalibrationKB();
 	void evaluateCalibrationAW();
 	void convertCameraMeasurementS(float*);
-    void convertCameraMeasurementAW(float*,float);
-    void convertCameraMeasurementKB(float*);
-    void filter(float*,float*);
-    void initializeCovariance();
-    void turn();
-    bool driveToCalibrationPosition();
-    double euclideanDistance(double* position1, double* position2);
-    float euclideanDistancef(float* position1, float* position2);
-    float euclideanDistancefd(float* position1, double* position2);
+	void convertCameraMeasurementAW(float*, float);
+	void convertCameraMeasurementKB(float*);
+	void filter(float*, float*);
+	void initializeCovariance();
+	void turn();
+	bool driveToCalibrationPosition();
+	double euclideanDistance(double* position1, double* position2);
+	float euclideanDistancef(float* position1, float* position2);
+	float euclideanDistancefd(float* position1, double* position2);
 	float firstmeasured[4];
 	double firstodometry[5];
 	float secondmeasured[4];
@@ -64,13 +60,14 @@ private:
 	double fourthodometry[5];
 	float fifthmeasured[4];
 	double fifthodometry[5];
-	double calibParam1;
-	double calibParam2;
+	int time;
+	CTimer* timer;
 	CMotors* motor;
 	double* odometry;
 	RobotBase::RobotType robotype;
 	RobotBase* robot;
-	bool saveCalibResult(double calibresalt1,double calibresalt2,double calibresult3);
+	bool saveCalibResult(double calibresalt1, double calibresalt2,
+			double calibresult3);
 	gsl_matrix *Q;
 	gsl_matrix *K;
 	gsl_matrix *invers;

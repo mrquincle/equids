@@ -22,6 +22,7 @@ using namespace std;
 typedef struct MapData {
 	gsl_matrix * map;
 	gsl_matrix * covariance;
+	std::vector<MapObjectType> mappedObjectTypes;
 } MapData;
 
 typedef struct OtherRobotMap {
@@ -31,22 +32,23 @@ typedef struct OtherRobotMap {
 
 class Map {
 public:
-	Map(double* robpos, RobotBase::RobotType robot_type);
+	Map(double* robpos, RobotBase::RobotType robot_type,int myID);
 	virtual ~Map();
 	gsl_matrix *state;
 	std::vector<MapObjectType> mappedObjectTypes;
 	gsl_matrix *predstate;
 	int mapSize;
 	static double PI;
+	int robotID;
 	void filter(double*, float*);
 	void odometryChange(double*);
 	MapData readFromFile(const char* filename);
 	int writeToFile(const char* filename, MapData data);
-	MappedObjectPosition* getMappedPosition(int ithLM);
-	int nearestTypeID(double* position, MapObjectType type);
-	int saveObjectToMap(MappedObjectPosition* position,
-			MappedObjectCovariance* covariance);
-	void addOtherRobotsObjects(CMessage message);
+	MappedObjectPosition getMappedPosition(int ithLM);
+	double* getRobotPosition();
+	int nearestTypeID(NearestObjectOfTypeToThisPosition nearestTo);
+	int saveObjectToMap(MappedObjectPosition position);
+	void addOtherRobotsObjects(MappedObjectPosition mappedObject);
 	gsl_matrix *P;
 	bool newDetected;
 	bool seeAfterLongTime;
@@ -55,6 +57,8 @@ public:
 	static void convertCameraMeasurement(float *, float hinge,
 			RobotBase::RobotType type);
 	static void convertCameraMeasurementAW(float *, float);
+	void mergeMap();
+	bool mappingEnded;
 private:
 //	double **actualMeasured;
 	//chyba odometrie robota
@@ -79,7 +83,10 @@ private:
 	void calculateOdometryCovarianceAW(double dX, double dY, double dPHI);
 	void calculateOdometryCovarianceKB(double dX, double dY, double dPHI);
 	void calculateOdometryCovarianceS(double dL, double dR, double changedphi);
+	bool areSame(MappedObjectPosition mappedObject1,MappedObjectPosition mappedObject2);
+	MappedObjectPosition averagePositions(std::vector<MappedObjectPosition> sameObjects);
 	std::vector<OtherRobotMap> otherMapData;
+
 };
 
 #endif /* MARK_H_ */

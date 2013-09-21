@@ -66,6 +66,16 @@ public:
 		return (sum() / (R)data.size());
 	}
 
+	R variance() {
+		if (empty()) return (R)0;
+		R avg = average();
+		R variance = R(0);
+		for (int i = 0; i < data.size(); ++i) {
+			variance += (data[i] - avg) * (data[i] - avg);
+		}
+		return variance;
+	}
+
 	T sum() {
 		T sum = T(0);
 		sum = std::accumulate(data.begin(), data.end(), sum);

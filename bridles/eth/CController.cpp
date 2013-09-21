@@ -51,7 +51,9 @@ void CController::parsePort(int argc, char **argv) {
 //! Create server and start it
 void CController::initServer() {
 	if (initialized_server) return;
-	std::cout << "Create (receiving) message server on port " << port << std::endl;
+	if (log_level >= LOG_INFO) {
+		std::cout << "Create (receiving) message server on port " << port << std::endl;
+	}
 	server = new CMessageServer();
 	server->initServer(port.c_str());
 	initialized_server = true;
@@ -64,12 +66,15 @@ void CController::initRobot() {
 	robot = RobotBase::Instance();
 	for (int i = 0; i < 4; ++i)
 		robot->SetPrintEnabled(i, false);
-	std::cout << "Initialized robot of type " << RobotTypeStr[robot_type] << std::endl;
-
+	if (log_level >= LOG_INFO) {
+		std::cout << "Initialized robot of type " << RobotTypeStr[robot_type] << std::endl;
+	}
 	char* robotID = getenv("sr_id");
 	if (robotID != NULL)
 		robot_id = atoi(robotID);
-	std::cout << "Robot has id " << robotID << std::endl;
+	if (log_level >= LOG_INFO) {
+		std::cout << "Robot has id " << robotID << std::endl;
+	}
 
 	initialized_robot = true;
 }
@@ -87,5 +92,3 @@ void CController::start() {
 	robot->pauseSPI(false);
 	usleep(10000);
 }
-
-

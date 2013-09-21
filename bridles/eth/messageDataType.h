@@ -16,6 +16,7 @@ typedef enum {
 	S_START = 0,
 	S_CALIBRATE_ODOMETRY,
 	S_BUILD_MAP,
+	S_WAIT_FOR_MAP_FROM_OTHERS,
 	S_DOCK_SOCKET,
 	S_DOCKED,
 	S_STREAM_VIDEO,
@@ -57,7 +58,14 @@ struct UbiPosition {
 };
 
 enum MapObjectType {
-	NORMAL_CIRCLE, DOCK_CIRCLE, SMALL_STEP, LARGE_STEP, WALL, ROBOT, UNIDENTIFIED
+	NORMAL_CIRCLE,
+	DOCK_CIRCLE,
+	DOCK_CIRCLE_ORGANISM,
+	SMALL_STEP,
+	LARGE_STEP,
+	WALL,
+	ROBOT,
+	UNIDENTIFIED
 };
 
 /**
@@ -71,12 +79,6 @@ struct MappedObjectPosition {
 	float yPosition; //!< The y coordinate
 	float zPosition; //!< The z coordinate
 	float phiPosition; //!< The phi coordinate
-};
-
-struct MappedObjectCovariance {
-	int mappedBy;
-	MapObjectType type;
-	int map_id;
 	float xUncertainty; //!< The x coordinate Uncertainty
 	float yUncertainty; //!< The y coordinate Uncertainty
 	float zUncertainty; //!< The z coordinate Uncertainty

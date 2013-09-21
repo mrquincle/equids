@@ -6,12 +6,12 @@
  */
 
 #include "Mapping.h"
-#define RANDOM_MOTION
-#define IMAGE_WAIT_COUNT 20
-#define TURNING_COUNT 2
+//#define RANDOM_MOTION
+#define IMAGE_WAIT_COUNT 30
+#define TURNING_COUNT 3
 #define MINIMUM_SEE_BLOB_REQ 20
 #define DRIVE_FORWARD_COUNT 5
-#define DRIVE_FORWARD_DIST 0.4
+#define DRIVE_FORWARD_DIST 0.5
 
 Mapping::Mapping(CMotors* motors) {
 	// TODO Auto-generated constructor stub
@@ -21,7 +21,11 @@ Mapping::Mapping(CMotors* motors) {
 	this->stai_in_motion = TURNING_COUNT;
 	this->seedSameBlob = 0;
 	this->runs = 0;
+	this->closedLoop = false;
 	image_wait_count = IMAGE_WAIT_COUNT;
+	timer = new CTimer();
+	timer->start();
+	time = timer->getTime();
 	//this->timer=new CTimer();
 	//this->timer->start();
 }
@@ -33,7 +37,7 @@ Mapping::~Mapping() {
 /**
  * Do mapping pseudo random map procedure in constant sequence - drive forward -> turn around start -> turn around end -> turn rand angle -> drive forward .....
  */
-void Mapping::doMappingMotion(bool seeBlob) {
+void Mapping::doMappingMotion(bool seeBlob, Map* slamMap) {
 
 	if (seeBlob) {
 		seedSameBlob += 1;
@@ -46,6 +50,8 @@ void Mapping::doMappingMotion(bool seeBlob) {
 			//	printf("wait stopped\n");
 			this->wait_stopped -= 1;
 			motor->setSpeeds(0, 0);
+			int motionTime = timer->getTime() - time;
+		//	printf("Stayed in motion for %d \n",motionTime);
 		} else {
 			//	printf("moving\n");
 			if (normalizeAngleDiff(
@@ -63,6 +69,7 @@ void Mapping::doMappingMotion(bool seeBlob) {
 				this->stai_in_motion = TURNING_COUNT;
 			}
 			this->seedSameBlob = 0;
+			time = timer->getTime();
 			motor->setSpeeds(0, motor->calibratedSpeed);
 
 		}
@@ -75,19 +82,29 @@ void Mapping::doMappingMotion(bool seeBlob) {
 		if (this->wait_stopped > 0) {
 			this->wait_stopped -= 1;
 			motor->setSpeeds(0, 0);
+			int motionTime = timer->getTime() - time;
+		//	printf("Stayed in motion for %d \n",motionTime);
 		} else {
 			if (normalizeAngleDiff(
 					this->lastPosition[2] - motor->getPosition()[2])
-					< M_PI / 18) {
+					< M_PI / 8) {
 				this->actualState = TURNING_TO_DIRECTION;
 				this->runs += 1;
 				memcpy(lastPosition, motor->getPosition(), 5 * sizeof(double));
 				//set turnToDirectionAngle
-#if defined(RANDOM_MOTION)
-				this->turnToDirectionAngle = randFromTO(-M_PI, M_PI);
-#else
+				/*
 
-#endif
+				this->turnToDirectionAngle = randFromTO(-M_PI, M_PI);
+*/
+				if(slamMap->mapSize>0){
+				double *pos = slamMap->getRobotPosition();
+				MappedObjectPosition firstLM = slamMap->getMappedPosition(0);
+				this->turnToDirectionAngle = atan2(firstLM.yPosition -pos[1] ,firstLM.xPosition -pos[0]);
+				printf("closing loop on angle %f \n",turnToDirectionAngle);
+				}else{
+				this->closedLoop = true;
+				}
+
 			}
 			if (this->stai_in_motion > 0) {
 				this->stai_in_motion -= 1;
@@ -96,6 +113,7 @@ void Mapping::doMappingMotion(bool seeBlob) {
 				this->stai_in_motion = TURNING_COUNT;
 			}
 			this->seedSameBlob = 0;
+			time = timer->getTime();
 			motor->setSpeeds(0, motor->calibratedSpeed);
 
 		}
@@ -135,14 +153,15 @@ void Mapping::doMappingMotion(bool seeBlob) {
 				this->stai_in_motion -= 1;
 			} else {
 				this->wait_stopped = IMAGE_WAIT_COUNT;
-				this->stai_in_motion = TURNING_TO_DIRECTION;
+				this->stai_in_motion = TURNING_COUNT;
 			}
 			if (normalizeAngleDiff(
 					this->turnToDirectionAngle - motor->getPosition()[2])
-					< M_PI / 6) {
+					< M_PI / 4 || (this->turnToDirectionAngle - motor->getPosition()[2])>M_PI / 4) {
 				memcpy(lastPosition, motor->getPosition(), 5 * sizeof(double));
 				this->actualState = DRIVE_FORWARD;
 				motor->setSpeeds(0, 0);
+				this->closedLoop = true;
 			} else {
 				this->seedSameBlob = 0;
 				motor->setSpeeds(0, motor->calibratedSpeed);

@@ -6,6 +6,7 @@
 
 #include <CMessageClient.h>
 
+bool status[20];
 int i = 0;
 int numSaved = 0;
 bool stop = false;
@@ -161,18 +162,24 @@ int main(int argc,char* argv[])
 	CTimer timer;
 	//message.type = MSG_GET_IMAGE;
 	image = new CRawImage();
+	int runs=0;
 	while (stop == false){
 		//		client->sendMessage(message);
 		client->sendSmallMessage(0);
 		client->checkForImage(image);	
 		//message.type = MSG_GET_IMAGE;
 		gui.drawImage(image);
+
+		//fill the status HERE
+		for (int i = 0;i<20;i++) status[i] = ((runs/(int)(pow(2,i)))%2)==1;
+		gui.drawStatus(status);
 #ifdef STORE_IMAGES_ANYWAY
 		image->saveBmp();
 #endif
 		gui.update();
 		processKeys(&cmd_client);
 		//usleep(100000);
+		runs++;
 	}
 	delete client;
 	return EXIT_SUCCESS;

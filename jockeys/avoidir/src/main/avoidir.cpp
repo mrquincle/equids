@@ -74,6 +74,7 @@ void controller_specific_args(AvoidIRController & controller, int argc, char **a
 	bool calibrate = false;
 	bool standalone = false;
 	bool justsensors = false;
+	bool as_jockey = false;
 
 	if (argc == 3) {
 		std::string arg2 = std::string(argv[2]);
@@ -83,6 +84,8 @@ void controller_specific_args(AvoidIRController & controller, int argc, char **a
 			standalone = true;
 		} else if (arg2.find("justsensors") != std::string::npos) {
 			justsensors = true;
+		} else if (arg2.find("as_jockey") != std::string::npos) {
+			as_jockey = true;
 		} else {
 			std::cerr << DEBUG << " usage: " << argv[0] << " PORT [OPTION]" << std::endl << std::endl;
 			std::cerr << "OPTION: calibrate|standalone|justsensors" << std::endl;
@@ -101,6 +104,7 @@ void controller_specific_args(AvoidIRController & controller, int argc, char **a
 		if (calibrate) {
 			controller.calibrate();
 		} else {
+			controller.setStandAlone();
 			controller.get_calibration();
 			if (justsensors) {
 				// only be able to quit by Ctrl+C
@@ -158,7 +162,11 @@ int main(int argc, char **argv) {
 		case MSG_START: {
 			runController = true;
 			controller.start();
-			controller.get_calibration();
+			if (controller.collided()) {
+				controller.escape();
+			} else {
+				controller.get_calibration();
+			}
 			controller.acknowledge();
 			break;
 		}
@@ -172,6 +180,7 @@ int main(int argc, char **argv) {
 		}
 		case MSG_STOP: {
 			runController = false;
+			controller.stop_motors();
 			controller.pause();
 			controller.acknowledge();
 			break;

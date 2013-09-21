@@ -30,45 +30,68 @@
 #define UBISENCE_POSITION_CHANNEL 55
 #define UBISENCE_MESSAGE_SERVER_CHANNEL 56
 #define DEBUGSTRING NAME << '[' << getpid() << "] " << __func__ << "(): "
+
 typedef enum {
-	WAIT = 0, MOVING
+	WAIT = 0, MOVING, STANDING
 } ActualCalibrationState;
 
+#define WAIT_QUEUE 10
 using namespace std;
-RobotPosition* finishPosition;
-ActualCalibrationState actualTask = WAIT;
-RobotBase::RobotType robot_type;
-RobotBase* robot;
+static RobotPosition* finishPosition;
+static ActualCalibrationState actualTask = WAIT;
+static ActualCalibrationState recvPos;
+static ActualCalibrationState waitPos[WAIT_QUEUE];
+static int waitTime[WAIT_QUEUE], recvTime;
+static int wait_ptr;
+static int delayTime;
+static RobotBase::RobotType robot_type;
+static RobotBase* robot;
 //message system
-CMessageServer* message_server;
-CMessage messagee;
-std::string portMS;
-move_to* mv;
-RobotPosition endPosition;
-UbiPosition detectedPosition;
-UbiPosition detectedPositionOld3;
-UbiPosition detectedPositionOld1;
-UbiPosition detectedPositionOld2;
+static CMessageServer* message_server;
+static CMessage messagee;
+static std::string portMS;
+static move_to* mv;
+static RobotPosition endPosition;
+static UbiPosition detectedPosition;
+static UbiPosition detectedPositionOld1;
+static UbiPosition detectedPositionOld2;
+static UbiPosition detectedPositionOld3;
+static int onPositionHist;
 
 //bridles
-CMotors* motor;
-CTimer* timer;
+static CMotors* motor;
+static CTimer* timer;
 
-//actions hadlers
+static bool stop = false;
+static bool gSet = false;
+static int onPosition = 0;
+static int lastOnPos = -1;
+static int pos = 0;
 
-bool stop = false;
-bool gSet = false;
 void interrupt_signal_handler(int signal) {
 	if (signal == SIGINT) {
 //RobotBase::MSPReset();
 		exit(0);
 	}
 }
-int pos = 0;
+
+static void reset_jockey() {
+   int i;
+   pos = 0;
+   recvPos = STANDING;
+   for (i=0; i<WAIT_QUEUE; i++) {
+      waitTime[i] = -1;
+      waitPos[i] = STANDING;
+   }
+   recvTime = -1;
+   wait_ptr = 0;
+   onPositionHist=2;
+}
 
 void initialize() {
 	robot_type = RobotBase::Initialize(NAME);
 	robot = RobotBase::Instance();
+   reset_jockey();   
 
 	for (int i = 0; i < 4; ++i)
 		robot->SetPrintEnabled(i, false);
@@ -97,7 +120,7 @@ void initialize() {
 	timer->start();
 
 	std::cout << "Create motor object" << std::endl;
-	motor = new CMotors(robot, robot_type, timer);
+	motor = new CMotors(robot, robot_type);
 	std::cout << "init motors" << std::endl;
 	motor->init();
 	std::cout << "after motor init" << std::endl;
@@ -106,7 +129,30 @@ void initialize() {
 	usleep(20000);
 }
 
-void readMessages() {
+static void collision() {
+   RobotPosition collisionPos;
+   collisionPos.x = detectedPosition.x;
+   collisionPos.y = detectedPosition.y;
+   collisionPos.phi = (float) motor->getPosition()[2];
+   message_server->sendMessage(MSG_COLLISION_DETECTED,
+     &collisionPos, sizeof(RobotPosition));
+   actualTask = WAIT;
+   motor->setSpeeds(0, 0);
+   reset_jockey();
+}
+
+static void remove_wait() {
+   int i;
+   if (wait_ptr>1) {
+      for (i=0; i<wait_ptr-1; i++) {
+         waitTime[i]=waitTime[i+1];
+         waitPos[i]=waitPos[i+1];
+      }
+   }
+   wait_ptr--;
+}
+
+static void readMessages() {
 	messagee = message_server->getMessage();
 	//fprintf(stdout, "Message type: %s \n", messagee.getStrType());
 
@@ -159,6 +205,7 @@ void readMessages() {
 				usleep(10000);
 			}
 			actualTask = WAIT;
+         reset_jockey();
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		}
 			;
@@ -175,32 +222,78 @@ void readMessages() {
 			break;
 		}
 		case MSG_MOVETOPOSITION: {
-			printf("msg movetopos \n");
+			printf("msg movetopos \n\n\n\n");
 
 			{
 				//actualTask = MOVING;
-				if (finishPosition == NULL) {
-					finishPosition = new RobotPosition();
-				}
+
+				finishPosition = new RobotPosition();
+				printf("setting final position \n");
 				memcpy(finishPosition, messagee.data, sizeof(RobotPosition));
 				usleep(10000);
 				gSet = true;
 			}
 			break;
 		}
-		case MSG_UBISENCE_POSITION: {
-			printf("msg ubisense \n");
-
-			pos++;
-			detectedPositionOld3 = detectedPositionOld2;
-			detectedPositionOld2 = detectedPositionOld1;
-			detectedPositionOld1 = detectedPosition;
-			memcpy(&detectedPosition, messagee.data, sizeof(UbiPosition));
-			printf("detected position %f %f \n", detectedPosition.x,
-					detectedPosition.y);
-
-		}
-			;
+		case MSG_UBISENCE_POSITION: 
+			if (actualTask != WAIT) {
+             memcpy(&detectedPosition, messagee.data, sizeof(UbiPosition));
+             recvTime = timer->getTime();
+             printf("msg UBI pos stamp %i time %i\n", detectedPosition.time_stamp, recvTime);
+             if (pos==0) { 
+               pos++;
+               detectedPositionOld3 = detectedPositionOld2;
+               detectedPositionOld2 = detectedPositionOld1;
+               detectedPositionOld1 = detectedPosition;
+             } else if (fabs(detectedPosition.y - detectedPositionOld1.y) > 0.03 || 
+                fabs(detectedPosition.x - detectedPositionOld1.x) > 0.03) {
+               pos++;
+               detectedPositionOld3 = detectedPositionOld2;
+               detectedPositionOld2 = detectedPositionOld1;
+               detectedPositionOld1 = detectedPosition;
+               if (onPosition==0) {
+                  if (onPositionHist>0) {
+                     onPositionHist--;
+                  }
+               }
+               printf("MOVING 3cm %i, onPosition %i hist %i\n", timer->getTime(), onPosition, onPositionHist);
+               if (recvPos==STANDING) {
+                  if (wait_ptr>0 && waitPos[0]==MOVING) {
+                     delayTime = recvTime-waitTime[0];
+                     printf("UBI DELAY is %f\n", delayTime/1000.0);
+                     remove_wait();
+                  }
+               }
+               if (wait_ptr>0) {
+                  while ((wait_ptr>0) && recvTime-waitTime[0]>10000) {
+                     remove_wait();
+                  }
+               }
+               recvPos = MOVING;
+             } else if (detectedPosition.time_stamp-detectedPositionOld1.time_stamp>2) {
+                if (recvPos==MOVING) {
+                  if (wait_ptr>0 && waitPos[0]==STANDING) {
+                     delayTime = recvTime-waitTime[0];
+                     printf("UBI DELAY is %f\n", delayTime/1000.0);
+                     remove_wait();
+                  } else {
+                     printf("COLISION 1 - STOPED\n");
+                     collision();
+                  }
+                }
+                recvPos = STANDING;
+                if (wait_ptr>0 && waitPos[0]==MOVING && (recvTime-waitTime[0])>10000) {
+                   printf("COLISION 2 - NOT STARTED\n");
+                   collision();
+                }
+                if (wait_ptr>0) {
+                   while ((wait_ptr>0) && recvTime-waitTime[0]>10000) {
+                     remove_wait();
+                   }
+                }
+             }
+          }
+			
 			break;
 		default:
 			break;
@@ -229,18 +322,13 @@ int main(int argc, char **argv) {
 	message_server = new CMessageServer();
 	std::cout << "Initialize CMessageServer" << std::endl;
 	message_server->initServer(portMS.c_str());
-	int onPosition = 0;
 	int turned = 0;
 
-	while (!gSet) {
-		readMessages();
-		usleep(5000);
-	}
 	printf("goal position set\n");
 
 	while (!stop) {
 		switch (actualTask) {
-		case (WAIT): {
+		case WAIT: {
 			readMessages();
 			usleep(200000);
 		}
@@ -259,7 +347,10 @@ int main(int argc, char **argv) {
 					if (fabs(detectedPosition.y - detectedPositionOld3.y) > 0.03
 							|| fabs(detectedPosition.x - detectedPositionOld3.x)
 									> 0.03) {
-						if (onPosition == 0) {
+						if (onPositionHist == 0) {
+                     printf("act pos (%f, %f) old pos (%f, %f)\n", detectedPosition.x,
+                           detectedPosition.y, detectedPositionOld3.x,
+                           detectedPositionOld3.y);
 							motor->setMotorPosition(detectedPosition.x,
 									detectedPosition.y,
 									(atan2(
@@ -275,40 +366,56 @@ int main(int argc, char **argv) {
 						//motor->setSpeeds(motor->calibratedSpeed, 0);
 						//usleep(500000);
 						//motor->setSpeeds(0,0);
-					} else {
-
-						if (detectedPosition.x == detectedPositionOld3.x
-								&& detectedPosition.y == detectedPositionOld3.y
-								&& detectedPosition.time_stamp
-										!= detectedPositionOld3.time_stamp) {
-							printf("kolize\n");
-							motor->setSpeeds(-40, 0);
-							sleep(2);
-							motor->setSpeeds(0, 0);
-							usleep(5000);
-							message_server->sendMessage(MSG_MOVETOPOSITION_DONE,
-									&endPosition, sizeof(endPosition));
-							actualTask = WAIT;
-						} else {
-							printf("neni dostatecne velka zmena pozice\n");
-							motor->setSpeeds(40, 0);
-						}
 					}
+
 				} else {
 					printf("jedu rovne pro zjisteni HEADING\n");
-					motor->setSpeeds(40, 0);
-
+					motor->setSpeeds(60, 0);
+					onPosition = 0;
 				}
 				usleep(500000);
 			}
-
+         if ((onPosition==0)!=(lastOnPos==0)) {
+            if (wait_ptr>=WAIT_QUEUE-2) {
+               motor->setSpeeds(0, 0);
+               if (wait_ptr<WAIT_QUEUE && lastOnPos==0) {
+                  waitPos[wait_ptr]=STANDING;
+                  waitTime[wait_ptr]=timer->getTime();
+                  wait_ptr++;
+               }
+               while (wait_ptr>=WAIT_QUEUE-4) {
+                  readMessages();
+                  usleep(500000);
+                  printf("INFINITE WAITING\n");
+               }
+            }
+            waitTime[wait_ptr]=timer->getTime();
+            if (onPosition>0) {
+               waitPos[wait_ptr]=STANDING;
+               printf("CHANGE TO STANDING in time %i\n", waitTime[wait_ptr]);
+            } else {               
+               waitPos[wait_ptr]=MOVING;
+               printf("CHANGE TO MOVING in time %i\n", waitTime[wait_ptr]);
+            }
+            if (wait_ptr>0 && (waitTime[wait_ptr]-waitTime[wait_ptr-1])<200) {
+               wait_ptr--;
+            } else {
+               wait_ptr++;
+            }
+            lastOnPos = onPosition;
+         }
+         if (onPosition>0) {
+            onPositionHist=4;
+         }
+		
 			if (turned == 1) {
 				printf("turned == 1\n");
-				motor->setSpeeds(0,0);
+				motor->setSpeeds(0, 0);
 				actualTask = WAIT;
 				endPosition.x = detectedPosition.x;
 				endPosition.y = detectedPosition.y;
 				endPosition.phi = (float) motor->getPosition()[2];
+				printf("sending MSG_MOVETOPOSITION_DONE\n");
 				message_server->sendMessage(MSG_MOVETOPOSITION_DONE,
 						&endPosition, sizeof(endPosition)); //todo &
 

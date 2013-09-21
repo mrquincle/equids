@@ -185,7 +185,7 @@ int CLaserScan::generateVector(CRawImage* laserImage, CRawImage* noLaserImage, i
 	assert (laserImage->getheight() == noLaserImage->getheight());
 
 	int threshold = 20;
-	int diff_threshold = 20;
+	int diff_threshold = 15;
 
 	int topRow = topRowLimit;
 	int bottomRow = bottomRowLimit;
@@ -238,7 +238,7 @@ int CLaserScan::generateVector(CRawImage* laserImage, CRawImage* noLaserImage, s
 	int margin_left = 120;
 	int margin_right = 220; // 640 = 320 + 320 = 120 + 200 + 100 + 220;
 	int threshold = 20;
-	int diff_threshold = 20;
+	int diff_threshold = 15;
 	for (int j = 0; j < laserImage->getheight(); j++) {
 		int p = 0;
 		for (int i = margin_left; i < laserImage->getwidth() - margin_right; i++) {

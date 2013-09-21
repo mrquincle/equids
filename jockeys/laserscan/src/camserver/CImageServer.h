@@ -55,6 +55,7 @@ class CImageServer{
 		int mySocket;
 		sem_t *dataSem;
 		sem_t connectSem;
+		sem_t captureSem;
 		int messageRead;
 		CRawImage *image;
 		bool stop;

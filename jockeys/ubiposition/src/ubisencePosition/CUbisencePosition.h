@@ -34,7 +34,7 @@ public:
 	sem_t dataSem;
 	bool stop;
 private:
-
+	pthread_t* thread;
 	Ubitag* own_ubitag;
 };
 

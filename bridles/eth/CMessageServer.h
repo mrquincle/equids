@@ -57,7 +57,7 @@ public:
 	}
 
 	//! Send a new message, you have to deallocate data yourself.
-	void sendMessage(int type, void *data, int len) {
+	void sendMessage(int type, const void *data, int len) {
 		jockey_IPC.SendData(type, (uint8_t*)data, len);
 	}
 

@@ -12,17 +12,18 @@
 #include "CTimer.h"
 //13 32
 using namespace std;
-bool PRINT_MEASUREDPOS = true;
+bool PRINT_MEASUREDPOS = false;
 bool PRINT_MATRICES = false;
 bool PRINT_LAND_MARKS = true;
 bool PRINT_ROB_POS = true;
-bool PRINT_MPTC = true;
+bool PRINT_MPTC = false;
 double Map::PI = 3.141592653589793238462;
 double ODOMETRY_XERROR = 0.00014;
 double ODOMETRY_YERROR = 0.00003;
 double ODOMETRY_PHIERROR = 0.0001;
 
-double DOCK_MINIMAL_Z_POS = 0.18;
+double DOCK_MINIMAL_Z_POS_ONGROUND = 0.25;
+double DOCK_MINIMAL_Z_POS_ONWALL = 0.5;
 /*
  double MEASUREMENT_XERROR =  0.000126829009494;
  double MEASUREMENT_YERROR = 0.000007700015105;
@@ -38,7 +39,7 @@ double kna2 = 2.3060e-05;
 double ODOMETRY_DL_VARIANCE = 0;
 double ODOMETRY_DR_VARIANCE = 0;
 double ODOMETRY_B_VARIANCE = 0.01;
-float TOLERANCE = 0.5;
+float TOLERANCE = 1;
 double TOLERANCEPHI = 0.2;
 double addP = 0.2;
 double hL = 0.01;
@@ -47,10 +48,16 @@ double b = 0.12;
 double *odometry_covariance = new double[3];
 CTimer timermap;
 
-Map::Map(double* odometr, RobotBase::RobotType robot_type) {
+Map::Map(double* odometr, RobotBase::RobotType robot_type, int myID) {
 	//ODOMETRY_D_VARIANCE=ODOMETRY_D_VARIANCE*4;
 	printf("Map initializing....\n");
 	this->robot_type = robot_type;
+	this->robotID = myID;
+	if (robot_type == RobotBase::ACTIVEWHEEL) {
+		mappingEnded = false;
+	} else {
+		mappingEnded = true;
+	}
 	//odometry error
 	kna2 = 100 * kna2;
 	timermap.start();
@@ -170,20 +177,6 @@ void Map::filter(double robpos[], float measuredpos[]) {
 			gsl_matrix_get(this->P, 2, 2) + odometry_covariance[2]);
 	//	printMatrix(this->predP);
 
-	/*
-	 double sigmaL2=1.7936e-06;
-	 double sigmaR2=1.7936e-06;
-	 gsl_matrix_set(this->predP,0, 0, gsl_matrix_get(this->P, 0, 0)+0.25*cos(robpos[2])*cos(robpos[2])*(sigmaL2+sigmaR2));
-	 gsl_matrix_set(this->predP,0, 0, gsl_matrix_get(this->P, 0, 1)+0.25*cos(robpos[2])*sin(robpos[2])*(sigmaL2+sigmaR2));
-	 gsl_matrix_set(this->predP,0, 0, gsl_matrix_get(this->P, 0, 2)+(0.5/b)*cos(robpos[2])*(sigmaL2-sigmaR2));
-	 gsl_matrix_set(this->predP,0, 0, gsl_matrix_get(this->P, 1, 0)+0.25*cos(robpos[2])*sin(robpos[2])*(sigmaL2+sigmaR2));
-	 gsl_matrix_set(this->predP,0, 0, gsl_matrix_get(this->P, 1, 1)+0.25*sin(robpos[2])*sin(robpos[2])*(sigmaL2+sigmaR2));
-	 gsl_matrix_set(this->predP,0, 0, gsl_matrix_get(this->P, 1, 2)+(0.5/b)*sin(robpos[2])*((sigmaL2+sigmaR2)/2));
-	 gsl_matrix_set(this->predP,0, 0, gsl_matrix_get(this->P, 2, 0)+(0.5/b)*cos(robpos[2])*((sigmaL2+sigmaR2)/2));
-	 gsl_matrix_set(this->predP,0, 0, gsl_matrix_get(this->P, 2, 1)+(0.5/b)*sin(robpos[2])*((sigmaL2+sigmaR2)/2));
-	 gsl_matrix_set(this->predP,0, 0, gsl_matrix_get(this->P, 2, 2)+((sigmaL2-sigmaR2)/2)/(b*b));
-	 */
-
 	if (PRINT_MATRICES) {
 		printf("P:\n");
 		printMatrix(this->P);
@@ -227,7 +220,9 @@ void Map::filter(double robpos[], float measuredpos[]) {
 								measuredToCenterY
 										- gsl_matrix_get(this->predstate,
 												var * 4 + 4, 0), 2), 0.5);
-		if ((this->mappedObjectTypes[var+1]==NORMAL_CIRCLE || this->mappedObjectTypes[var+1]==DOCK_CIRCLE) && vzdalenost < TOLERANCE ) {
+		if ((this->mappedObjectTypes[var + 1] == NORMAL_CIRCLE
+				|| this->mappedObjectTypes[var + 1] == DOCK_CIRCLE|| this->mappedObjectTypes[var + 1] == DOCK_CIRCLE_ORGANISM)
+				&& vzdalenost < TOLERANCE) {
 			//if(gsl_matrix_get(this->predstate, var*3+3, 0)-TOLERANCE<measuredToCenterX && gsl_matrix_get(this->predstate, var*3+3, 0)-TOLERANCE<measuredToCenterX){
 			//	if(gsl_matrix_get(this->predstate, var*3+4, 0)-TOLERANCE<measuredToCenterY && gsl_matrix_get(this->predstate, var*3+4, 0)-TOLERANCE<measuredToCenterY){
 			//je to ten objekt
@@ -254,12 +249,14 @@ void Map::filter(double robpos[], float measuredpos[]) {
 	if (mapatoNEobsahuje) {
 		//	printf("new Landmark\n");
 		this->newDetected = true;
-		if (measuredToCenterZ > DOCK_MINIMAL_Z_POS) {
+		if (measuredToCenterZ < DOCK_MINIMAL_Z_POS_ONGROUND) {
 			mappedObjectTypes.push_back(NORMAL_CIRCLE);
-		} else {
+		} else if(measuredToCenterZ > DOCK_MINIMAL_Z_POS_ONGROUND && measuredToCenterZ<DOCK_MINIMAL_Z_POS_ONWALL){
 			mappedObjectTypes.push_back(DOCK_CIRCLE);
+		}else{
+			mappedObjectTypes.push_back(DOCK_CIRCLE_ORGANISM);
 		}
-
+		this->lastSeen = this->mapSize;
 		pozicevmape = this->mapSize; //pozice v mape je od 0-inf
 		this->mapSize += 1;
 		if (PRINT_MATRICES) {
@@ -572,7 +569,7 @@ void Map::filter(double robpos[], float measuredpos[]) {
 	gsl_matrix_free(predP_Ht);
 	gsl_matrix_free(difference);
 	if (PRINT_ROB_POS) {
-		printf("robot pos\n");
+		//printf("robot pos\n");
 		printf("ROBPOS=[ROBPOS [%2.7f ; %2.7f ; %2.7f ; 1 ]]; \n",
 				gsl_matrix_get(this->state, 0, 0),
 				gsl_matrix_get(this->state, 1, 0),
@@ -583,8 +580,8 @@ void Map::filter(double robpos[], float measuredpos[]) {
 	}
 	if (PRINT_LAND_MARKS) {
 		//printf("velikost mapy je:%d",this->mapSize);
-		printf("statesize %d %d \n", this->state->size1, this->state->size2);
-		printf("Psize %d %d \n", this->P->size1, this->P->size2);
+//		printf("statesize %d %d \n", this->state->size1, this->state->size2);
+//		printf("Psize %d %d \n", this->P->size1, this->P->size2);
 		for (var = 0; var <= this->mapSize - 1; ++var) {
 			printf("LM%d=[LM%d [%2.7f ; %2.7f ; %2.7f ; %2.7f]]; \n", var, var,
 					gsl_matrix_get(this->state, var * 4 + 3, 0),
@@ -651,7 +648,7 @@ void Map::odometryChange(double robpos[]) {
 	}
 	if (PRINT_LAND_MARKS) {
 		//printf("velikost mapy je:%d",this->mapSize);
-		for (var = 0; var <= this->mapSize - 1; ++var) {
+		for (var = 0; var < this->mapSize ; ++var) {
 			printf("LM%d=[LM%d [%2.7f ; %2.7f ; %2.7f ; %2.7f ]]; \n", var, var,
 					gsl_matrix_get(this->state, var * 4 + 3, 0),
 					gsl_matrix_get(this->state, var * 4 + 4, 0),
@@ -685,9 +682,16 @@ MapData Map::readFromFile(const char* filename) {
 		fscanf(file, "%u\n", &ncov);
 		gsl_matrix * covariance = gsl_matrix_alloc(mcov, ncov);
 		gsl_matrix_fscanf(file, covariance);
+		fscanf(file, "\n");
+		int typeSize = (mmap - 3) / 4 + 1;
+		std::vector<MapObjectType> mappedTypes;
+		for (int var = 0; var < typeSize; ++var) {
+			fscanf(file, "%lu\n", &mappedTypes[var]);
+		}
 		fclose(file);
 		data.map = map;
 		data.covariance = covariance;
+		data.mappedObjectTypes = mappedTypes;
 		return data;
 	} else {
 		printf("can not read matrix from file %s \n", filename);
@@ -708,6 +712,10 @@ int Map::writeToFile(const char* filename, MapData data) {
 		fprintf(file, "%lu\n", data.covariance->size1);
 		fprintf(file, "%lu\n\n", data.covariance->size2);
 		gsl_matrix_fprintf(file, data.covariance, "%g");
+		fprintf(file, "\n");
+		for (int var = 0; var < data.mappedObjectTypes.size(); ++var) {
+			fprintf(file, "%lu\n", data.mappedObjectTypes[var]);
+		}
 		fprintf(file, "\n");
 		fclose(file);
 		return 0;
@@ -779,10 +787,10 @@ void Map::convertCameraMeasurementS(float measuredpos[]) {
 
 void Map::convertCameraMeasurementKB(float measuredpos[]) {
 	// upravit
-	measuredpos[0] = measuredpos[0] + 0.049;
-	measuredpos[1] = measuredpos[1] - 0.018;
+	measuredpos[0] = measuredpos[0] + 0.053;
+	measuredpos[1] = measuredpos[1] - 0.021;
 	//measuredpos[2] se nezmění - promítnutí do plochy
-	measuredpos[3] = measuredpos[3] + 0.09;	//z axis
+	measuredpos[3] = measuredpos[3] + 0.084;	//z axis
 }
 
 void Map::convertCameraMeasurementAW(float measuredpos[], float hinge) {
@@ -862,8 +870,10 @@ void Map::calculateOdometryCovarianceAW(double dX, double dY, double dPHI) {
 	double prvni[2] = { 0, dX };
 	double druhy[2] = { 0, dY };
 
-	odometry_covariance[2] = abs(dPHI) * 0.0012177 + 0, 174444444
-			* euclideanDistance(prvni, druhy);
+//	odometry_covariance[2] = abs(dPHI) * 0.0015 ;
+	odometry_covariance[2] = abs(dPHI) * 0.00015;
+//	printf("odometry_covariance[2] %f \n", odometry_covariance[2]);
+	//+ 0, 174444444* euclideanDistance(prvni, druhy);
 //+ (pow((ODOMETRY_DL_VARIANCE-ODOMETRY_DR_VARIANCE),2)/pow(b,4))*ODOMETRY_B_VARIANCE ;
 
 }
@@ -953,50 +963,75 @@ void Map::calculateOdometryCovarianceS(double dL, double dR,
 	}
 }
 
-MappedObjectPosition* Map::getMappedPosition(int ithLM) {
+MappedObjectPosition Map::getMappedPosition(int ithLM) {
 	//ithLM is from 0 to mapsize-1
-
+	MappedObjectPosition mappedObject;
 	if (ithLM < this->mapSize && ithLM > -1) {
-		MappedObjectPosition* mappedObject = new MappedObjectPosition();
-		mappedObject->type = mappedObjectTypes[ithLM];
-		mappedObject->map_id = ithLM;
-		mappedObject->xPosition = gsl_matrix_get(this->state, ithLM * 4 + 3, 0);
-		mappedObject->yPosition = gsl_matrix_get(this->state, ithLM * 4 + 4, 0);
-		mappedObject->phiPosition = gsl_matrix_get(this->state, ithLM * 4 + 5,
+
+		mappedObject.type = mappedObjectTypes[ithLM + 1];
+		mappedObject.map_id = ithLM;
+		mappedObject.mappedBy = robotID;
+		mappedObject.xPosition = gsl_matrix_get(this->state, ithLM * 4 + 3, 0);
+		mappedObject.yPosition = gsl_matrix_get(this->state, ithLM * 4 + 4, 0);
+		mappedObject.phiPosition = gsl_matrix_get(this->state, ithLM * 4 + 5,
 				0);
-		mappedObject->zPosition = gsl_matrix_get(this->state, ithLM * 4 + 6, 0);
-		return mappedObject;
+		mappedObject.zPosition = gsl_matrix_get(this->state, ithLM * 4 + 6, 0);
+		mappedObject.xUncertainty = gsl_matrix_get(this->P, ithLM * 4 + 3,
+				ithLM * 4 + 3);
+		mappedObject.yUncertainty = gsl_matrix_get(this->P, ithLM * 4 + 4,
+				ithLM * 4 + 4);
+		mappedObject.phiUncertainty = gsl_matrix_get(this->P, ithLM * 4 + 5,
+				ithLM * 4 + 5);
+		mappedObject.zUncertainty = gsl_matrix_get(this->P, ithLM * 4 + 6,
+				ithLM * 4 + 6);
 	} else {
+
+		mappedObject.type = UNIDENTIFIED;
 		printf("trying to get LM position out of map size\n");
-		return NULL;
 	}
+	return mappedObject;
 }
+
+double* Map::getRobotPosition() {
+	double* pointer;
+	double robotposition[3];
+	robotposition[0] = gsl_matrix_get(this->state, 0, 0);
+	robotposition[1] = gsl_matrix_get(this->state, 1, 0);
+	robotposition[2] = gsl_matrix_get(this->state, 2, 0);
+	pointer = robotposition;
+	return pointer;
+}
+
 /**
  * sequential determination of ith position of nearest LM
  */
-int Map::nearestTypeID(double* position, MapObjectType type) {
+int Map::nearestTypeID(NearestObjectOfTypeToThisPosition nearestTo) {
 	int num = -1;
 	double dist = DBL_MAX;
 	int var;
+	double position[2] = { nearestTo.xPosition, nearestTo.yPosition };
 	for (var = 0; var < this->mapSize; ++var) {
-		MappedObjectPosition* actualObj = this->getMappedPosition(var);
-		double actual[2] = { actualObj->xPosition, actualObj->yPosition };
+
+		MappedObjectPosition actualObj = this->getMappedPosition(var);
+		printf("triing object type %d on pos %f %f \n", actualObj.type,
+				actualObj.xPosition, actualObj.yPosition);
+		double actual[2] = { actualObj.xPosition, actualObj.yPosition };
 		double actualdist = euclideanDistance(position, actual);
-		if (actualObj->type == type && actualdist < dist) {
+		if (actualObj.type == nearestTo.type && actualdist < dist) {
 			dist = actualdist;
 			num = var;
 		}
-		delete actualObj;
 	}
-	return var;
+	return num;
 }
 
-int Map::saveObjectToMap(MappedObjectPosition* position,
-		MappedObjectCovariance* covariance = NULL) {
+int Map::saveObjectToMap(MappedObjectPosition position) {
 	//state->
 	int pozicevmape = this->mapSize; //pozice v mape je od 0-inf
 	this->mapSize += 1;
-	mappedObjectTypes.push_back(position->type);
+	printf("adding object type %d pos %f %f %f %f id %d robid %d\n",position.type,position.xPosition,position.yPosition,
+			position.phiPosition,position.zPosition,position.map_id,position.mappedBy);
+	mappedObjectTypes.push_back(position.type);
 	int oldsize = 4 * (this->mapSize - 1) + 3;
 	int newsize = 4 * (this->mapSize) + 3;
 	gsl_matrix *newstate = gsl_matrix_alloc(newsize, 1);
@@ -1005,95 +1040,53 @@ int Map::saveObjectToMap(MappedObjectPosition* position,
 	gsl_matrix *newpredP = gsl_matrix_calloc(newsize, newsize);
 	int var, var2;
 
-	gsl_matrix_set(newstate, pozicevmape * 4 + 3, 0, position->xPosition);
-	gsl_matrix_set(newpredstate, pozicevmape * 4 + 3, 0, position->xPosition);
-	gsl_matrix_set(newstate, pozicevmape * 4 + 4, 0, position->yPosition);
-	gsl_matrix_set(newpredstate, pozicevmape * 4 + 4, 0, position->yPosition);
-	gsl_matrix_set(newstate, pozicevmape * 4 + 5, 0, position->phiPosition);
-	gsl_matrix_set(newpredstate, pozicevmape * 4 + 5, 0, position->phiPosition);
-	gsl_matrix_set(newstate, pozicevmape * 4 + 6, 0, position->zPosition);
-	gsl_matrix_set(newpredstate, pozicevmape * 4 + 6, 0, position->zPosition);
+	gsl_matrix_set(newstate, pozicevmape * 4 + 3, 0, position.xPosition);
+	gsl_matrix_set(newpredstate, pozicevmape * 4 + 3, 0, position.xPosition);
+	gsl_matrix_set(newstate, pozicevmape * 4 + 4, 0, position.yPosition);
+	gsl_matrix_set(newpredstate, pozicevmape * 4 + 4, 0, position.yPosition);
+	gsl_matrix_set(newstate, pozicevmape * 4 + 5, 0, position.phiPosition);
+	gsl_matrix_set(newpredstate, pozicevmape * 4 + 5, 0, position.phiPosition);
+	gsl_matrix_set(newstate, pozicevmape * 4 + 6, 0, position.zPosition);
+	gsl_matrix_set(newpredstate, pozicevmape * 4 + 6, 0, position.zPosition);
 
-	switch (position->type) {
-	case NORMAL_CIRCLE: {
+	if (position.xUncertainty > 0 && position.xUncertainty < 0.05) {
 		gsl_matrix_set(newP, pozicevmape * 4 + 3, pozicevmape * 4 + 3,
-				MEASUREMENT_XERROR);
+				position.xUncertainty);
 		gsl_matrix_set(newpredP, pozicevmape * 4 + 3, pozicevmape * 4 + 3,
-				MEASUREMENT_XERROR);
-		gsl_matrix_set(newP, pozicevmape * 4 + 4, pozicevmape * 4 + 4,
-				MEASUREMENT_YERROR);
-		gsl_matrix_set(newpredP, pozicevmape * 4 + 4, pozicevmape * 4 + 4,
-				MEASUREMENT_YERROR);
-		gsl_matrix_set(newP, pozicevmape * 4 + 5, pozicevmape * 4 + 5,
-				MEASUREMENT_PHIERROR);
-		gsl_matrix_set(newpredP, pozicevmape * 4 + 5, pozicevmape * 4 + 5,
-				MEASUREMENT_PHIERROR);
-		gsl_matrix_set(newP, pozicevmape * 4 + 6, pozicevmape * 4 + 6,
-				MEASUREMENT_ZERROR);
-		gsl_matrix_set(newpredP, pozicevmape * 4 + 6, pozicevmape * 4 + 6,
-				MEASUREMENT_ZERROR);
-	}
-		;
-		break;
-	case DOCK_CIRCLE: {
-		gsl_matrix_set(newP, pozicevmape * 4 + 3, pozicevmape * 4 + 3,
-				MEASUREMENT_XERROR);
+				position.xUncertainty);
+	} else {
+		gsl_matrix_set(newP, pozicevmape * 4 + 3, pozicevmape * 4 + 3, 0.05);
 		gsl_matrix_set(newpredP, pozicevmape * 4 + 3, pozicevmape * 4 + 3,
-				MEASUREMENT_XERROR);
+				0.05);
+	}
+	if (position.yUncertainty > 0 && position.yUncertainty < 0.05) {
 		gsl_matrix_set(newP, pozicevmape * 4 + 4, pozicevmape * 4 + 4,
-				MEASUREMENT_YERROR);
+				position.yUncertainty);
 		gsl_matrix_set(newpredP, pozicevmape * 4 + 4, pozicevmape * 4 + 4,
-				MEASUREMENT_YERROR);
+				position.yUncertainty);
+	} else {
+		gsl_matrix_set(newP, pozicevmape * 4 + 4, pozicevmape * 4 + 4, 0.05);
+		gsl_matrix_set(newpredP, pozicevmape * 4 + 4, pozicevmape * 4 + 4,
+				0.05);
+	}
+	if (position.phiUncertainty > 0 && position.phiUncertainty < 0.6) {
 		gsl_matrix_set(newP, pozicevmape * 4 + 5, pozicevmape * 4 + 5,
-				MEASUREMENT_PHIERROR);
+				position.phiUncertainty);
 		gsl_matrix_set(newpredP, pozicevmape * 4 + 5, pozicevmape * 4 + 5,
-				MEASUREMENT_PHIERROR);
+				position.phiUncertainty);
+	} else {
+		gsl_matrix_set(newP, pozicevmape * 4 + 5, pozicevmape * 4 + 5, 0.6);
+		gsl_matrix_set(newpredP, pozicevmape * 4 + 5, pozicevmape * 4 + 5, 0.6);
+	}
+	if (position.zUncertainty > 0 && position.zUncertainty < 0.05) {
 		gsl_matrix_set(newP, pozicevmape * 4 + 6, pozicevmape * 4 + 6,
-				MEASUREMENT_ZERROR);
+				position.zUncertainty);
 		gsl_matrix_set(newpredP, pozicevmape * 4 + 6, pozicevmape * 4 + 6,
-				MEASUREMENT_ZERROR);
-	}
-		;
-		break;
-	default: {
-		if (covariance == NULL) {
-			gsl_matrix_set(newP, pozicevmape * 4 + 3, pozicevmape * 4 + 3,
-					0.0005);
-			gsl_matrix_set(newpredP, pozicevmape * 4 + 3, pozicevmape * 4 + 3,
-					0.0005);
-			gsl_matrix_set(newP, pozicevmape * 4 + 4, pozicevmape * 4 + 4,
-					0.0005);
-			gsl_matrix_set(newpredP, pozicevmape * 4 + 4, pozicevmape * 4 + 4,
-					0.0005);
-			gsl_matrix_set(newP, pozicevmape * 4 + 5, pozicevmape * 4 + 5,
-					0.0005);
-			gsl_matrix_set(newpredP, pozicevmape * 4 + 5, pozicevmape * 4 + 5,
-					0.0005);
-			gsl_matrix_set(newP, pozicevmape * 4 + 6, pozicevmape * 4 + 6,
-					0.0005);
-			gsl_matrix_set(newpredP, pozicevmape * 4 + 6, pozicevmape * 4 + 6,
-					0.0005);
-		} else {
-			gsl_matrix_set(newP, pozicevmape * 4 + 3, pozicevmape * 4 + 3,
-					covariance->xUncertainty);
-			gsl_matrix_set(newpredP, pozicevmape * 4 + 3, pozicevmape * 4 + 3,
-					covariance->xUncertainty);
-			gsl_matrix_set(newP, pozicevmape * 4 + 4, pozicevmape * 4 + 4,
-					covariance->yUncertainty);
-			gsl_matrix_set(newpredP, pozicevmape * 4 + 4, pozicevmape * 4 + 4,
-					covariance->yUncertainty);
-			gsl_matrix_set(newP, pozicevmape * 4 + 5, pozicevmape * 4 + 5,
-					covariance->phiUncertainty);
-			gsl_matrix_set(newpredP, pozicevmape * 4 + 5, pozicevmape * 4 + 5,
-					covariance->phiUncertainty);
-			gsl_matrix_set(newP, pozicevmape * 4 + 6, pozicevmape * 4 + 6,
-					covariance->zUncertainty);
-			gsl_matrix_set(newpredP, pozicevmape * 4 + 6, pozicevmape * 4 + 6,
-					covariance->zUncertainty);
-		}
-	}
-		;
-		break;
+				position.zUncertainty);
+	} else {
+		gsl_matrix_set(newP, pozicevmape * 4 + 6, pozicevmape * 4 + 6, 0.05);
+		gsl_matrix_set(newpredP, pozicevmape * 4 + 6, pozicevmape * 4 + 6,
+				0.05);
 	}
 
 	for (var = 0; var < oldsize; ++var) {
@@ -1119,36 +1112,240 @@ int Map::saveObjectToMap(MappedObjectPosition* position,
 
 }
 
-void Map::addOtherRobotsObjects(CMessage message) {
-	if (message.type == MSG_MAP_DATA) {
-		MappedObjectPosition position;
-		memcpy(&position, message.data, message.len);
-		bool foundRobot = false;
-		for (int var = 0; var < otherMapData.size(); ++var) {
-			bool foundObject = false;
-			if (otherMapData[var].robotID == position.mappedBy) {
+void Map::addOtherRobotsObjects(MappedObjectPosition position) {
+	bool foundRobot = false;
+	for (int var = 0; var < otherMapData.size(); ++var) {
+		bool foundObject = false;
+		if (otherMapData[var].robotID == position.mappedBy) {
 
-				for (int var2 = 0;
-						var2 < otherMapData[var].mappedObjects.size(); ++var2) {
-					if (otherMapData[var].mappedObjects[var2].map_id
-							== position.map_id) {
-						foundObject = true;
-						break;
-					}
+			for (int var2 = 0; var2 < otherMapData[var].mappedObjects.size();
+					++var2) {
+				if (otherMapData[var].mappedObjects[var2].map_id
+						== position.map_id) {
+					foundObject = true;
+					break;
 				}
-				if (!foundObject) {
-					otherMapData[var].mappedObjects.push_back(position);
-				}
-				foundRobot = true;
-				break;
 			}
+			if (!foundObject) {
+				otherMapData[var].mappedObjects.push_back(position);
+			}
+			foundRobot = true;
+			break;
 		}
-		if (!foundRobot) {
-			OtherRobotMap otherMap;
-			otherMap.robotID = position.mappedBy;
-			otherMap.mappedObjects.push_back(position);
-			otherMapData.push_back(otherMap);
-		}
+	}
+	if (!foundRobot) {
+		OtherRobotMap otherMap;
+		otherMap.robotID = position.mappedBy;
+		otherMap.mappedObjects.push_back(position);
+		otherMapData.push_back(otherMap);
+	}
+	printf("addOtherRobotsObjects type %d pos %f %f %f %f id %d robid %d\n",position.type,position.xPosition,
+			position.yPosition,	position.phiPosition,position.zPosition,position.map_id,position.mappedBy);
+	if (mappingEnded) {
+		mergeMap();
 	}
 }
 
+void Map::mergeMap() {
+	printf("merging map \n");
+	int myDataPos = -1;
+	int maxMapped = 0;
+	//find index of my map inside  otherMapData and define max number of mapped landmarks
+	for (int var = 0; var < otherMapData.size(); ++var) {
+		if (otherMapData[var].robotID == this->robotID) {
+			myDataPos = var;
+			otherMapData[var].mappedObjects.clear();
+
+		}
+		if (otherMapData[var].mappedObjects.size() > maxMapped) {
+			maxMapped = otherMapData[var].mappedObjects.size();
+		}
+	}
+	//if my map is not inside otherMapData
+	if (myDataPos == -1) {
+		myDataPos = otherMapData.size();
+		OtherRobotMap otherMap;
+		otherMap.robotID = robotID;
+		otherMapData.push_back(otherMap);
+	}
+	printf("my data pos is %d and size of otherMapData is %d\n", myDataPos,otherMapData.size());
+
+	//delete my mapped objects
+	if(otherMapData[myDataPos].mappedObjects.size()>0){
+	otherMapData[myDataPos].mappedObjects.clear();
+	}
+	printf("cleared \n");
+	//fill my mapped objects by map
+	for (int var = 0; var < this->mapSize; ++var) {
+		MappedObjectPosition position;
+		position = this->getMappedPosition(var);
+		otherMapData[myDataPos].mappedObjects.push_back(position);
+	}
+	printf("for \n");
+	if (otherMapData[myDataPos].mappedObjects.size() > maxMapped) {
+		maxMapped = otherMapData[myDataPos].mappedObjects.size();
+	}
+	printf("if \n");
+	//delete actual map before merging
+	int oldsize = 4 * (this->mapSize - 1) + 3;
+	int newsize = 3;
+	this->mapSize = 0;
+	gsl_matrix *newstate = gsl_matrix_alloc(newsize, 1);
+	gsl_matrix *newpredstate = gsl_matrix_alloc(newsize, 1);
+	gsl_matrix *newP = gsl_matrix_calloc(newsize, newsize);
+	gsl_matrix *newpredP = gsl_matrix_calloc(newsize, newsize);
+	for (int var = 0; var < newsize; ++var) {
+		gsl_matrix_set(newstate, var, 0, gsl_matrix_get(this->state, var, 0));
+		gsl_matrix_set(newpredstate, var, 0,
+				gsl_matrix_get(this->predstate, var, 0));
+		for (int var2 = 0; var2 < newsize; ++var2) {
+			gsl_matrix_set(newP, var, var2, gsl_matrix_get(this->P, var, var2));
+			gsl_matrix_set(newpredP, var, var2,
+					gsl_matrix_get(this->predP, var, var2));
+		}
+	}
+	gsl_matrix_free(this->state);
+	gsl_matrix_free(this->predstate);
+	gsl_matrix_free(this->P);
+	gsl_matrix_free(this->predP);
+	this->state = newstate;
+	this->predstate = newpredstate;
+	this->P = newP;
+	this->predP = newpredP;
+	mappedObjectTypes.clear();
+	mappedObjectTypes.push_back(ROBOT);
+	printf("after deleting mapped my map \n");
+	//merging together - loop through
+	//create table of
+	int velikos = otherMapData.size();
+	bool *alreadyLooped = new bool[velikos * maxMapped];//array that holds wheather was this landmark alreadz looped
+	for (int var = 0; var < velikos * maxMapped; ++var) {
+		alreadyLooped[var] = false;
+	}
+	printf("initialize alreadyLooped to false \n");
+	//bool myBoolArray[velikos][maxMapped] = {{ 0 }};
+	std::vector<MappedObjectPosition> averaged;
+	//loop throught different robot maps
+	for (int var = 0; var < otherMapData.size(); ++var) {
+		//loop throught robots landmarks
+
+		for (int var2 = 0; var2 < otherMapData[var].mappedObjects.size();
+				++var2) {
+			printf("loop robot %d object %d\n",otherMapData[var].robotID,otherMapData[var].mappedObjects[var2].map_id);
+			if (!alreadyLooped[var * maxMapped + var2]) {
+			printf("loop robot %d object %d\n",otherMapData[var].robotID,otherMapData[var].mappedObjects[var2].map_id);
+			//here is when mapped object of robot was not previously looped
+			std::vector<MappedObjectPosition> sameObjects;	// vector for save same objects
+			sameObjects.push_back(otherMapData[var].mappedObjects[var2]);
+			alreadyLooped[var * maxMapped + var2] = true; //set that this object was already looped and tried for marging
+				for (int var3 = 0; var3 < otherMapData.size(); ++var3) {
+					if (var3 != var) {
+						printf("not same robots %d %d \n",otherMapData[var].robotID,otherMapData[var3].robotID);
+						//here do not test same robots map
+						//loop through other robots mapped objects
+						for (int var4 = 0;
+								var4 < otherMapData[var3].mappedObjects.size();
+								++var4) {
+							if (!alreadyLooped[var3 * maxMapped + var4]) {
+								//here if this object was not previously looped
+								//test if object are same
+								if (areSame(
+										otherMapData[var].mappedObjects[var2],
+										otherMapData[var3].mappedObjects[var4])) {
+									sameObjects.push_back(
+											otherMapData[var3].mappedObjects[var4]);
+									MappedObjectPosition pos = otherMapData[var3].mappedObjects[var4];
+									printf("adding object from robot %d on pos %f %f %f type %d \n",otherMapData[var3].robotID,pos.xPosition,pos.yPosition,pos.phiPosition,pos.type);
+									alreadyLooped[var3 * maxMapped + var4] =
+											true;
+								}
+							}
+						}
+					}
+				}
+			//averrage together
+			MappedObjectPosition averagepos = averagePositions(sameObjects);
+			printf("averagepos type %d pos %f %f %f %f id %d robid %d\n",averagepos.type,averagepos.xPosition,
+					averagepos.yPosition,	averagepos.phiPosition,averagepos.zPosition,averagepos.map_id,averagepos.mappedBy);
+			averaged.push_back(averagepos);
+
+			}
+		}
+	}
+
+	for (int var = 0; var < averaged.size(); ++var) {
+		printf("adding to map \n");
+		saveObjectToMap(averaged[var]);
+	}
+
+	delete[] alreadyLooped;
+}
+
+bool Map::areSame(MappedObjectPosition mappedObject1,
+		MappedObjectPosition mappedObject2) {
+	bool toReturn = false;
+	//test if objects are of same types
+	if(mappedObject1.type==mappedObject2.type && (mappedObject2.type==DOCK_CIRCLE || mappedObject2.type==NORMAL_CIRCLE || mappedObject2.type==DOCK_CIRCLE_ORGANISM )){
+	//calculate distances between objects
+	float vzdalenost = pow(
+			pow(mappedObject1.xPosition - mappedObject2.xPosition, 2)
+					+ pow(mappedObject1.yPosition - mappedObject2.yPosition, 2),
+			0.5);
+	if (vzdalenost < TOLERANCE) {
+		toReturn = true;
+	}
+	}
+	return toReturn;
+}
+
+MappedObjectPosition Map::averagePositions(
+		std::vector<MappedObjectPosition> sameObjects) {
+
+	MappedObjectPosition returnPos;
+	if(sameObjects.size()>1){
+	returnPos.xPosition = 0;
+	returnPos.yPosition = 0;
+	returnPos.zPosition = 0;
+	returnPos.phiPosition = 0;
+	double sum_of_koeffs_x = 0;
+	double sum_of_koeffs_y = 0;
+	double sum_of_koeffs_z = 0;
+	double sum_of_koeffs_phi = 0;
+	for (int var = 0; var < sameObjects.size(); ++var) {
+		sum_of_koeffs_x += (1.0 / sameObjects[var].xUncertainty);
+		sum_of_koeffs_y += (1.0 / sameObjects[var].yUncertainty);
+		sum_of_koeffs_z += (1.0 / sameObjects[var].zUncertainty);
+		sum_of_koeffs_phi += (1.0 / sameObjects[var].phiUncertainty);
+	}
+
+	for (int var = 0; var < sameObjects.size(); ++var) {
+		returnPos.xPosition += sameObjects[var].xPosition
+				* (1.0 / sameObjects[var].xUncertainty);
+		returnPos.yPosition += sameObjects[var].yPosition
+				* (1.0 / sameObjects[var].yUncertainty);
+		returnPos.zPosition += sameObjects[var].zPosition
+				* (1.0 / sameObjects[var].zUncertainty);
+		returnPos.phiPosition += sameObjects[var].phiPosition
+				* (1.0 / sameObjects[var].phiUncertainty);
+		returnPos.xUncertainty += sameObjects[var].xUncertainty
+				* (1.0 / sameObjects[var].xUncertainty);
+		returnPos.yUncertainty += sameObjects[var].yUncertainty
+				* (1.0 / sameObjects[var].yUncertainty);
+		returnPos.zUncertainty += sameObjects[var].zUncertainty
+				* (1.0 / sameObjects[var].zUncertainty);
+		returnPos.phiUncertainty += sameObjects[var].phiUncertainty
+				* (1.0 / sameObjects[var].phiUncertainty);
+	}
+	returnPos.xPosition = returnPos.xPosition / sum_of_koeffs_x;
+	returnPos.yPosition = returnPos.yPosition / sum_of_koeffs_y;
+	returnPos.zPosition = returnPos.zPosition / sum_of_koeffs_z;
+	returnPos.phiPosition = returnPos.phiPosition / sum_of_koeffs_phi;
+	returnPos.xUncertainty = returnPos.xUncertainty / sum_of_koeffs_x;
+	returnPos.yUncertainty = returnPos.yUncertainty / sum_of_koeffs_y;
+	returnPos.zUncertainty = returnPos.zUncertainty / sum_of_koeffs_z;
+	returnPos.phiUncertainty = returnPos.phiUncertainty / sum_of_koeffs_phi;
+	}else{
+		returnPos = sameObjects[0];
+	}
+	return returnPos;
+}

@@ -43,9 +43,16 @@
 
 #endif
 
+
 #if defined(__GXX_EXPERIMENTAL_CXX0X__)
 
-void random_init(int seed = 0) {
+#if __GNUC__ >= 4 && __GNUC_MINOR__ < 5
+typedef std::uniform_int<int> t_uniform_int_distribution;
+#elif __GNUC__ >= 4 && __GNUC_MINOR__ >= 5
+typedef std::uniform_int_distribution<int> t_uniform_int_distribution;
+#endif
+
+void inline random_init(int seed = 0) {
 	// todo: use it to seed the random generator
 }
 
@@ -58,7 +65,7 @@ void random_init(int seed = 0) {
 template<typename Iter, typename RandomGenerator>
 Iter inline random_element(Iter start, Iter end, RandomGenerator& g) {
     if (start == end) return start;
-    std::uniform_int_distribution<> dis(0, std::distance(start, end) - 1);
+    t_uniform_int_distribution dis(0, std::distance(start, end) - 1);
     std::advance(start, dis(g));
     return start;
 }
@@ -73,7 +80,7 @@ Iter inline random_element(Iter start, Iter end) {
 int inline random_value(int start, int end) {
     static std::random_device rd;
     static std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dis(start, end);
+    t_uniform_int_distribution dis(start, end);
     return dis(gen);
 }
 

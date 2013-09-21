@@ -39,6 +39,7 @@ typedef enum {
 	S_START = 0,
 	S_CALIBRATE_ODOMETRY,
 	S_BUILD_MAP,
+	S_WAIT_FOR_MAP_FROM_OTHERS,
 	S_DOCK_SOCKET,
 	S_DOCKED,
 	S_STREAM_VIDEO,
@@ -80,7 +81,8 @@ typedef enum {
 private:
 	//! State for the state machine in Run()
 	TState state;
-
+	jockey_id lastActiveJockey;
+	int sleepTime;
 	//! A raised quit flag will drop out of the while loop in Run()
 	bool quit;
 };
