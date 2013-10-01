@@ -16,7 +16,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-
+#include <string>
 #include <semaphore.h>
 #include <pthread.h>
 
@@ -38,27 +38,34 @@ ECameraMessage;*/
 
 void* serverLoop(void* serv);
 
-class CImageServer{
-	public:
+class CImageServer {
+public:
 
-		CImageServer(sem_t *imsem,CRawImage* image);
-		~CImageServer();
-		int initServer(const char* port);
+	CImageServer(sem_t *imsem,CRawImage* image);
+	~CImageServer();
+	int initServer(const char* port);
 
-		int checkForMessage(int socket);
-		int sendImage(int socket);
-		int closeConnection(int socket);
-		void stopServer();
+	int checkForMessage(int socket);
+	int sendImage(int socket);
+	int closeConnection(int socket);
+	void stopServer();
 
-		int connected;
-		int serverSocket;
-		int mySocket;
-		sem_t *dataSem;
-		sem_t connectSem;
-		sem_t captureSem;
-		int messageRead;
-		CRawImage *image;
-		bool stop;
+	int connected;
+	int serverSocket;
+	int mySocket;
+	sem_t *dataSem;
+	sem_t connectSem;
+	sem_t captureSem;
+	int messageRead;
+	CRawImage *image;
+	bool stop;
+
+	//! Set prefix for log messages
+	inline void setLogPrefix(std::string log_prefix) {
+		this->log_prefix = log_prefix + "CImageServer: ";
+	}
+	std::string log_prefix;
+
 };
 
 #endif

@@ -20,7 +20,7 @@ endif
 
 # Optional local jockey file for specific options for this jockey
 -include jockey.mk
-
+LDFLAGS += -L../../../libs/v4l2 -lv4l2 -lv4lconvert
 ####################################################################################
 # List the directories you want to include from the "bridles" 
 ####################################################################################

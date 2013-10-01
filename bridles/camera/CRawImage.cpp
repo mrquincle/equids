@@ -352,7 +352,7 @@ int CRawImage::getSaveNumber()
 
 CRawImage::~CRawImage()
 {
-	printf("Deallocate image of size %i\n", size);
+	printf("CRawImage: Deallocate image of size %i\n", size);
 	if (data != NULL) {
 		free(data);
 	}

@@ -36,9 +36,10 @@
  * **************************************************************************************/
 
 CLaser::CLaser(RobotBase *robot_base, RobotBase::RobotType robot_type) {
-	printf("Create laser object\n");
+//	printf("Create laser object\n");
+	log_prefix = "CLamera: ";
 	if (robot_base == NULL) {
-		fprintf(stderr, "robot_base is null, error in instantiation!\n");
+		std::cerr << log_prefix << "robot_base is null, error in instantiation!" << std::endl;
 	}
 	this->robot = robot_base;
 	this->robot_type = robot_type;
@@ -48,7 +49,7 @@ CLaser::CLaser(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 CLaser::~CLaser() {
 	robot = NULL;
 	status_on = false;
-	printf("Laser object deallocated\n");
+	std::cout << log_prefix << "Laser object deallocated" << std::endl;
 }
 
 /**
@@ -79,7 +80,7 @@ void CLaser::On() {
 		break;
 	}
 	case RobotBase::ACTIVEWHEEL: default:
-		fprintf(stderr, "I don't know how to turn on the laser on this robot type\n");
+		std::cerr << log_prefix << "I don't know how to turn on the laser on this robot type (there is no laser)" << std::endl;
 		break;
 	}
 }
@@ -100,7 +101,7 @@ void CLaser::Off() {
 		break;
 	}
 	case RobotBase::ACTIVEWHEEL: default:
-		fprintf(stderr, "I don't know how to turn off the laser on this robot type\n");
+		std::cerr << log_prefix << "I don't know how to turn off the laser on this robot type (there is no laser)" << std::endl;
 		break;
 	}
 }
@@ -120,7 +121,7 @@ void CLaser::Toggle() {
 		break;
 	}
 	case RobotBase::ACTIVEWHEEL: default:
-		fprintf(stderr, "I don't know how to toggle the laser on this robot type\n");
+		std::cerr << log_prefix << "I don't know how to toggle the laser on this robot type (there is no laser)" << std::endl;
 		break;
 	}
 }

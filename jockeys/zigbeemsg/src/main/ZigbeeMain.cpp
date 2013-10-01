@@ -11,9 +11,13 @@
 
 #include "wapi/wapi.h"
 #include "CMessageServer.h"
+#define NAME "ZigBee"
 #define WAIT_TO_IDENTITY_TIMEOUT_S 1
 #define RECEIVE_MESSAGE_TIMEOUT_MS 5000
 #define ZIGBEE_CHANNEL 60
+
+//! Convenience function for printing to standard out
+#define DEBUG NAME << '[' << getpid() << "] " << __func__ << "(): "
 
 using namespace wapi;
 CMessageServer *server;
@@ -23,9 +27,9 @@ static bool stopJockey = false;
  * If the user presses Ctrl+C, this can be used to do memory deallocation or a last communication with the MSPs.
  */
 void interrupt_signal_handler(int signal) {
-   if (signal == SIGINT) {
-      stopJockey=true;
-   }
+	if (signal == SIGINT) {
+		stopJockey=true;
+	}
 }
 
 
@@ -33,27 +37,27 @@ static Ubitag my_ubitag;
 
 int zigbeeInit(WAPI *wapi)
 {
-		int wapi_error;
-      int cnt;
-		int channel=ZIGBEE_CHANNEL;
-		
-      wapi_error = wapi->join(channel);
-		if(WAPI::WAPI_OK != wapi_error)	{
-		   fprintf(stderr, "Cannot join to channel %i wapi_error %i\n", channel, wapi_error);
-		   return 0;
-		}
-		printf("Joined to channel %i\n",channel);
-		
-      do	{
-		   wapi_error = wapi->nodeInfo(my_ubitag);
-		   if(WAPI::WAPI_OK != wapi_error)	{
-			  fprintf(stderr, "Waiting for identity\n");
-			  sleep(WAIT_TO_IDENTITY_TIMEOUT_S);
+	int wapi_error;
+	int cnt;
+	int channel=ZIGBEE_CHANNEL;
 
-		   }
-		} while(WAPI::WAPI_OK != wapi_error && cnt++<10);
-	
-	   return wapi_error==WAPI::WAPI_OK;
+	wapi_error = wapi->join(channel);
+	if(WAPI::WAPI_OK != wapi_error)	{
+		fprintf(stderr, "Cannot join to channel %i wapi_error %i\n", channel, wapi_error);
+		return 0;
+	}
+	printf("Joined to channel %i\n",channel);
+
+	do	{
+		wapi_error = wapi->nodeInfo(my_ubitag);
+		if(WAPI::WAPI_OK != wapi_error)	{
+			fprintf(stderr, "Waiting for identity\n");
+			sleep(WAIT_TO_IDENTITY_TIMEOUT_S);
+
+		}
+	} while(WAPI::WAPI_OK != wapi_error && cnt++<10);
+
+	return wapi_error==WAPI::WAPI_OK;
 }
 
 int zigbeeSend(WAPI *wapi, const uint8_t *data, int len) {
@@ -80,28 +84,36 @@ int zigbeeSend(WAPI *wapi, const uint8_t *data, int len) {
 }
 
 int main(int argc, char **argv) {
-   struct sigaction a;
-   WAPI wapi(0);
-   Message receive_msg;
-   bool wapi_init;
-   int wapi_error;
+	struct sigaction a;
+	WAPI wapi(0);
+	Message receive_msg;
+	bool wapi_init;
+	int wapi_error;
 
-	fprintf(stdout, "Ubisence position starting %s\n", argv[1]);
+	std::ostringstream ss; ss.clear();
+	ss << DEBUG;
+	std::string debug_str = ss.str();
+
+	std::cout << "################################################################################" << std::endl;
+	std::cout << "Run " << NAME << " compiled at time " << __TIME__ << std::endl;
+	std::cout << "################################################################################" << std::endl;
+
+	fprintf(stdout, "%sUbisence position starting %s\n", debug_str.c_str(), argv[1]);
 
 	a.sa_handler = &interrupt_signal_handler;
 	sigaction(SIGINT, &a, NULL);
 
 	if (argc <= 1) {
-		fprintf(stderr, "Usage: port_number\n");
+		fprintf(stderr, "%sUsage: port_number\n", debug_str.c_str());
 		return 1;
 	}
 
-	printf("Create receiving message server on port %s\n", argv[1]);
+	printf("%sCreate receiving message server on port %s\n", debug_str.c_str(), argv[1]);
 
 	server = new CMessageServer();
 	server->initServer(argv[1]);
 
-	fprintf(stderr, "Init server finished\n");
+	printf("%sInit server finished\n", debug_str.c_str());
 
 	wapi_init = zigbeeInit(&wapi);
 
@@ -112,7 +124,7 @@ int main(int argc, char **argv) {
 		message = server->getMessage();
 
 		if (message.type != MSG_NONE) {
-			printf("Command: %s\n", message.getStrType());
+			printf("%sCommand: %s\n", debug_str.c_str(), message.getStrType());
 		}
 
 		switch (message.type) {
@@ -120,15 +132,18 @@ int main(int argc, char **argv) {
 			// init WAPI
 			server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		};
-			break;
+		break;
 
 		case MSG_START: {
+			server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 			break;
 		}
 		case MSG_STOP: {
+			server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 			break;
 		}
 		case MSG_QUIT: {
+			server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 			stopJockey = true;
 			break;
 		}
@@ -162,7 +177,10 @@ int main(int argc, char **argv) {
 		}
 		if (wapi_init) {
 			wapi_error = wapi.receive(receive_msg, 1);
+
 			if (WAPI::WAPI_OK == wapi_error) {
+				std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+				std::cout << "Received zigbee message" << std::endl;
 				server->sendMessage(MSG_ZIGBEE_MSG, (void*) receive_msg.Data(),
 						receive_msg.Size());
 			}

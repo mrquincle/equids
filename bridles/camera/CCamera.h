@@ -29,10 +29,14 @@ class CCamera {
 public:
 	bool initialized;
 
+	//! Constructor, does create image of specific dimensions
 	CCamera();
 
-	//! If you want to initialize a real camera
-	int Init(const char *deviceName, int &devfd, int width, int height);
+	//! Destructor, stops the camera too
+	~CCamera();
+
+	//! If you want to initialize a real camera, use Start after this
+	int Init(int width, int height);
 
 	//! Set semaphore if you want to get only a new image if e.g. streaming is successful
 	void setSemaphore(sem_t *cap_sem);
@@ -40,15 +44,28 @@ public:
 	//! If you want to load images from a directory use this "dummy" camera
 	int dummyInit(const char *directoryName, const char *prefixImage);
 
+	//! Stop the camera, closes the /dev video device so other code can use this camera
 	void Stop();
 
-	~CCamera();
+	//! ? really!?
+	bool stopped;
+
+	//! Start the camera, (re)opens the /dev video device
+	int Start(const char *deviceName, int &devfd);
 
 	//! This gets you a new image, by default it will convert it to RGB values
 	int renewImage(CRawImage* image, bool convert , bool swap=false);
 
 	//! Denoise image by capturing another image and averaging over the two
 	int denoiseImageByCapturingAnother(CRawImage* image);
+
+	//! Set verbosity
+	inline void setVerbosity(char verbosity) { log_level = verbosity; }
+
+	//! Set prefix for log messages
+	inline void setLogPrefix(std::string log_prefix) {
+		this->log_prefix = log_prefix + "CCamera: ";
+	}
 
 	void setGain(int value);
 	int getGain();
@@ -64,7 +81,8 @@ public:
 
 	void yuyv_to_uyvy(unsigned char *data, size_t width, size_t height);
 
-	inline void saveImages(bool save) { save_images = save; }
+	inline void saveImages(bool save) { save_images = save; };
+
 protected:
 	//! This gets you a dummy image
 	int dummyImage(CRawImage* image);
@@ -85,11 +103,15 @@ private:
 	int camdevfd;
 
 	int pixel_format;
-	bool print_debug;
 
 	bool flip_camera;
 
 	bool semaphore_set;
+
+	//! Debug state
+	char log_level;
+
+	std::string log_prefix;
 
 	sem_t *capture_sem;
 };

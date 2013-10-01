@@ -57,8 +57,10 @@ public:
 	int messageRead;
 	CRawImage *image;
 	bool stop;
+
 private:
 	pthread_t* connectLoopThread;
+
 };
 
 #endif

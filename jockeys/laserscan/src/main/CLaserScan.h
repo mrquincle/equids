@@ -27,6 +27,8 @@
 #ifndef CSENSORFUSION_H_
 #define CSENSORFUSION_H_
 
+//#define USE_HOUGH_TRANSFORM
+
 /***********************************************************************************************************************
  * Jockey framework includes
  **********************************************************************************************************************/
@@ -37,7 +39,9 @@
 #include "CLaser.h"
 #include "CCamera.h"
 
+#ifdef USE_HOUGH_TRANSFORM
 #include <Hough.h>
+#endif
 #include <DetectLineModuleExt.h>
 
 /***********************************************************************************************************************
@@ -79,6 +83,15 @@ public:
 	//! All the necessary initialisation, needs to be called before anything
 	int Init();
 
+	//! Pause everything, give up the file descriptor to the camera for example
+	void Pause();
+
+	//! Start after a pause
+	int Start();
+
+	//! Is started
+	bool isStarted() { return started; }
+
 	//! Stop everything
 	void Stop();
 
@@ -118,6 +131,13 @@ public:
 
 	//! Get recognized object type
 	void GetRecognizedObject(ObjectType &object_type, int & distance);
+
+	//! Set prefix for log messages
+	inline void setLogPrefix(std::string log_prefix) {
+		camera.setLogPrefix(log_prefix + "in CLaserscan, ");
+		laser.setLogPrefix(log_prefix + "in CLaserscan, ");
+		this->log_prefix = log_prefix + "CLaserScan: ";
+	}
 protected:
 	//! Get the laser scan
 	void GetData();
@@ -126,19 +146,24 @@ protected:
 	int InitCam(int imgWidth, int imgHeight, int laserResolution);
 
 	//! Generate laser vector using two cameras, one with laser on, one with laser off
-	int generateVector(CRawImage* laserImage, CRawImage* noLaserImage, int* vec);
+//	int generateVector(CRawImage* laserImage, CRawImage* noLaserImage, int* vec);
 
 	int generateVector(CRawImage* laserImage, CRawImage* noLaserImage, std::vector<int> & vec);
 
+	float getRobustness(std::vector<int> & vec);
+
+#ifdef USE_HOUGH_TRANSFORM
 	//! Get line from an image
 	void getLine(CRawImage *image, double & alpha, double & d);
+#endif
 
-	void estimateParameters(std::vector<int> & vec, int & length, int & distance, int &start, int &end);
+	void estimateParameters(std::vector<int> & vec, int & length, int & distance, int &start, int &end, float &variance);
 
 private:
+#ifdef USE_HOUGH_TRANSFORM
 	//! The internal structure for the Hough transform
 	dobots::Hough<DecPoint> hough;
-
+#endif
 	bool printTime;
 
 	bool printLaser;
@@ -182,6 +207,9 @@ private:
 	double coeff_b;
 	double coeff_c;
 
+	bool started;
+
+	std::string log_prefix;
 };
 
 #endif /* CSENSORFUSION_H_ */

@@ -52,11 +52,17 @@ public:
 
 	void tick();
 
-	//! Overload pause to also stop the motors
+	//! Overload pause to also stop the motors and the camera
 	void pause();
+
+	//! Overload start to start camera
+	void start();
 
 	//! Check if the controller / robot is properly initialized
 	bool initialized();
+
+	//! Go back for a while, be careful with this function, because there is no collision avoidance here!
+	void head_back(int factor = 1);
 
 	void startVideoStream(std::string port);
 
@@ -66,9 +72,19 @@ public:
 
 	void testCamera();
 
-	void sendDetectedObject(MappedObjectPosition &position);
+	bool getDistance(int &distance);
+
+	ObjectType getDetectedObject();
+
+	void sendDetectedObject(const ObjectType object, MappedObjectPosition &position);
+
+	void printDetectedObject(ObjectType object);
 
 	void motorCommand(MotorCommand &motorCommand);
+
+	inline void setCameraExclusive(bool exclusive = true) { exclusive_camera = exclusive; }
+
+	inline void calcDistance(bool calc_distance) { this->calc_distance = calc_distance ; }
 private:
 	CLaserScan *scan;
 
@@ -93,6 +109,10 @@ private:
 	bool semaphore_set;
 
 	sem_t *capture_sem;
+
+	bool exclusive_camera;
+
+	bool calc_distance;
 };
 
 

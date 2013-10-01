@@ -101,7 +101,9 @@ static const std::string ScenarioStr[] = {
  * Basically only turns on and off the laser for a couple of times.
  */
 int main(int argc, char **argv) {
+	std::cout << "################################################################################" << std::endl;
 	std::cout << "Run " << NAME << " compiled at time " << __TIME__ << std::endl;
+	std::cout << "################################################################################" << std::endl;
 
 	Scenario scenario;
 	scenario = SC_GRAND_CHALLENGE1;

@@ -25,7 +25,9 @@
 #endif
 
 #define NAME "CameraDetection"
+
 #define DEBUG NAME << '[' << getpid() << "] " << __func__ << "(): "
+
 #define VIDEO_DEVICE "/dev/video0"
 #define IMAGE_WIDTH 640
 #define IMAGE_HEIGHT 480
@@ -36,6 +38,7 @@
 #define PI 3.14159265
 
 #define DEBUGSTRING NAME << '[' << getpid() << "] " << __func__ << "(): "
+
 typedef enum {
 	DETECT_DOCKING = 0, DETECT_MAPPING, DETECT_STAIR, DETECT_NO_TASK
 } ActualCameraUsage;
@@ -152,11 +155,14 @@ void switchActualTask(ActualCameraUsage newTask) {
 void readMessages() {
 	//	printf("getting message\n");
 	message = message_server->getMessage();
+	std::ostringstream ss; ss.clear(); ss.str("");
+	ss << DEBUG;
+	std::string debug_str = ss.str();
 	if (message.type != MSG_NONE) {
 		//	fprintf(stdout,"Command: %s %i %i %i %i\n",message.getStrType(),message.value1,message.value2,message.value3,message.value4);
 		switch (message.type) {
 		case MSG_INIT: {
-			printf("message init\n");
+			printf("%smessage init\n", debug_str.c_str());
 			//need robot type for right calibration file
 
 			 robot_type = RobotBase::Initialize(NAME);
@@ -175,7 +181,7 @@ void readMessages() {
 			 }
 			 break;
 			 default: {
-			 printf("swapping ................. ..............\n");
+			 printf("%sswapping ................. ..............\n", debug_str.c_str());
 			 swapIMG = true;
 			 }
 			 break;
@@ -183,21 +189,20 @@ void readMessages() {
 
 			sem_init(&imageSem, 0, 1);
 
-			int cameraDeviceHandler;
 			int imgWidth = IMAGE_WIDTH;
 			int imgHeight = IMAGE_HEIGHT;
 			int bytes_per_pixel = 3;
 			camera = new CCamera();
-			camera->Init(VIDEO_DEVICE, cameraDeviceHandler, imgWidth,
-					imgHeight);
+			camera->Init(imgWidth, imgHeight);
+			std::ostringstream msg; msg.clear(); msg.str("");
+			msg << NAME << '[' << getpid() << "] ";
+			camera->setLogPrefix(msg.str());
+
 			image = new CRawImage(imgWidth, imgHeight, bytes_per_pixel);
 
 			image_server = new CImageServer(&imageSem, image);
 
-			std::cout << "Possible image server on port " << portIS
-					<< std::endl;
-
-			std::cout << "Possible image server on port " << portIS
+			std::cout << DEBUG << "Possible image server on port " << portIS
 					<< std::endl;
 
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
@@ -205,38 +210,41 @@ void readMessages() {
 			;
 			break;
 		case MSG_START: {
-			printf("Start %s\n", NAME);
+			printf("%sStart %s\n", debug_str.c_str(), NAME);
+			int cameraDeviceHandler;
+			camera->Start(VIDEO_DEVICE, cameraDeviceHandler);
 			actualTask = DETECT_NO_TASK;
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		}
 			;
 			break;
 		case MSG_STOP: {
-			printf("Stop %s\n", NAME);
+			printf("%sStop %s\n", debug_str.c_str(), NAME);
+			camera->Stop();
 			switchActualTask(DETECT_NO_TASK);
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		}
 			;
 			break;
 		case MSG_QUIT: {
-			printf("Quit %s\n", NAME);
+			printf("%sQuit %s\n", debug_str.c_str(), NAME);
 			switchActualTask(DETECT_NO_TASK);
 			stop = true;
 		}
 			;
 			break;
 		case MSG_CAM_DETECT_DOCKING: {
-			printf("message MSG_CAM_DETECT_DOCKINGt\n");
+			printf("%smessage MSG_CAM_DETECT_DOCKINGt\n", debug_str.c_str());
 			switchActualTask(DETECT_DOCKING);
-			std::cout << "Initialize Docking" << std::endl;
+			std::cout << DEBUG << "Initialize Docking" << std::endl;
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		}
 			;
 			break;
 		case MSG_CAM_DETECT_MAPPING: {
-			printf("message MSG_CAM_DETECT_MAPPING\n");
+			printf("%smessage MSG_CAM_DETECT_MAPPING\n", debug_str.c_str());
 			switchActualTask(DETECT_MAPPING);
-			std::cout << "Initialize mapping" << std::endl;
+			std::cout << DEBUG << "Initialize mapping" << std::endl;
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		}
 			;
@@ -248,9 +256,13 @@ void readMessages() {
 		}
 			;
 			break;
-
+//		case MSG_SPEED: {
+//			memcpy(&motorCommand, message.data, sizeof(MotorCommand));
+//			controller.motorCommand(motorCommand);
+//			break;
+//		}
 		case MSG_CAM_VIDEOSTREAM_START: {
-			printf("Start video stream on %s\n", NAME);
+			printf("%sStart video stream on %s\n", debug_str.c_str(), NAME);
 			if (!streamVideo) {
 				streamVideo = true;
 				image_server->initServer(portIS.c_str());
@@ -260,7 +272,7 @@ void readMessages() {
 			;
 			break;
 		case MSG_CAM_VIDEOSTREAM_STOP: {
-			printf("Stop video stream on %s\n", NAME);
+			printf("%sStop video stream on %s\n", debug_str.c_str(), NAME);
 			if (streamVideo) {
 				streamVideo = false;
 				image_server->stopServer();
@@ -283,8 +295,10 @@ int main(int argc, char **argv) {
 	struct sigaction a;
 	a.sa_handler = &interrupt_signal_handler;
 	sigaction(SIGINT, &a, NULL);
-	std::cout << DEBUG << "Started with params " << argv[1] << ", " << argv[2]
-			<< std::endl;
+
+	std::cout << "################################################################################" << std::endl;
+	std::cout << "Run " << NAME << " compiled at time " << __TIME__ << std::endl;
+	std::cout << "################################################################################" << std::endl;
 
 	if (argc > 2) {
 		portMS = std::string(argv[1]);
@@ -296,15 +310,18 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-	std::cout << "Create (receiving) message server on port " << portMS
+	std::cout << DEBUG << "Started with params " << argv[1] << ", " << argv[2]
+			<< std::endl;
+
+	std::cout << DEBUG << "Create (receiving) message server on port " << portMS
 			<< std::endl;
 
 	message_server = new CMessageServer();
-	std::cout << "Initialize CMessageServer" << std::endl;
+	std::cout << DEBUG << "Initialize CMessageServer" << std::endl;
 	message_server->initServer(portMS.c_str());
 
 	while (!stop) {
-		if (actualTask != DETECT_NO_TASK || (streamVideo && camera !=NULL)) {
+		if (camera!=NULL && !camera->stopped && (actualTask != DETECT_NO_TASK || streamVideo)) {
 			//camera->renewImage(image,true);
 			camera->renewImage(image, true,false);
 		}
@@ -377,7 +394,7 @@ int main(int argc, char **argv) {
 			break;
 		}
 	}
-	std::cout << "Stopping camera detection jockey" << std::endl;
+	std::cout << DEBUG << "Stopping camera detection jockey" << std::endl;
 	return 0;
 }
 

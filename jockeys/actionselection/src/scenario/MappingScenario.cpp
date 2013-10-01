@@ -58,14 +58,30 @@ MappingScenario::~MappingScenario() {
 bool MappingScenario::Init() {
 	bool continue_program = true;
 
-	J_POSITION = equids->find("ubiposition");
+	int id = V_UBIPOSITION;
+	J_POSITION = equids->find("ubiposition",id);
+	id = V_ZIGBEEMSG;
+	J_ZBMESSENGER = equids->find("zigbeemsg",id);
+	id = V_CAMERADETECTION;
+	J_CAMERADETECTION = equids->find("cameradetection",id);
+	id = V_MOTORCALIBRATION;
+	J_MOTORCALIBRATION = equids->find("motorcalibration",id);
+	id = V_MAPPING;
+	J_MAPPING = equids->find("mapping",id);
+	id = V_MOVE_TO_POSITION;
+	J_DRIVE_TO_POSITION = equids->find("movetoposition",id);
+	id = V_DOCKING;
+	J_DOCK_SOCKET = equids->find("docking",id);
+	id = V_REMOTECONTROL;
+	J_REMOTE_CONTROL = equids->find("remotecontrol",id);
+	id = V_ORGANISM_CONTROL;
+	J_ORGANISM_CONTROL = equids->find("organismcontrol",id);
 
 	//! Send an error message or also quit program..
 	if (J_POSITION == -1) {
 		std::cout << "Not defined jockey \"position\"" << std::endl;
 		continue_program = false;
 	}
-	J_ZBMESSENGER = equids->find("zigbeemsg");
 
 	//! Send an error message or also quit program..
 	if (J_ZBMESSENGER == -1) {
@@ -73,46 +89,36 @@ bool MappingScenario::Init() {
 		continue_program = false;
 	}
 
-	J_CAMERADETECTION = equids->find("cameradetection");
-
 	if (J_CAMERADETECTION == -1) {
 		std::cout << "Not deffined jockey J_CAMERADETECTION" << std::endl;
 		continue_program = false;
 	}
-
-	J_MOTORCALIBRATION = equids->find("motorcalibration");
 
 	if (J_MOTORCALIBRATION == -1) {
 		std::cout << "Not deffined jockey J_MOTORCALIBRATION" << std::endl;
 		continue_program = false;
 	}
 
-	J_MAPPING = equids->find("mapping");
-
 	if (J_MAPPING == -1) {
 		std::cout << "Not deffined jockey J_MAPPING" << std::endl;
 		continue_program = false;
 	}
 
-	J_DRIVE_TO_POSITION = equids->find("movetoposition");
 	if (J_DRIVE_TO_POSITION == -1) {
 		std::cout << "Not deffined jockey J_DRIVE_TO_POSITION" << std::endl;
 		continue_program = false;
 	}
 
-	J_DOCK_SOCKET = equids->find("docking");
 	if (J_DOCK_SOCKET == -1) {
 		std::cout << "Not deffined jockey J_DOCK_SOCKET" << std::endl;
 		continue_program = false;
 	}
 
-	J_REMOTE_CONTROL = equids->find("remotecontrol");
 	if (J_REMOTE_CONTROL == -1) {
 		std::cout << "Not deffined jockey J_REMOTE_CONTROL" << std::endl;
 		continue_program = false;
 	}
 
-	J_ORGANISM_CONTROL = equids->find("organismcontrol");
 	if (J_ORGANISM_CONTROL == -1) {
 		std::cout << "Not deffined jockey J_ORGANISM_CONTROL" << std::endl;
 		continue_program = false;
@@ -172,6 +178,7 @@ void MappingScenario::Run() {
 
 		switch (state) {
 		case S_START: {
+
 			state = S_CALIBRATE_ODOMETRY;
 			break;
 
@@ -597,7 +604,7 @@ void MappingScenario::Run() {
 					printf("switching to remote controll \n");
 					equids->switchToJockey(J_REMOTE_CONTROL);
 				}
-
+				sleepTime = 50;
 				if (unpacked.type == MSG_REMOTE_CONTROL) {
 					printf("sending MSG_REMOTE_CONTROL \n");
 					equids->getJockey(J_REMOTE_CONTROL)->SendMessage(unpacked);

@@ -12,7 +12,8 @@
 #define MAX_DATA 128
 
 #include "ipc.hh"
-#include "CMessage.h"
+#include <CMessage.h>
+#include <messageDataType.h>
 #include <semaphore.h>
 #include <vector>
 
@@ -33,6 +34,8 @@ public:
 	int port_num;
 	int pid;
 	int acknowledge;
+	vocab_t vocab_id;
+   struct UbiPosition actual_position;
 
 	CJockey();
 	~CJockey();

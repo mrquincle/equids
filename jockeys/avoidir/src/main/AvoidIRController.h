@@ -32,12 +32,6 @@
 
 #include <CController.h>
 
-//! The name of the controller can be used for controller selection
-static const std::string NAME = "AvoidInfrared";
-
-//! Convenience function for printing to standard out
-#define DEBUG NAME << '[' << getpid() << "] " << __func__ << "(): "
-
 /**
  * Use this class as a template class for other controllers if you want to quickly prototype your own controller. The
  * basic functionality is probably the same, except for the tick() function where you can use your own stuff.
@@ -52,6 +46,8 @@ public:
 
 	//! Initialize the periphery, probably best be done when you got the control from the jockey framework
 	void initRobotPeriphery();
+
+	void start();
 
 	//! Report collision to action control
 	void reportCollision();

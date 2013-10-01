@@ -29,6 +29,7 @@
 #include <cassert>
 #include <algorithm>
 #include <iostream>
+#include <sys/syslog.h>
 
 //! Declare the following as unmangled C functions
 extern "C" {
@@ -98,6 +99,7 @@ extern "C" {
 CCamera::CCamera(): width(DEFAULT_IMAGE_WIDTH), height(DEFAULT_IMAGE_HEIGHT),
 		defaultImage(CRawImage(DEFAULT_IMAGE_WIDTH,DEFAULT_IMAGE_HEIGHT,3))
 {
+	log_prefix = "CCamera: "; // call setLogPrefix with a string with you controller embedded
 	gain = exposition = 0;
 	loadFileIndex = 0;
 	saveFileIndex = 0;
@@ -108,10 +110,11 @@ CCamera::CCamera(): width(DEFAULT_IMAGE_WIDTH), height(DEFAULT_IMAGE_HEIGHT),
 	save_images = false;
 	camdevfd = -1;
 	pixel_format = V4L2_PIX_FMT_YUYV;
-	print_debug = false;
+	log_level = LOG_EMERG;
 	semaphore_set = false;
 	flip_camera = false;
 	ASSERT_EQUAL(defaultImage.getwidth(), width);
+    stopped = true;
 }
 
 CCamera::~CCamera() {
@@ -119,7 +122,7 @@ CCamera::~CCamera() {
 }
 
 /**
- * Open the camera device.
+ * Set camera parameters.
  *
  * @param deviceName         v4l or v4l2 camera device, e.g. /dev/video0
  * @param devfd              file descriptor of camera device
@@ -127,22 +130,10 @@ CCamera::~CCamera() {
  * @param height             resolution
  * @return                   success (0), failure (<0)
  */
-int CCamera::Init(const char *deviceName, int &devfd, int width, int height)
+int CCamera::Init(int width, int height)
 {
-	if (print_debug)
-		printf("CCamera: Open device %s\n", deviceName);
-	//devfd = open_device();
-	camdevfd = cam_opendev(deviceName, width, height, 1);
 	this->width = width;
 	this->height = height;
-	if (!camdevfd) {
-		printf("CCamera: Cannot open video device\n");
-		return -1;
-	} else {
-		if (print_debug)
-			printf("CCamera: Device %s opened\n", deviceName);
-	}
-	devfd = camdevfd;
 #ifndef OLD
 	init_mmap(devfd, deviceName);
 	start_capturing(devfd);
@@ -160,17 +151,17 @@ int CCamera::Init(const char *deviceName, int &devfd, int width, int height)
 	}
 
 	if (flip_camera) {
-		printf("Camera will be flipped\n");
+		printf("%sCamera will be flipped\n", log_prefix.c_str());
 	} else {
-		printf("Camera will not be flipped\n");
+		printf("%sCamera will not be flipped\n", log_prefix.c_str());
 	}
 
 	// we will need to capture a few images to get rid of the greenish pictures in the beginning
-	printf("We capture 10 images to get rid of greenish pictures in the beginning\n");
-	for (int i = 0; i < 10; ++i) {
-		cam_capture(camdevfd, width, height);
-	}
-	printf("Finished capturing\n");
+	// we cannot do that anymore, because we are not allowed to open the device on Init
+//	printf("%s We capture 10 images to get rid of greenish pictures in the beginning\n", log_prefix.c_str());
+//	for (int i = 0; i < 10; ++i) {
+//		cam_capture(camdevfd, width, height);
+//	}
 	return 0;
 }
 
@@ -192,7 +183,7 @@ int CCamera::dummyInit(const char *directoryName, const char *prefixImage) {
 	strcpy(directory, directoryName);
 	strcpy(loadFilePrefix, prefixImage);
 	sprintf(fileName, "%s/%s0000.bmp", directory, loadFilePrefix, prefixImage);
-	fprintf(stderr,"Camera type: dummy camera\n");
+	fprintf(stderr,"%sCamera type: dummy camera\n", log_prefix.c_str());
 	FILE* file = fopen(fileName,"r");
 	if (file == NULL){
 		fprintf(stderr,"File %s not found.\n",fileName);
@@ -205,10 +196,53 @@ int CCamera::dummyInit(const char *directoryName, const char *prefixImage) {
  * Closes the file descriptor to the camera.
  */
 void CCamera::Stop() {
-	if (camdevfd >= 0) cam_closedev(camdevfd);
+	if (stopped) {
+		printf("%sCamera is already stopped\n", log_prefix.c_str());
+		return;
+	} else {
+		printf("%sStop camera \n", log_prefix.c_str());
+	}
+
+	if (camdevfd >= 0) {
+		cam_closedev(camdevfd);
+	} else {
+		printf("%sCould not stop camera, no proper device handler \n", log_prefix.c_str());
+	}
 	camdevfd = -1;
-	if (print_debug)
-		printf("Camera device handler closed\n");
+//	if (log_level >= LOG_INFO)
+//		printf("Camera device handler closed\n");
+	stopped = true;
+}
+
+/**
+ * Start the camera actually, opens the device
+ *
+ * @param deviceName         v4l or v4l2 camera device, e.g. /dev/video0
+ * @param devfd              file descriptor of camera device
+ */
+int CCamera::Start(const char *deviceName, int &devfd) {
+	if (!stopped) {
+		printf("%sCamera is already started\n", log_prefix.c_str());
+		return 0;
+	} else {
+		printf("%sStart camera \n", log_prefix.c_str());
+	}
+
+	if (log_level >= LOG_INFO)
+		printf("%sOpen device %s\n", log_prefix.c_str(), deviceName);
+	stopped = false;
+	camdevfd = cam_opendev(deviceName, width, height, 1);
+	this->width = width;
+	this->height = height;
+	if (!camdevfd) {
+		fprintf(stderr, "%sCannot (re)open video device.\n", log_prefix.c_str());
+		return -1;
+	} else {
+		if (log_level >= LOG_INFO)
+			printf("%sDevice %s opened\n", log_prefix.c_str(), deviceName);
+	}
+	devfd = camdevfd;
+	return 0;
 }
 
 /**
@@ -235,7 +269,7 @@ int CCamera::renewImage(CRawImage* image, bool convert, bool swap)
 	if (dummy_mode) return dummyImage(image);
 
 	size_t yuv_size = width*height*2;
-	if (print_debug)
+	if (log_level >= LOG_INFO)
 		printf("Size of YUVY is %i\n", (int)yuv_size);
 	assert (yuv_size > 0);
 	unsigned char* buffer = NULL;
@@ -246,14 +280,14 @@ int CCamera::renewImage(CRawImage* image, bool convert, bool swap)
 	buffer = cam_stream(camdevfd);
 #endif
 
-	if (print_debug)
-		printf("Grabbed frame, now copy to buffer in CRawImage\n");
+	if (log_level >= LOG_INFO)
+		printf("%sGrabbed frame, now copy to buffer in CRawImage\n", log_prefix.c_str());
 
 	if (save_images) {
 		char fileName[256];
 		sprintf(fileName, "%s%04i.jpg", "image", ++saveFileIndex);
 		//		yuyv_to_uyvy((unsigned char*)b.start, width, height); // jpeg function does not read YUYV format properly
-		fprintf(stderr, "Removed jpeg support. Seems overkill on a robot.\n");
+		fprintf(stderr, "%sRemoved jpeg support. Seems overkill on a robot.\n", log_prefix.c_str());
 		//		save_jpeg_image((unsigned char*)b.start, height, width, fileName);
 		//		yuyv_to_uyvy((unsigned char*)b.start, width, height); // transform back
 	}
@@ -261,7 +295,7 @@ int CCamera::renewImage(CRawImage* image, bool convert, bool swap)
 	if (convert) {
 		yuv422_to_rgb(image->data, (unsigned char*)buffer, yuv_size);
 	} else {
-		fprintf(stderr, "Just realize that you copied the original YUV formatted data.\n");
+		fprintf(stderr, "%sJust realize that you copied the original YUV formatted data.\n", log_prefix.c_str());
 		memcpy(image->data,buffer,yuv_size);
 	}
 
@@ -285,14 +319,14 @@ int CCamera::denoiseImageByCapturingAnother(CRawImage* image)
 	if (dummy_mode) return dummyImage(image);
 
 	size_t yuv_size = width*height*2;
-	if (print_debug)
+	if (log_level >= LOG_INFO)
 		printf("Size is %i\n", (int)yuv_size);
 	assert (yuv_size > 0);
 	unsigned char* buffer = NULL;
 	buffer = cam_capture(camdevfd, width, height);
 
-	if (print_debug)
-		printf("Grabbed frame, now copy to buffer in CRawImage\n");
+	if (log_level >= LOG_INFO)
+		printf("%sGrabbed frame, now copy to buffer in CRawImage\n", log_prefix.c_str());
 
 	yuv422_to_rgb(defaultImage.data, (unsigned char*)buffer, yuv_size);
 
@@ -313,7 +347,7 @@ int CCamera::dummyImage(CRawImage* image)
 {
 	char fileName[1000];
 	sprintf(fileName,"%s/%s%04i.bmp",directory,loadFilePrefix,loadFileIndex);
-	printf("Tries to load file %s as a dummy image\n", fileName);
+	printf("%sTries to load file %s as a dummy image\n", log_prefix.c_str(), fileName);
 	if (image->loadBmp(fileName)) {
 		loadFileIndex++;
 	} else {
@@ -344,8 +378,8 @@ int CCamera::dummyImage(CRawImage* image)
  */
 void CCamera::yuv422_to_rgb(unsigned char * output_ptr, unsigned char * input_ptr, size_t width_times_height)
 {
-	if (print_debug)
-		printf("Convert yuv to rgb\n");
+	if (log_level >= LOG_INFO)
+		printf("%sConvert yuv to rgb\n", log_prefix.c_str());
 
 	unsigned int i, size;
 	unsigned char Y0, Y1, U, V;
@@ -403,8 +437,8 @@ void CCamera::yuv422_to_rgb(unsigned char * output_ptr, unsigned char * input_pt
 	if (flip_camera) {
 		assert((output_pt - output_ptr) == -1);
 	} else {
-		if (print_debug)
-			printf("Compare %i with %i\n", (int)(output_pt - output_ptr), (int)(height*width*3));
+		if (log_level >= LOG_INFO)
+			printf("%sCompare %i with %i\n", log_prefix.c_str(), (int)(output_pt - output_ptr), (int)(height*width*3));
 		assert((output_pt - output_ptr) == height*width*3);
 	}
 }

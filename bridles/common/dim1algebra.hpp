@@ -475,6 +475,15 @@ T absolute(T x) { return std::abs(x); }
 template<typename T>
 T xlogx(T x) { return std::log(x) * x; }
 
+/**
+ * Just calculates x*(1-x) or x-x^2, a symmetric curve around 0.5, that intersects with the y-axis at 0 and +1, is 
+ * positive between 0 and +1, and negative out of that range. The maximum at x=1/2 is y=1/4. The integral from 0 to +1
+ * is 1/6.
+ */
+template<typename T>
+T x_times_1_minus_x(T x) { return x * (T(1)-x); }
+
+
 /***********************************************************************************************************************
  * Unary functions
  **********************************************************************************************************************/
@@ -936,6 +945,22 @@ T coupled_entropy(InputIterator first, InputIterator last, T q) {
 
 	return T(1)/q * (-1 + accumulate(first, last, T(0), std::plus<T>(), fixed_power<T>(1-q)) );
 }
+
+/**
+ * The Gini index or Gini coefficient is not an entropy, but the form is quite similar, hence it is added here.
+ */
+template<typename T, typename InputIterator>
+T gini_index(InputIterator first, InputIterator last, T q) {
+	__glibcxx_function_requires(_InputIteratorConcept<InputIterator>);
+	__glibcxx_requires_valid_range(first, last);
+	typedef typename std::iterator_traits<InputIterator>::difference_type DistanceType1;
+
+	DistanceType1 dist = std::distance(first, last);
+	if (!dist) return T(0);
+
+	return accumulate(first, last, T(0), std::plus<T>(), x_times_1_minus_x<T>);
+}
+
 
 /***********************************************************************************************************************
  * Cross entropy

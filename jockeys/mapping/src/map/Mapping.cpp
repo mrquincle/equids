@@ -156,8 +156,8 @@ void Mapping::doMappingMotion(bool seeBlob, Map* slamMap) {
 				this->stai_in_motion = TURNING_COUNT;
 			}
 			if (normalizeAngleDiff(
-					this->turnToDirectionAngle - motor->getPosition()[2])
-					< M_PI / 4 || (this->turnToDirectionAngle - motor->getPosition()[2])>M_PI / 4) {
+					this->turnToDirectionAngle - normalizeAngle(motor->getPosition()[2]) )
+					< M_PI / 8 || (this->turnToDirectionAngle - normalizeAngle(motor->getPosition()[2]))>M_PI / 4) {
 				memcpy(lastPosition, motor->getPosition(), 5 * sizeof(double));
 				this->actualState = DRIVE_FORWARD;
 				motor->setSpeeds(0, 0);

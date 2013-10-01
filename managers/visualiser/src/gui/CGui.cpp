@@ -9,17 +9,16 @@ CGui::CGui()
   screen = SDL_SetVideoMode(1240,480,24,SDL_SWSURFACE); 
   if (screen == NULL)fprintf(stderr,"Couldn't set SDL video mode: %s\r\n",SDL_GetError());
   SDL_WM_SetCaption("Robot revue vision system","Robot revue vision system");
-  initJockeys();
 }
 
 CGui::~CGui()
 {
 }
 
-void CGui::initJockeys()
+void CGui::initJockeys(int jockey_count)
 {
-	char dummy[20];
-	for (int i = 0;i<20;i++){
+	char dummy[jockey_count];
+	for (int i = 0;i<jockey_count;i++){
 		activeArray[i].width=300;
 		activeArray[i].height=48;
 		sprintf(dummy,"images/A%04i.bmp",i);

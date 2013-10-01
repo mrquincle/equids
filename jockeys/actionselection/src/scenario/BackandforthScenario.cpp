@@ -28,6 +28,7 @@
 #include <iostream>
 
 #include <global.hh>
+#include <CMessage.h>
 
 BackandforthScenario::BackandforthScenario(CEquids * equids): CScenario(equids) {
 	J_BACK = J_FORTH = J_WENGUO = -1;
@@ -46,9 +47,12 @@ BackandforthScenario::~BackandforthScenario() {
 bool BackandforthScenario::Init() {
 	bool continue_program = true;
 
-	J_FORTH = equids->find("forth");
-	J_BACK = equids->find("back");
-	J_WENGUO = equids->find("wenguo");
+	int id = V_BACKANDFORTH;
+	J_FORTH = equids->find("forth", id);
+	id = V_BACKANDFORTH;
+	J_BACK = equids->find("back", id);
+	id = V_WENGUO;
+	J_WENGUO = equids->find("wenguo", id);
 
 	//! Send an error message or also quit program..
 	if (J_FORTH==-1) {

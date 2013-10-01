@@ -46,10 +46,13 @@
 
 //#define __DEBUG__
 #define UBISENCE_CHANNEL 55
-#define DEBUG NAME << '[' << getpid() << "] " << __func__ << "(): "
 
 //! The name of the controller can be used for controller selection
 std::string NAME = "UbiPosition";
+
+//! Please, use for print statements
+#define DEBUG NAME << '[' << getpid() << "] " << __func__ << "(): "
+
 CUbisencePosition* ubisencePositionServer;
 typedef enum {
 	WAIT = 0, SEND_POSITION
@@ -66,7 +69,8 @@ bool stop;
  */
 void interrupt_signal_handler(int signal) {
 	if (signal == SIGINT) {
-		ubisencePositionServer->stopServer();
+		if (ubisencePositionServer != NULL)
+			ubisencePositionServer->stopServer();
 		//RobotBase::MSPReset();
 		stop = true;
 	}
@@ -77,10 +81,10 @@ void interrupt_signal_handler(int signal) {
 void readMessages() {
 	messagee = message_server->getMessage();
 	if (messagee.type != MSG_NONE) {
-		//	fprintf(stdout,"Command: %s %i %i %i %i\n",message.getStrType(),message.value1,message.value2,message.value3,message.value4);
+		//	fprintf(stdout,"Command: %s %i %i %i %i" << std::cout,message.getStrType(),message.value1,message.value2,message.value3,message.value4);
 		switch (messagee.type) {
 		case MSG_INIT: {
-			printf("message init\n");
+			std::cout << DEBUG << "message init" << std::endl;
 			ubisencePositionServer = new CUbisencePosition();
 			actualTask = WAIT;
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
@@ -90,7 +94,9 @@ void readMessages() {
 		case MSG_START: {
 			actualTask = SEND_POSITION;
 			if(ubisencePositionServer->stop){
-			ubisencePositionServer->initServer(UBISENCE_CHANNEL);
+				std::cout << DEBUG << "Initialize server" << std::endl;
+				ubisencePositionServer->initServer(UBISENCE_CHANNEL);
+				std::cout << DEBUG << "Server initialized" << std::endl;
 			}
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		}
@@ -98,7 +104,7 @@ void readMessages() {
 			break;
 		case MSG_STOP: {
 			actualTask = WAIT;
-			printf("stopping ubisence position server\n");
+			std::cout << DEBUG << "stopping ubisence position server" << std::endl;
 			//ubisencePositionServer->stopServer();
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		}
@@ -125,6 +131,10 @@ int main(int argc, char **argv) {
 	a.sa_handler = &interrupt_signal_handler;
 	sigaction(SIGINT, &a, NULL);
 
+	std::cout << "################################################################################" << std::endl;
+	std::cout << "Run " << NAME << " compiled at time " << __TIME__ << std::endl;
+	std::cout << "################################################################################" << std::endl;
+
 	if (argc > 1) {
 		portMS = std::string(argv[1]);
 	} else {
@@ -132,11 +142,11 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-	std::cout << "Create (receiving) message server on port " << portMS
+	std::cout << DEBUG << "Create (receiving) message server on port " << portMS
 			<< std::endl;
 
 	message_server = new CMessageServer();
-	std::cout << "Initialize CMessageServer" << std::endl;
+	std::cout << DEBUG << "Initialize CMessageServer" << std::endl;
 	message_server->initServer(portMS.c_str());
 
 	while (!stop) {
@@ -147,7 +157,7 @@ int main(int argc, char **argv) {
 
 				UbiPosition posit = ubisencePositionServer->getPosition();
 #ifdef __DEBUG__
-					printf("position is %f %f %f %d \n",posit.x,posit.y,posit.z,posit.time_stamp);
+					std::cout << DEBUG << "position is " << posit.x << ',' << posit.y << ',' << posit.z << ',' << posit.time_stamp << std::endl;
 #endif
 				message_server->sendMessage(MSG_UBISENCE_POSITION, &posit,
 						sizeof(UbiPosition));
@@ -169,7 +179,7 @@ int main(int argc, char **argv) {
 	if (ubisencePositionServer != NULL) {
 		delete ubisencePositionServer;
 	}
-	std::cout << "Finish UbiPosition" << std::endl;
+	std::cout << DEBUG << "Finish UbiPosition" << std::endl;
 	return 0;
 }
 

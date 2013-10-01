@@ -22,6 +22,10 @@
 #ifndef MAPPINGSCENARIO_H_
 #define MAPPINGSCENARIO_H_
 
+#ifndef ENABLE_MAPPING_SCENARIO
+#define ENABLE_MAPPING_SCENARIO
+#endif
+
 #ifdef ENABLE_MAPPING_SCENARIO
 
 #include <CScenario.h>

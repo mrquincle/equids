@@ -87,12 +87,12 @@ int move_to::move(RobotPosition f, UbiPosition u) {
 		switch (typ) {
 		case RobotBase::ACTIVEWHEEL: {
 			if (abs(P) > 40) {
-				motor->setSpeeds(0, -P*1.6);
+				motor->setSpeeds(0, -P);
 				toReturn = 2;
 				printf("tunrning on position \n");
 			} else {
-            if (abs(P)>20) {
-				  motor->setSpeeds(60, -P*1.6);
+            if (abs(P)>15) {
+				  motor->setSpeeds(60, -P*2);
             } else {
               motor->setSpeeds(60, -P*3);
             }               
@@ -102,10 +102,15 @@ int move_to::move(RobotPosition f, UbiPosition u) {
 		}
 			break;
 		case RobotBase::SCOUTBOT: {
-			P = 1.3*P;
-			motor->setSpeeds(60, P);
+			//P = P;
+         if (abs(P)>50) {
+            motor->setSpeeds(50,P);
+         } else if (abs(P)>20) {
+            motor->setSpeeds(42,P);
+         } else {
+			   motor->setSpeeds(36, P);
+         }
 			toReturn= 0;
-
 		}
 			break;
 		}

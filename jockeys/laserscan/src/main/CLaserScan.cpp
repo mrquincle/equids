@@ -44,6 +44,12 @@ bool SAVE_RGB_DIFF_IMAGES_TO_DISK = false;
 
 bool DUMMY_CAMERA = false;
 
+//! The name of the controller can be used for controller selection
+static const std::string NAME = "LaserScan";
+
+//! Convenience function for printing to standard out
+#define DEBUG NAME << '[' << getpid() << "] " << __func__ << "(): "
+
 CLaserScan::CLaserScan(RobotBase *robot_base, RobotBase::RobotType robot_type,
 		int img_width = 640, int img_height = 480,
 		int laser_width = 640): printTime(LASER_VERBOSE),
@@ -119,14 +125,15 @@ int CLaserScan::InitCam(int imgWidth, int imgHeight, int laserResolution) {
 		camera.dummyInit("/data/blackfin/test", "image");
 		return error;
 	}
-	camera.Init("/dev/video0", cameraDeviceHandler, imgWidth, imgHeight);
+	//	error = camera.Init("/dev/video0", cameraDeviceHandler, imgWidth, imgHeight);
+	error = camera.Init(imgWidth, imgHeight);
 	if (error < 0) fprintf (stderr, "Error initialising camera\n");
-	if (cameraDeviceHandler <= 0) {
-		fprintf(stderr, "Camera not properly initialized.\n");
-		fprintf(stderr, "Did you do \"modprobe blackfin-cam\"?\n");
-		error = -1;
-		return error;
-	}
+	//	if (cameraDeviceHandler <= 0) {
+	//		fprintf(stderr, "Camera not properly initialized.\n");
+	//		fprintf(stderr, "Did you do \"modprobe blackfin-cam\"?\n");
+	//		error = -1;
+	//		return error;
+	//	}
 	if (printLaser)
 		fprintf(stdout,"%s(): Camera initialized in the laser\n", __func__);
 	return error;
@@ -150,19 +157,34 @@ int CLaserScan::Init() {
 	return error;
 }
 
+void CLaserScan::Pause() {
+	camera.Stop();
+	started = false;
+}
+
+int CLaserScan::Start() {
+	started = true;
+	int error = camera.Start("/dev/video0", cameraDeviceHandler);
+	if ((error < 0) || (cameraDeviceHandler <= 0)) {
+		std::cerr << DEBUG << "Camera device handler could not be obtained. Other controller using the camera?" << std::endl;
+		error = -1;
+	}
+	return error;
+}
+
 /**
  * Stop everything and deallocate all memory used to store the images and laserscans.
  */
 void CLaserScan::Stop() {
 	if (printLaser)
-		printf("Deallocate image-related stuff in laser\n");
+		std::cout << DEBUG << "Deallocate image-related stuff in laser" << std::endl;
 	if (image1 != NULL) delete image1;
 	if (image2 != NULL) delete image2;
 	if (laserVec != NULL) delete [] laserVec;
 	if (laserSmallVec != NULL) delete [] laserSmallVec;
 	laserVec = NULL; laserSmallVec = NULL;
 	if (printLaser)
-		printf("All laser scan stuff deallocated\n");
+		std::cout << DEBUG << "All laser scan stuff deallocated" << std::endl;
 	camera.Stop();
 }
 
@@ -179,54 +201,52 @@ void CLaserScan::Stop() {
  * @param vec                the vector with the (vertical) y-position of the laser line, vec[i]=0 if nothing detected
  * @return                   success (0) or failure (<0)
  */
-int CLaserScan::generateVector(CRawImage* laserImage, CRawImage* noLaserImage, int* vec)
-{
-	assert (laserImage->getwidth() == noLaserImage->getwidth());
-	assert (laserImage->getheight() == noLaserImage->getheight());
-
-	int threshold = 20;
-	int diff_threshold = 15;
-
-	int topRow = topRowLimit;
-	int bottomRow = bottomRowLimit;
-	int width = laserImage->getwidth();
-	int pos;
-	if (topRow < 0) topRow = 0;
-	if (bottomRow > laserImage->getheight()-1) {
-		fprintf(stderr, "Error, bottomRow %i is larger than height %i\n", bottomRow, laserImage->getheight() -1);
-		return -1;
-	}
-	if (bottomRow < topRow) {
-		fprintf(stderr, "Error, index should be [%i < %i] (reversed)... sorry!!\n", bottomRow, topRow);
-		return -1;
-	}
-
-	if (printLaser)
-		printf("%s(): row %i-%i [width %i, height %i]\n", __func__, bottomRowLimit, topRowLimit, width, laserImage->getheight());
-
-	// we first run over the width of the image
-	for (int i = 0; i<width; ++i) {
-
-		bool red = false;
-		int h;
-		// we now run over this column from the bottom row (high index) to the top row (low index)
-		// because close items are more important than items far away
-		for (h = bottomRow; h > topRow && !red; h--){
-			pos = 3*(h*width+i);
-			// if we detect red as red enough, we set the flag
-			red = imageManip.isMoreRed(*laserImage, *noLaserImage, pos, threshold, diff_threshold);
-		}
-		// broken out of the loop, so either red detected, or h became topRow
-		vec[i] = laserImage->getheight()-1 - h;
-		// just set to 0 if no red detected
-		if (!red) {
-			vec[i] = 0; // distance=0 if nothing was red
-		}
-	}
-	return 0;
-}
-
-
+//int CLaserScan::generateVector(CRawImage* laserImage, CRawImage* noLaserImage, int* vec)
+//{
+//	assert (laserImage->getwidth() == noLaserImage->getwidth());
+//	assert (laserImage->getheight() == noLaserImage->getheight());
+//
+//	int threshold = 20;
+//	int diff_threshold = 20;
+//
+//	int topRow = topRowLimit;
+//	int bottomRow = bottomRowLimit;
+//	int width = laserImage->getwidth();
+//	int pos;
+//	if (topRow < 0) topRow = 0;
+//	if (bottomRow > laserImage->getheight()-1) {
+//		fprintf(stderr, "Error, bottomRow %i is larger than height %i\n", bottomRow, laserImage->getheight() -1);
+//		return -1;
+//	}
+//	if (bottomRow < topRow) {
+//		fprintf(stderr, "Error, index should be [%i < %i] (reversed)... sorry!!\n", bottomRow, topRow);
+//		return -1;
+//	}
+//
+//	if (printLaser)
+//		printf("%s(): row %i-%i [width %i, height %i]\n", __func__, bottomRowLimit, topRowLimit, width, laserImage->getheight());
+//
+//	// we first run over the width of the image
+//	for (int i = 0; i<width; ++i) {
+//
+//		bool red = false;
+//		int h;
+//		// we now run over this column from the bottom row (high index) to the top row (low index)
+//		// because close items are more important than items far away
+//		for (h = bottomRow; h > topRow && !red; h--){
+//			pos = 3*(h*width+i);
+//			// if we detect red as red enough, we set the flag
+//			red = imageManip.isMoreRed(*laserImage, *noLaserImage, pos, threshold, diff_threshold);
+//		}
+//		// broken out of the loop, so either red detected, or h became topRow
+//		vec[i] = laserImage->getheight()-1 - h;
+//		// just set to 0 if no red detected
+//		if (!red) {
+//			vec[i] = 0; // distance=0 if nothing was red
+//		}
+//	}
+//	return 0;
+//}
 
 int CLaserScan::generateVector(CRawImage* laserImage, CRawImage* noLaserImage, std::vector<int> & vec) {
 
@@ -235,10 +255,10 @@ int CLaserScan::generateVector(CRawImage* laserImage, CRawImage* noLaserImage, s
 
 	// clear the vector first
 	vec.clear();
-	int margin_left = 120;
-	int margin_right = 220; // 640 = 320 + 320 = 120 + 200 + 100 + 220;
+	int margin_left = 150;
+	int margin_right = 220;
 	int threshold = 20;
-	int diff_threshold = 15;
+	int diff_threshold = 20;
 	for (int j = 0; j < laserImage->getheight(); j++) {
 		int p = 0;
 		for (int i = margin_left; i < laserImage->getwidth() - margin_right; i++) {
@@ -270,10 +290,11 @@ int CLaserScan::generateVector(CRawImage* laserImage, CRawImage* noLaserImage, s
  * line. If the thing portrayed on is too close, it will not be seen by the camera and the red-line will be portrayed
  * till the bottom of the visual field of the camera.
  */
-void CLaserScan::estimateParameters(std::vector<int> & vec, int & length, int & distance, int &start, int &end) {
+void CLaserScan::estimateParameters(std::vector<int> & vec, int & length, int & distance, int &start, int &end, float &variance) {
 	// count the number of successive non-zeros for now (three zeros breaks the line)
 	length = 0;
 	distance = 0;
+	variance = 0.0;
 #ifdef STRATEGY_CONSECUTIVE
 	int gap = 0;
 	for (int i = 0; i < vec.size() && gap < 4; i++) {
@@ -301,6 +322,11 @@ void CLaserScan::estimateParameters(std::vector<int> & vec, int & length, int & 
 			length++;
 		}
 	}
+	if (length) {
+		avg = avg / length;
+	}
+
+
 	for (int i = 3; i < vec.size(); i++) {
 		if (vec[i] && vec[i-1] && vec[i-2]) {
 			start = i-2;
@@ -314,11 +340,29 @@ void CLaserScan::estimateParameters(std::vector<int> & vec, int & length, int & 
 		}
 	}
 
+	//	std::cout << DEBUG << "Average: " << avg << std::endl;
+	for (int i = 0; i < vec.size(); ++i) {
+		if (vec[i]) {
+			float var = (vec[i] - avg) * (vec[i] - avg);
+			//			std::cout << DEBUG << "Diff between " << vec[i] << " and " << avg << " = " << var << std::endl;
+			variance += var;
+		}
+	}
+	//	std::cout << DEBUG << "Total variance: " << variance << std::endl;
 
-	if (length)
-		distance = avg / length;
+	if (length) {
+		distance = avg;
+		variance = variance / length;
+	}
 #endif
 }
+
+float CLaserScan::getRobustness(std::vector<int> & vec) {
+	//	float
+}
+
+
+#ifdef USE_HOUGH_TRANSFORM
 
 /**
  * Get line out of the image using the Hough transform.
@@ -358,6 +402,7 @@ void CLaserScan::getLine(CRawImage *image, double & alpha, double & d) {
 
 	std::cout << "Recognized line of angle " << alpha << " and distance " << d << std::endl;
 }
+#endif
 
 /**
  * Gets the data for the laser and the camera.
@@ -545,28 +590,61 @@ void CLaserScan::Fill(int *in, int in_size, int *out, int out_size) {
  * Get recognized object.
  */
 void CLaserScan::GetRecognizedObject(ObjectType &object_type, int & distance) {
-	// get the two camera images and calculate the difference
-	GetData();
+	int trials = 4;
+	assert (trials >= 0);
 
-	generateVector(image2,image1,laserVector);
+	int a_distance[trials];
+	int a_length[trials];
+	int a_start[trials];
+	int a_end[trials];
+	float a_variance[trials];
 
-	distance = 0;
-	int length = 0, start = 0, end = 0;
-	estimateParameters(laserVector, length, distance, start, end);
+	for (int t = 0; t < trials; ++t) {
+		// get the two camera images and calculate the difference
+		GetData();
 
-//	if (printLaser) {
-		std::cout << "Laser parameters: length=" << length << ", distance=" << distance << ", start=" << start << ", end=" << end << std::endl;
-//	}
+		generateVector(image2,image1,laserVector);
 
-	// used octave to fit the stuff, first array is the distance in cm, second array are the values from the laserscan
-	// x=[7,10,13,16,19,22,25,28,31,34,37];
-	// y=[151,204,234,250,265,276,281,287,292,298,300];
-	// p = polyfit(y,x,2)
-	// 1.9176e-03  -6.8800e-01   6.8157e+01
-	double coeff_a = 68.157;
-	double coeff_b = -0.688;
-	double coeff_c = 0.0019176;
-	distance = coeff_a + (double)distance * coeff_b + (double)distance*distance*coeff_c;
+		//	float robustness = getRobustness(laserVector);
+
+		a_distance[t] = 0; a_length[t] = 0; a_start[t] = 0; a_end[t] = 0; a_variance[t] = 0.0;
+		estimateParameters(laserVector, a_length[t], a_distance[t], a_start[t], a_end[t], a_variance[t]);
+
+		std::cout << DEBUG << "Variance is " << a_variance[t] << std::endl;
+		std::cout << DEBUG << "Laser parameters: length=" << a_length[t] << ", distance=" << a_distance[t] << ", start="
+				<< a_start[t] << ", end=" << a_end[t] << std::endl;
+
+		// used octave to fit the stuff, first array is the distance in cm, second array are the values from the laserscan
+		// x=[7,10,13,16,19,22,25,28,31,34,37];
+		// y=[151,204,234,250,265,276,281,287,292,298,300];
+		// p = polyfit(y,x,2)
+		// 1.9176e-03  -6.8800e-01   6.8157e+01
+		static const double coeff_a = 68.157;
+		static const double coeff_b = -0.688;
+		static const double coeff_c = 0.0019176;
+		a_distance[t] = coeff_a + (double)a_distance[t] * coeff_b + (double)a_distance[t]*a_distance[t]*coeff_c;
+	}
+
+	int max_index = -1;
+	int max_length = 0;
+	for (int t = 0; t < trials; ++t) {
+		if (a_length[t] > max_length ) {
+			if (a_variance[t] < 50) {
+				max_length = a_length[t];
+				max_index = t;
+			}
+		}
+	}
+	if (max_index < 0) max_index = 0; // pick random one
+
+	std::cout << DEBUG << "Select trial " << max_index << std::endl;
+
+	int variance, length, start, end;
+	distance = a_distance[max_index];
+	variance = a_variance [max_index];
+	length = a_length[max_index];
+	start = a_start[max_index];
+	end = a_end[max_index];
 
 	/*
 	 * small step (very high last value):
@@ -604,8 +682,15 @@ void CLaserScan::GetRecognizedObject(ObjectType &object_type, int & distance) {
 	 *  length=304, distance=300, start=1, end=318
 	 */
 
+
 	printf("Laser detected: \n");
-	if (distance > 40) {
+	if (variance > 50.0) {
+		printf("* something, but too much noise\n");
+		object_type = O_SOMETHING;
+	} else if (variance == 0) {
+		printf("* nothing for now\n");
+		object_type = O_NOTHING;
+	} else if (distance > 40) {
 		printf("* nothing for now\n");
 		object_type = O_NOTHING;
 		return;
@@ -614,6 +699,7 @@ void CLaserScan::GetRecognizedObject(ObjectType &object_type, int & distance) {
 		object_type = O_WALL;
 		return;
 	} else if (length > 180 && (start < 150)) { // start very low means that the line goes up very high, must be a wall
+		//	} else if (length > 150 && (start < 150)) { // start very low means that the line goes up very high, must be a wall
 		printf("* a wall because there is something far away\n");
 		object_type = O_WALL;
 		return;
@@ -621,15 +707,15 @@ void CLaserScan::GetRecognizedObject(ObjectType &object_type, int & distance) {
 		printf("* a wall because there is something very far away\n");
 		object_type = O_WALL;
 		return;
-	} else if (length < 100) {
+	} else if ((length < 100) && (distance < 30)) {
 		printf("* a small step because there is a very tiny line\n");
 		object_type = O_SMALL_STEP;
 		return;
-	} else if ((length < 150) && (start > 250)) {
+	} else if ((length < 150) && (start > 250) && (distance < 30)) {
 		printf("* a small step because there is a tiny line and it is nearby\n");
 		object_type = O_SMALL_STEP;
 		return;
-	} else if (length < 260) { //	 && (distance/length < 2.0) ) {
+	} else if ((length < 260) && (distance < 30)) { //	 && (distance/length < 2.0) ) {
 		printf("* a large step because there is a nice line\n");
 		object_type = O_LARGE_STEP;
 		return;
@@ -654,12 +740,13 @@ void CLaserScan::GetDistance(int &distance) {
 	GetData();
 
 	generateVector(image2,image1,laserVector);
-	int length = 0, start = 0, end = 0;
-	estimateParameters(laserVector, length, distance, start, end);
+
+	int length = 0, start = 0, end = 0; float variance = 0;
+	estimateParameters(laserVector, length, distance, start, end, variance);
 	//	if (printLaser) {
-	fprintf(stdout,"%s(): Line length: %i pixels\n", __func__, length);
-	//		fprintf(stdout,"%s(): Distance to line: %i cm\n", __func__, distance);
-	//	}
+	std::cout << DEBUG << "Variance is " << variance << std::endl;
+	std::cout << DEBUG << "Line length: " << length << " pixels" << std::endl;
+	//	std::cout << DEBUG << "Distance to line: " << distance << std::endl;
 
 	//		x=[7,10,13,16,19,22,25,28,31,34,37];
 	//		y=[151,204,234,250,265,276,281,287,292,298,300];
@@ -671,6 +758,11 @@ void CLaserScan::GetDistance(int &distance) {
 	double coeff_c = 0.0019176;
 	distance = coeff_a + (double)distance * coeff_b + (double)distance*distance*coeff_c;
 
+	if (variance > 50.0) {
+		distance = -1;
+	} else if (variance == 0) {
+		distance = 255;
+	}
 
 #ifdef CALC_DISTANCE
 	Fill(laserVec, laserResolution, laserSmallVec, laserSmallVecSize);

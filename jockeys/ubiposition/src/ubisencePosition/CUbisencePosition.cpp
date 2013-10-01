@@ -17,6 +17,7 @@ CUbisencePosition::CUbisencePosition() {
 	stop = true;
 	validPosition = false;
 	threadFinished = false;
+	thread = NULL;
 }
 
 CUbisencePosition::~CUbisencePosition() {
@@ -53,6 +54,7 @@ int CUbisencePosition::initServer(const int channel) {
 	stop = false;
 	int error =0;
 	int wapi_error;
+	assert (wapi != NULL);
 	wapi_error = wapi->join(channel);
 	if (WAPI::WAPI_OK != wapi_error) {
 		std::cout << "Cannot join to channel for ubisence" << channel
@@ -77,9 +79,10 @@ int CUbisencePosition::initServer(const int channel) {
 	return 0;
 }
 
-int CUbisencePosition::stopServer() {
-	pthread_cancel(*thread);
+void CUbisencePosition::stopServer() {
 	stop = true;
+	usleep(30);
+	pthread_cancel(*thread);
 }
 
 UbiPosition CUbisencePosition::getPosition() {

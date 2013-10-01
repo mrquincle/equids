@@ -33,12 +33,13 @@
  *
  */
 CMotors::CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type) {
-	log_level = LOG_EMERG;
-	if (log_level >= LOG_INFO) {
-		printf("Create motors object\n");
-	}
+	log_prefix = "CMotors: ";
+	log_level = LOG_NOTICE;
+//	if (log_level >= LOG_INFO) {
+//		std::cout << log_prefix << "Create motors object" << std::endl;
+//	}
 	if (robot_base == NULL) {
-		fprintf(stderr, "robot_base is null, error in instantiation!\n");
+		std::cerr << log_prefix << "robot_base is null, error in instantiation!" << std::endl;
 	}
 	this->robot_base = robot_base;
 	this->robot_type = robot_type;
@@ -51,22 +52,9 @@ CMotors::CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 	max_radius = 1000; // the maximum value
 	axle_track = 10;
 
-	// use an environmental variable REVERSE_TRACKS, by default reverse tracks is false
-	left_right_reversed = false;
-	char *reverse_tracks = getenv("REVERSE_TRACKS");
-	if (reverse_tracks) {
-		std::string rev = std::string(reverse_tracks);
-		std::transform(rev.begin(), rev.end(), rev.begin(), ::tolower);
-		if (rev == "true") {
-			left_right_reversed = true;
-		}
-	}
-
-	if (left_right_reversed) {
-		printf("Left and right wheel will be reversed\n");
-	} else {
-		printf("Left and right wheel will be at default, not reversed\n");
-	}
+	motorOrientation1 = 1;
+	motorOrientation2 = 1;
+	motorOrientation3 = 1;
 
 	buf[0]=0;
 	buf[1]=0;
@@ -77,16 +65,61 @@ CMotors::CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 	actualspeed1=0;
 	actualspeed2=0;
 	actualspeed3=0;
-	motorOrientation1 = 1;
-	motorOrientation2 = 1;
-	motorOrientation3 = 1;
-	this->readMotorOrientations();
+
 	posX=0;
 	posY=0;
 	posPhi=0;
 	dx=0;
 	dy=0;
 	dphi=0;
+
+	timer = new CTimer();
+	timer->start();
+	lastTime=timer->getTime();
+}
+
+CMotors::~CMotors() {
+
+}
+
+/**
+ * Initialize the motors. Enable high-power voltage that is required to drive the motors.
+ */
+void CMotors::init() {
+	if (log_level >= LOG_INFO) {
+		std::cout << log_prefix << "Enable motors, this turns on the high voltage circuitry on the robot" << std::endl;
+	}
+
+	// use an environmental variable REVERSE_TRACKS, by default reverse tracks is false
+	char *reverse_tracks;
+	reverse_tracks = getenv("MOTOR_ORIENTATION1");
+	if (reverse_tracks) {
+		std::string rev = std::string(reverse_tracks);
+		std::transform(rev.begin(), rev.end(), rev.begin(), ::tolower);
+		if (rev == "reversed") {
+			motorOrientation1 = -1;
+		}
+	}
+	reverse_tracks = getenv("MOTOR_ORIENTATION2");
+	if (reverse_tracks) {
+		std::string rev = std::string(reverse_tracks);
+		std::transform(rev.begin(), rev.end(), rev.begin(), ::tolower);
+		if (rev == "reversed") {
+			motorOrientation2 = -1;
+		}
+	}
+	reverse_tracks = getenv("MOTOR_ORIENTATION3");
+	if (reverse_tracks) {
+		std::string rev = std::string(reverse_tracks);
+		std::transform(rev.begin(), rev.end(), rev.begin(), ::tolower);
+		if (rev == "reversed") {
+			motorOrientation3 = -1;
+		}
+	}
+
+	readMotorOrientations();
+	readCalibResult();
+
 	calibratedSpeed=40;
 
 	switch (robot_type) {
@@ -110,25 +143,20 @@ CMotors::CMotors(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 		break;
 	}
 	default:
-		fprintf(stderr, "can not set odometry coefficients\n");
+		std::cerr << log_prefix << "can not set odometry coefficients" << std::endl;
 		break;
 	}
-	timer = new CTimer();
-	timer->start();
-	lastTime=timer->getTime();
-}
 
-CMotors::~CMotors() {
-
-}
-
-/**
- * Initialize the motors. Enable high-power voltage that is required to drive the motors.
- */
-void CMotors::init() {
-	if (log_level >= LOG_INFO) {
-		printf("Enable motors, this turns on the high voltage circuitry on the robot\n");
+	if (motorOrientation1 < 0) {
+		std::cout << log_prefix << "Motor 1 is in reverse" << std::endl;
 	}
+	if (motorOrientation2 < 0) {
+		std::cout << log_prefix << "Motor 2 is in reverse" << std::endl;
+	}
+	if (motorOrientation3 < 0) {
+		std::cout << log_prefix << "Motor 3 is in reverse" << std::endl;
+	}
+
 	this->go();
 	srand(time(NULL));
 }
@@ -139,7 +167,7 @@ void CMotors::calibrate(MotorCalibResult calibrationResult){
 	this->odometry_koef3=calibrationResult.odometry_koef3;
 	this->calibratedSpeed=calibrationResult.calibratedSpeed;
 	if (log_level >= LOG_INFO) {
-		printf("calibrating on %d\n",calibratedSpeed);
+		std::cout << log_prefix << "calibrating on " << calibratedSpeed << std::endl;
 	}
 }
 
@@ -167,7 +195,7 @@ void CMotors::translate(int speed, int radius, int & left, int & right) {
 	dobots::cap_range(radius, -max_radius, max_radius);
 	dobots::cap_range(speed, -max_speed, max_speed);
 	if (log_level >= LOG_INFO) {
-		std::cout << "Cap [speed,radius] to [" << speed << ',' << radius << ']' << std::endl;
+		std::cout << log_prefix << "Cap [speed,radius] to [" << speed << ',' << radius << ']' << std::endl;
 	}
 
 	int abs_radius = abs(radius);
@@ -181,7 +209,7 @@ void CMotors::translate(int speed, int radius, int & left, int & right) {
 		// map absolute speed to velocity
 		int wheel_velocity = cmd_to_ctrl(abs_speed);
 		if (log_level >= LOG_INFO) {
-			std::cout << "Wheel velocity is " << wheel_velocity << std::endl;
+			std::cout << log_prefix << "Wheel velocity is " << wheel_velocity << std::endl;
 		}
 
 		left = (int) (wheel_velocity * (abs_radius + axle_track) / (abs_radius + axle_track / 2.0));
@@ -192,9 +220,8 @@ void CMotors::translate(int speed, int radius, int & left, int & right) {
 		dobots::cap_scale<int,double>(left, right, min_wheel_velocity, max_wheel_velocity);
 	}
 
-	// for the ScoutBot, the right "wheel" is inverted
-	//if (left_right_reversed) left = -left;
-	if (left_right_reversed) right = -right;
+//	right *= motorOrientation1;
+//	left *= motorOrientation2;
 
 	// add back the sign of the speed
 	if (speed < 0) {
@@ -209,7 +236,7 @@ void CMotors::translate(int speed, int radius, int & left, int & right) {
 	}
 
 	if (log_level >= LOG_INFO) {
-		std::cout << "Translated [speed,radius]=[" << speed << ',' << radius << ']' << " into " <<
+		std::cout << log_prefix << "Translated [speed,radius]=[" << speed << ',' << radius << ']' << " into " <<
 			"[left,right]=[" << left << ',' << right << ']' << std::endl;
 	}
 }
@@ -237,12 +264,12 @@ void CMotors::setRadianSpeeds(int forward, int radius) {
 	switch (robot_type) {
 	case RobotBase::ACTIVEWHEEL: {
 		if (log_level >= LOG_INFO) {
-			std::cout << "Got command [forward,radius]=[" << forward << ',' << radius << ']' << std::endl;
+			std::cout << log_prefix << "Got command [forward,radius]=[" << forward << ',' << radius << ']' << std::endl;
 		}
 		int turn = 0;
 		if (forward == 0) {
 			if (log_level >= LOG_INFO) {
-				std::cout << "Stop the wheels" << std::endl;
+				std::cout << log_prefix << "Stop the wheels" << std::endl;
 			}
 //			set_to_zero();
 			setSpeeds(0,0);
@@ -267,23 +294,23 @@ void CMotors::setRadianSpeeds(int forward, int radius) {
 				turn = 0;
 			}
 			if (log_level >= LOG_INFO) {
-				std::cout << "Send command to the wheels [forward,turn]=[" << forward << ',' << turn << ']' << std::endl;
+				std::cout << log_prefix << "Send command to the wheels [forward,turn]=[" << forward << ',' << turn << ']' << std::endl;
 			}
 			setSpeeds(forward, turn);
 		}
-//		fprintf(stderr, "To be implemented\n");
+//		std::cerr << log_prefix <<"To be implemented" << std::endl;
 //		int turn = radius / 10;
 //		dobots::cap_range(turn, -100, 100);
 //		ActiveWheel *bot = (ActiveWheel*)robot_base;
 //		int left, right;
 //		translate(forward, radius, left, right);
-//		std::cout << "Send command to the wheels [left,right]=[" << left << ',' << right << ']' << std::endl;
+//		std::cout << log_prefix << "Send command to the wheels [left,right]=[" << left << ',' << right << ']' << std::endl;
 //		bot->MoveWheelsFront(left, right);
 //		bot->MoveWheelsRear(left, right);
 		break;
 	}
 	case RobotBase::KABOT: {
-		fprintf(stderr, "To be implemented\n");
+		std::cerr << log_prefix << "To be implemented" << std::endl;
 		KaBot *bot = (KaBot*)robot_base;
 		//		bot->moveForward(forward);
 		//		bot->moveRight(turn);
@@ -293,45 +320,60 @@ void CMotors::setRadianSpeeds(int forward, int radius) {
 		ScoutBot *bot = (ScoutBot*)robot_base;
 		int left, right;
 		translate(forward, radius, left, right);
-		std::cout << "Send command to the wheels [left,right]=[" << left << ',' << right << ']' << std::endl;
-		bot->Move(left, right);
+		if (log_level >= LOG_NOTICE) {
+			std::cout << log_prefix << "Send command to the wheels [left,right]=[" << left << ',' << right << ']' << std::endl;
+		}
+		bot->Move(motorOrientation1*left,motorOrientation2*right);
 		break;
 	}
 	default:
-		fprintf(stderr, "%s(): There is no way to drive a robot without knowing its layout\n", __func__);
+		std::cerr << log_prefix << "There is no way to drive a robot without knowing its layout" << std::endl;
 		break;
 	}
 }
 
 /**
- * Rotate on the spot. Actually depends on the battery level etc.
+ * Rotate on the spot. Actually depends on the battery level etc. Assumes degrees between [-180,180]
  */
 void CMotors::rotate(int degrees) {
 	switch (robot_type) {
 	case RobotBase::ACTIVEWHEEL: {
-		fprintf(stderr, "To be implemented\n");
+		std::cerr << log_prefix << "To be implemented" << std::endl;
 		ActiveWheel *bot = (ActiveWheel*)robot_base;
+		int turn = 40;
+		if (degrees < 0) {
+			turn = -turn;
+		}
+		setSpeeds(0, turn);
+		static const int us_per_degree = 100000; //25000;
+		usleep(us_per_degree * abs(degrees));
+		setSpeeds(0,0);
 		break;
 	}
 	case RobotBase::KABOT: {
-		fprintf(stderr, "To be implemented\n");
+		std::cerr << log_prefix << "To be implemented" << std::endl;
 		KaBot *bot = (KaBot*)robot_base;
 		break;
 	}
 	case RobotBase::SCOUTBOT: {
 		ScoutBot *bot = (ScoutBot*)robot_base;
-		int left = 40;
-		int right = left_right_reversed ? left : -left;
-		std::cout << "Send command to the wheels [left,right]=[" << left << ',' << right << ']' << std::endl;
-		bot->Move(left, right);
+		int left = 40; int right = -40;
+		if (degrees < 0) {
+			left = -left;
+			right = -right;
+		}
+		if (log_level >= LOG_NOTICE) {
+			std::cout << log_prefix << "Make wheels rotating [left,right]=[" << left << ',' << right << ']' << std::endl;
+		}
+		bot->Move(motorOrientation1*left,motorOrientation2*right);
 		// rotations per second, in case left and right are +/- 40
 		static const int us_per_degree = 20000; //25000;
-		usleep(us_per_degree * degrees);
+		usleep(us_per_degree * abs(degrees));
 		bot->Move(0,0);
 		break;
 	}
 	default:
-		fprintf(stderr, "There is no way to drive a robot without knowing its layout\n");
+		std::cout << log_prefix << "There is no way to drive a robot without knowing its layout" << std::endl;
 		break;
 	}
 }
@@ -345,12 +387,13 @@ void CMotors::rotate(int degrees) {
  * Always try to use calibrated speed for motions to avoid nonlinearity in speed setting
  */
 void CMotors::setSpeeds(int forward, int turn) {
-	//printf("robot type is %d\n",this->robot_type);
+	//std::cout << log_prefix << "robot type is %d\n",this->robot_type);
 	switch (robot_type) {
 	case RobotBase::ACTIVEWHEEL: {
 		//drive differentially - means two down wheel speeds are equal
 		//can not turn and forward 100% and 100% - therefore count equivalent
 		//max turn is on place turning
+		std::cout << "Set speeds to " << forward << " and " << turn << std::endl;
 		int speedtop;
 		int speeddown;
 		float curving_factor=1-(abs(turn)/100.0);
@@ -436,7 +479,7 @@ void CMotors::setSpeeds(int forward, int turn) {
 		usleep(100000); // at least 0.1 second per command
 	}
 	default:
-		fprintf(stderr, "There is no way to drive a robot without knowing its layout\n");
+		std::cerr << log_prefix <<"There is no way to drive a robot without knowing its layout" << std::endl;
 		break;
 	}
 }
@@ -469,7 +512,7 @@ void CMotors::set_to_zero() {
 		break;
 	}
 	default:
-		fprintf(stderr, "in function halt no robot type\n");
+		std::cerr << log_prefix <<"in function halt no robot type" << std::endl;
 		break;
 	}
 }
@@ -493,7 +536,7 @@ void CMotors::halt() {
 		break;
 	}
 	default:
-		fprintf(stderr, "in function halt no robot type\n");
+		std::cerr << log_prefix <<"in function halt no robot type" << std::endl;
 		break;
 	}
 }
@@ -506,32 +549,32 @@ void CMotors::go() {
 
 	/*switch (robot_type) {
 	case RobotBase::ACTIVEWHEEL: {
-		fprintf(stdout, "in go AW\n");
+		fstd::cout << log_prefix << stdout, "in go AW" << std::endl;
 		ActiveWheel *bot = (ActiveWheel*)robot_base;
-		fprintf(stdout, "in go AW 2\n");
+		fstd::cout << log_prefix << stdout, "in go AW 2" << std::endl;
 		bot->EnableMotors(true);
-		fprintf(stdout, "in go AW 3\n");
+		fstd::cout << log_prefix << stdout, "in go AW 3" << std::endl;
 	break;
 	}
 	case RobotBase::KABOT: {
-		fprintf(stdout, "in go KB\n");
+		fstd::cout << log_prefix << stdout, "in go KB" << std::endl;
 		KaBot *bot = (KaBot*)robot_base;
-		fprintf(stdout, "in go KB2\n");
+		fstd::cout << log_prefix << stdout, "in go KB2" << std::endl;
 		bot->EnableMotors(true);
-		fprintf(stdout, "in go KB3\n");
+		fstd::cout << log_prefix << stdout, "in go KB3" << std::endl;
 	break;
 	}
 	case RobotBase::SCOUTBOT: {
-		fprintf(stdout, "in go S\n");
+		fstd::cout << log_prefix << stdout, "in go S" << std::endl;
 		ScoutBot* bot = (ScoutBot*)robot_base;
-		fprintf(stdout, "in go S2\n");
+		fstd::cout << log_prefix << stdout, "in go S2" << std::endl;
 		usleep(500000);
 		bot->EnableMotors(true);
-		fprintf(stdout, "in go S3\n");
+		fstd::cout << log_prefix << stdout, "in go S3" << std::endl;
 	break;
 	}
 	default:
-	fprintf(stderr, "in go no robot base\n");
+	std::cerr << log_prefix <<"in go no robot base" << std::endl;
 	break;
 	}*/
 }
@@ -550,7 +593,7 @@ void CMotors::setMotorSpeedsKB(int sFront,int sRear)
 		}
 		lastTime=timer->getTime();
 	}else{
-		std::cout << "Can not move like KaBot" << std::endl;
+		std::cout << log_prefix << "Can not move like KaBot" << std::endl;
 	}
 }
 
@@ -572,12 +615,12 @@ void CMotors::setMotorSpeedsAW(int leftD,int rightD,int top)
 		}
 		lastTime=timer->getTime();
 	}else{
-		std::cout << "Can not move like AW" << std::endl;
+		std::cout << log_prefix << "Can not move like AW" << std::endl;
 	}
 }
 
 void CMotors::setMotorSpeedsS(int left,int right)
-{	//printf("setting speed Scout: %d %d\n",left, right);
+{	//std::cout << log_prefix << "setting speed Scout: %d %d\n",left, right);
 	if(robot_type==RobotBase::SCOUTBOT){
 		countOdometryTimeS(timer->getTime()-lastTime);
 		if(actualspeed1!=left || actualspeed2!=right){
@@ -588,7 +631,7 @@ void CMotors::setMotorSpeedsS(int left,int right)
 		}
 		lastTime=timer->getTime();
 	}else{
-		std::cout << "Can not move like Scout" << std::endl;
+		std::cout << log_prefix << "Can not move like Scout" << std::endl;
 	}
 
 }
@@ -624,14 +667,14 @@ void CMotors::countOdometryTimeAW(int timediff,double hinge){
 	//	double hinge=120;
 	double L12=0.1051;
 	double L3=2*sin(0.5*hinge)*0.105-0.05254;
-	//printf("%f\n",L3);
+	//std::cout << log_prefix << "%f\n",L3);
 	L12=L12*odometry_koef3;
 	L3=L3*odometry_koef3;
 
 	//L3=0.1575;
 	//L12=L12/1.225;
 	//L3=L3/1.225;
-	//printf("timediff %d \n",timediff);
+	//std::cout << log_prefix << "timediff %d \n",timediff);
 	double D=2*cos(delta)*(L12+L3*sin(delta));
 	double ld=odometry_koef1*timediff*(-actualspeed1);
 	double pd=odometry_koef1*timediff*(-actualspeed2);
@@ -639,7 +682,7 @@ void CMotors::countOdometryTimeAW(int timediff,double hinge){
 	dx=(1/D)*((-L12*sin(posPhi)-L3*cos(delta-posPhi))*ld+(L12*sin(posPhi)-L3*cos(delta+posPhi))*pd+(2*L12*cos(delta)*cos(posPhi))*h);
 	dy=(1/D)*((L12*cos(posPhi)+L3*sin(delta-posPhi))*ld+(-L12*cos(posPhi)-L3*sin(delta+posPhi))*pd+(2*L12*cos(delta)*sin(posPhi))*h);
 	dphi=(1/D)*((cos(delta))*ld+(cos(delta))*pd+(sin(2*delta))*h);
-	//printf("timediff=[timediff %d];\n",timediff);
+	//std::cout << log_prefix << "timediff=[timediff %d];\n",timediff);
 	posX -= dx;
 	posY -= dy;
 	double pok=sin(0.5*hinge)*0.135-0.0519615;
@@ -660,26 +703,26 @@ void CMotors::countOdometryTimeS(int timediff){
 	//dl=timediff/(820000.0/leftSpeed);
 	//dr=timediff/(820000.0/-rightSpeed);
 	//hallData = robot->GetHallSensorValues2D();
-	//printf("pred:  R: %d L: %d\n",hallData.right,hallData.left);
+	//std::cout << log_prefix << "pred:  R: %d L: %d\n",hallData.right,hallData.left);
 
 	double dl=odometry_koef1*actualspeed1*timediff ;
 	double dr=-odometry_koef2*actualspeed2*timediff;
 	buf[3]=buf[3]+dl;
 	buf[4]=buf[4]+dr;
-	//printf("ujel jsem levou odometry: %f\n",dl);
-	//printf("ujel jsem pravou odometry: %f\n",dr);
+	//std::cout << log_prefix << "ujel jsem levou odometry: %f\n",dl);
+	//std::cout << log_prefix << "ujel jsem pravou odometry: %f\n",dr);
 	dphi = (-dr+dl)/odometry_koef3;
-	//	printf("dphi: %f\n",dphi);
+	//	std::cout << log_prefix << "dphi: %f\n",dphi);
 
 	if(dl==dr || dl==-dr){
 		double stredniujeta=((dl + dr)/2.0);
-		//printf("stredniujeta: %f\n",stredniujeta);
+		//std::cout << log_prefix << "stredniujeta: %f\n",stredniujeta);
 		dx = stredniujeta*cos(posPhi+dphi);
 		dy = stredniujeta*sin(posPhi+dphi);
 	}else{
 		float centric=(odometry_koef3*(dr+dl))/(2*(dr-dl));
-		//printf("centric: %f\n",centric);
-		//printf("posPhi: %f\n",posPhi);
+		//std::cout << log_prefix << "centric: %f\n",centric);
+		//std::cout << log_prefix << "posPhi: %f\n",posPhi);
 		dx=-centric*(sin(posPhi+dphi)-sin(posPhi));
 		dy=centric*(cos(posPhi+dphi)-cos(posPhi));
 	}
@@ -689,7 +732,7 @@ void CMotors::countOdometryTimeS(int timediff){
 	buf[0] = posX;
 	buf[1] = posY;
 	buf[2] = posPhi;
-	//printf("uhel: %f\n",buf[2]);
+	//std::cout << log_prefix << "uhel: %f\n",buf[2]);
 }
 
 void CMotors::setMotorPosition(float x,float y,float phi){
@@ -699,7 +742,7 @@ void CMotors::setMotorPosition(float x,float y,float phi){
 	this->posX=x;
 	this->posY=y;
 	this->posPhi=phi;
-	printf("setting position %f %f %f\n",buf[0],buf[1],buf[2]);
+	std::cout << log_prefix << "setting position " << buf[0] << ',' << buf[1] << ',' << buf[2] << std::endl;
 }
 
 double* CMotors::getPosition(){
@@ -708,7 +751,7 @@ double* CMotors::getPosition(){
 	return this->buf;
 }
 void CMotors::evaluatePosition(){
-	//printf("evaluate position\n");
+	//std::cout << log_prefix << "evaluate position" << std::endl;
 	switch (robot_type) {
 	case RobotBase::ACTIVEWHEEL: {
 		this->setMotorSpeedsAW(	this->actualspeed1,this->actualspeed2,this->actualspeed3);
@@ -723,7 +766,7 @@ void CMotors::evaluatePosition(){
 		break;
 	}
 	default:
-		fprintf(stderr, "cannot evaluate position for unknown robot type\n");
+		std::cerr << log_prefix <<"cannot evaluate position for unknown robot type" << std::endl;
 		break;
 	}
 }
@@ -739,11 +782,35 @@ bool CMotors::readMotorOrientations() {
 
 		fscanf(file, "%d\n%d\n%d\n", &motorOrientation1, &motorOrientation2,
 				&motorOrientation3);
-		printf("readed orientation of motors %d %d %d\n",motorOrientation1,motorOrientation2,motorOrientation3);
+		std::cout << log_prefix << "read orientation of motors " << motorOrientation1 << ' ' << motorOrientation2 << ' '
+				<< motorOrientation3 << std::endl;
 		fclose(file);
 		return true;
 	} else {
-		printf("can not load motor orientation, leaving default 1 1 1 \n");
+		std::cout << log_prefix << "can not load motor orientation from file " << std::endl;
+		return false;
+	}
+}
+
+bool CMotors::readCalibResult() {
+	FILE * file;
+	double calibresult1;
+	double calibresult2;
+	double calibresult3;
+	int calibspeed;
+	if (file = fopen("/flash/motorCALIB.dat", "rb")) {
+		fscanf(file, "%le\n%le\n%le\n%d\n", &calibresult1, &calibresult2,
+				&calibresult3, &calibspeed);
+		fclose(file);
+		std::cout << log_prefix << "setting odometry coef 1,2,3: " << calibresult1 << ' ' << calibresult2 << ' ' <<
+				calibresult3 << " and f " << calibspeed << " for speed" << std::endl;
+		this->odometry_koef1 = calibresult1;
+		this->odometry_koef2 = calibresult2;
+		this->odometry_koef3 = calibresult3;
+		this->calibratedSpeed = calibspeed;
+		return true;
+	} else {
+		std::cout << log_prefix << "can not read calibresults from file " << std::endl;
 		return false;
 	}
 }

@@ -116,7 +116,7 @@ public:
 	void direction(int & sign_speed, int & radius);
 
 	//! Just a collision signal for the front leds
-	bool collision();
+	bool collision(LedLocation loc=LL_FRONT_LEFT, int adjust_treshold=0);
 
 	//! Power on the given LED type
 	void power_all(LedType led_type, bool on=true);
@@ -144,6 +144,14 @@ public:
 
 	//! Encounter of another robot
 	bool encounter();
+
+	//! Set prefix for log messages
+	inline void setLogPrefix(std::string log_prefix) {
+		this->log_prefix = log_prefix + "CLeds: ";
+		std::string motor_log_prefix = log_prefix + "From CLeds, ";
+		if (motors) motors->setLogPrefix(motor_log_prefix);
+	}
+
 private:
 
 	CMotors *motors;
@@ -199,6 +207,7 @@ private:
     bool enable_ambient;
 
     bool enable_proximity;
+
 public:
 	pthread_mutex_t ir_rx_mutex;
 
@@ -207,6 +216,8 @@ public:
 	bool message_recv;
 
 	long int messages_sent;
+
+	std::string log_prefix;
 };
 
 #endif /* CLEDS_H_ */

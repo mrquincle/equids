@@ -50,6 +50,16 @@
 #include <CLeds.h>
 
 /***********************************************************************************************************************
+ * Debug info
+ **********************************************************************************************************************/
+
+//! The name of the controller can be used for controller selection
+static const std::string NAME = "AvoidInfrared";
+
+//! Convenience function for printing to standard out
+#define DEBUG NAME << '[' << getpid() << "] " << __func__ << "(): "
+
+/***********************************************************************************************************************
  * Implementation
  **********************************************************************************************************************/
 
@@ -133,7 +143,9 @@ void controller_specific_args(AvoidIRController & controller, int argc, char **a
 int main(int argc, char **argv) {
 	signal(SIGINT, sigproc);
 
+	std::cout << "################################################################################" << std::endl;
 	std::cout << "Run " << NAME << " compiled at time " << __TIME__ << std::endl;
+	std::cout << "################################################################################" << std::endl;
 
 	AvoidIRController controller;
 	controller.parsePort(argc, argv);
@@ -146,10 +158,20 @@ int main(int argc, char **argv) {
 	bool quitController = false;
 	bool runController = false;
 	while (!quitController){
+
+		usleep(50000);
+		if (!runController)
+			usleep(450000);
+
 		message = controller.getMessage();
 
-		if (message.type != MSG_NONE)
-			std::cout << "Command: " << message.getStrType() << " of length " << message.len << std::endl;
+		if (message.type != MSG_NONE) {
+			if (message.len > 0) {
+				std::cout << DEBUG << "Got command: \"" << message.getStrType() << "\" of length " << message.len << std::endl;
+			} else {
+				std::cout << DEBUG << "Got command: \"" << message.getStrType() << "\"" << std::endl;
+			}
+		}
 
 		switch (message.type){
 		case MSG_INIT: {
@@ -163,6 +185,7 @@ int main(int argc, char **argv) {
 			runController = true;
 			controller.start();
 			if (controller.collided()) {
+				std::cout << "Start controller again after a collision, perform an escape maneuver" << std::endl;
 				controller.escape();
 			} else {
 				controller.get_calibration();

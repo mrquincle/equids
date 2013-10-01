@@ -2,8 +2,13 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <iostream>
 
 #define MAX_BUFFER 1024
+
+#define NAME "ActionSelection"
+
+#define DEBUG NAME << '[' << getpid() << "] " << __func__ << "(): "
 
 CEquids::CEquids() {
 	num_jockeys = 0;
@@ -46,7 +51,7 @@ int CEquids::analyze(char *buf, FILE *fd) {
 			while (ptr>0 && (tmp[ptr]=='\n' || tmp[ptr]=='\r')) {
 				ptr--;
 			}
-			if (ptr>0) {
+			if (strlen(tmp)>0) {
 				tmp[ptr+1]=0;
 				j->argv[p] = strdup(tmp);
 				printf("Parse argument for %s: %s\n", j->name, tmp);
@@ -76,7 +81,6 @@ bool CEquids::start() {
 	for (int i=0; i<num_jockeys; i++) {
 		pid = vfork();
 		if (pid==0) {
-			//sprintf(exe,"/flash/%s", jockeys[i].argv[0]);
 			fprintf(stdout, "Starting process %s with %s ", jockeys[i].argv[0], jockeys[i].argv[1]);
 			char *a; int j = 2;
 			while ((a = jockeys[i].argv[j]) != NULL) {
@@ -85,6 +89,7 @@ bool CEquids::start() {
 			}
 			printf("\n");
 			if (execvp(jockeys[i].argv[0], jockeys[i].argv)<0) {
+				sprintf(exe,"%s", jockeys[i].argv[0]);
 				fprintf(stderr, "Cannot exec process %s\n", exe);
 				error = true;
 			}
@@ -125,18 +130,37 @@ bool CEquids::init(const char *filename) {
 	}
 	return result;
 }
-
-void CEquids::initJockey(int j) {
+//permanently means that it is not stored in runnigng jockey
+void CEquids::initJockey(int j, bool permanently) {
 	usleep(500000);
-	if (j>=0 && j<num_jockeys) {
-		runningJockey = j;
-		jockeys[j].SendMessage(MSG_START, NULL, 0);
-		while (jockeys[j].acknowledge==0) {
-			usleep(10000);
+	if(!jockeys[j].started){
+		if (j>=0 && j<num_jockeys) {
+			if(!permanently) {
+				runningJockey = j;
+			}
+			std::cout << DEBUG << "Send MSG_START to jockey " << jockeys[j].name << std::endl;
+			jockeys[j].SendMessage(MSG_START, NULL, 0);
+			while (jockeys[j].acknowledge==0) {
+				usleep(10000);
+			}
+			std::cout << DEBUG << "Got acknowledgment from jockey " << jockeys[j].name << " for MSG_START" << std::endl;
+			jockeys[j].started = true;
+		} else {
+			fprintf(stderr, "Error! This jockey does not exist!\n");
 		}
-		jockeys[j].started = true;
-	} else {
-		fprintf(stderr, "Error! This jockey does not exist!\n");
+	}else{
+		printf("Error! try to start already running jockey \n");
+	}
+	if (permanently) {
+		std::cout << DEBUG << "Jockey " << jockeys[j].name << " will run permanently!" << std::endl;
+	}
+}
+
+//! Returns identifiers, not indices!
+void CEquids::getAllRunningJockeys(std::vector<vocab_t> &jockeyIds) {
+	jockeyIds.clear();
+	for (int i = 0; i < num_jockeys; ++i) {
+		if (jockeys[i].started) jockeyIds.push_back(jockeys[i].vocab_id);
 	}
 }
 
@@ -149,22 +173,26 @@ void CEquids::switchToJockey(int j) {
 		return;
 	} else {
 		if (runningJockey>=0 && runningJockey<num_jockeys)
-			printf("Switch from jockey %s to jockey %s\n", jockeys[runningJockey].name, jockeys[j].name);
+			std::cout << DEBUG << "Switch from jockey " << jockeys[runningJockey].name << " to jockey " << jockeys[j].name << std::endl;
 	}
 
 	if (runningJockey>=0 && runningJockey<num_jockeys) {
+		std::cout << DEBUG << "Send MSG_STOP to jockey " << jockeys[runningJockey].name << std::endl;
 		jockeys[runningJockey].SendMessage(MSG_STOP, NULL, 0);
 		while (jockeys[runningJockey].acknowledge==0) {
 			usleep(10000);
 		}
+		std::cout << DEBUG << "Got acknowledgment from jockey " << jockeys[runningJockey].name << " for MSG_STOP" << std::endl;
 		jockeys[runningJockey].started = false;
 	}
 	if (j>=0 && j<num_jockeys) {
 		runningJockey = j;
+		std::cout << DEBUG << "Send MSG_START to jockey " << jockeys[j].name << std::endl;
 		jockeys[j].SendMessage(MSG_START, NULL, 0);
 		while (jockeys[j].acknowledge==0) {
 			usleep(10000);
 		}
+		std::cout << DEBUG << "Got acknowledgment from jockey " << jockeys[j].name << " for MSG_START" << std::endl;
 		jockeys[runningJockey].started = true;
 	}
 }
@@ -199,11 +227,12 @@ void CEquids::sendMessageToALL(int type, void *data, int len){
 	}
 }
 
-int CEquids::find(const char *name) {
+int CEquids::find(const char *name, vocab_t vocab_id) {
 	int ret=-1;
 
 	for (int i=0; i<num_jockeys && ret<0; i++) {
 		if (strcmp(name, jockeys[i].name)==0) {
+			jockeys[i].vocab_id = vocab_id;
 			ret = i;
 		}
 	}

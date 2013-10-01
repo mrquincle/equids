@@ -1,15 +1,10 @@
 actionselection
-avoidall
 avoidir
-backandforth
-camera-actionselection
 cameradetection
-climbslope
 docking
 gotorobot
 gotosocket
 laserscan
-lasertest
 mapping
 movetoposition
 organismcontrol

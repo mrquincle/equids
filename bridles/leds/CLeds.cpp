@@ -39,8 +39,11 @@
  * Create object that drives the leds, the normal ones, as well as the infrared ones.
  */
 CLeds::CLeds(RobotBase *robot_base, RobotBase::RobotType robot_type) {
-	std::cout << "Create CLeds object, requires CMotors for calibration" << std::endl;
+	log_prefix = "CLeds: ";
 	motors = new CMotors(robot_base, robot_type);
+	motors->init();
+	motors->setLogPrefix("CMotors from Cleds: ");
+
 	type = robot_type;
 	robot = robot_base;
 	irled_count = 8;
@@ -83,7 +86,7 @@ CLeds::CLeds(RobotBase *robot_base, RobotBase::RobotType robot_type) {
 	if( access( optionfile_name.c_str(), F_OK ) != -1 ) {
 		optionfile.Load(optionfile_name);
 	} else {
-		std::cerr << "Configuration file does not exist!" << std::endl;
+		std::cerr << log_prefix << "Configuration file does not exist!" << std::endl;
 	}
 
 	// temporary array to not have to query each ambient, reflective, etc. value from the MSP each time, but get them
@@ -110,10 +113,14 @@ CLeds::~CLeds() {
  * taken into account by subsequent functions.
  */
 bool CLeds::init() {
-	std::cout << "Turn off the normal LEDs for less inference" << std::endl;
+	std::cout << log_prefix << "Turn off the normal LEDs for less inference" << std::endl;
 	power_all(LT_NORMAL, false);
 
-	std::cout << "Turn on the reflective IR LEDs" << std::endl;
+	std::cout << log_prefix << "Turn on some of normal LEDs for debugging" << std::endl;
+	robot->SetLEDOne(robot->GetSide(RobotBase::LEFT), 1, LED_GREEN);
+	robot->SetLEDOne(robot->GetSide(RobotBase::RIGHT), 0, LED_WHITE);
+
+	std::cout << log_prefix << "Turn on the reflective IR LEDs" << std::endl;
 	// seems to work only when doing it twice in a row
 	power_all(LT_REFLECTIVE, true);
 	sleep(1);
@@ -148,7 +155,7 @@ int CLeds::reflective(int i, bool offset) {
 	if (board_running[side]) {
 		value = ir_values[i/2].sensor[1-i%2].reflective - (offset ? offset_reflective[i] : 0);
 	}
-	if (log_level >= LOG_DEBUG) std::cout << "Reflective value [" << i << "]: " << value << std::endl;
+	if (log_level >= LOG_DEBUG) std::cout << log_prefix << "Reflective value [" << i << "]: " << value << std::endl;
 	return value;
 }
 
@@ -173,8 +180,8 @@ int CLeds::proximity(int i, bool offset) {
 }
 
 void *IRCommRxThread(void *l) {
-    std::cout << "Start IRCommRxThread" << std::endl;
     CLeds * leds = (CLeds*) l;
+    std::cout << leds->log_prefix << "Start IRCommRxThread" << std::endl;
     leds->receiving_messages = true;
     while(leds->receiving_messages) {
         pthread_mutex_lock(&leds->ir_rx_mutex);
@@ -186,7 +193,7 @@ void *IRCommRxThread(void *l) {
 
         usleep(20000);
     }
-    std::cout << "Quit IRCommRxThread" << std::endl;
+    std::cout << leds->log_prefix << "Quit IRCommRxThread" << std::endl;
 }
 
 void CLeds::send_message(const std::string & msg) {
@@ -365,7 +372,7 @@ void CLeds::calibrate(bool turn_around) {
 	enable_ambient = true;
 	enable_proximity = true;
 
-	std::cout << "Turn off the normal LEDs for calibration purposes" << std::endl;
+	std::cout << log_prefix << "Turn off the normal LEDs for calibration purposes" << std::endl;
 	power_all(LT_NORMAL, false);
 	power_all(LT_REFLECTIVE, true);
 
@@ -373,43 +380,46 @@ void CLeds::calibrate(bool turn_around) {
 	if (turn_around) {
 		turns = 360/45;
 	}
-	static int32_t count = 100;
+	static int32_t count = 100 / turns;
 
 	for (int n = 0; n < turns; n++) {
 		if (turn_around) {
 			int degrees = 45;
-			std::cout << "Set robot to rotate for " << degrees << " degrees" << std::endl;
+			std::cout << log_prefix << "Set robot to rotate for " << degrees << " degrees" << std::endl;
 			motors->rotate(degrees);
 		}
 
 		static int32_t between_rounds_sleep = 10000;
-		std::cout << "We will turn for " << (double)((count * between_rounds_sleep) / (double)1000000) << " seconds, " <<
+		std::cout << log_prefix << "We will turn for " << (double)((count * between_rounds_sleep) / (double)1000000) << " seconds, " <<
 				"calibrating the infrared sensors" << std::endl;
 		assert((count * between_rounds_sleep) < 60000000); // make sure it stays under a minute
 
 		// update a number of times, at least to the histogram size to be sure
 		for (int t = 0; t < count; ++t) {
 			sample();
+			int ll = log_level;
+			if ((!t % 20)) log_level = LOG_DEBUG;
 			for(int i=0; i < irled_count; i++)
 			{
 				offset_reflective[i] += reflective(i, false);
 				offset_ambient[i] += ambient(i, false);
 				offset_proximity[i] += proximity(i, false);
 			}
+			log_level = ll;
 			usleep(between_rounds_sleep);
 		}
 	}
 
 	// update the histogram now
-	for (int t = 0; t < count; ++t) {
+	for (int t = 0; t < count * turns; ++t) {
 		update();
 	}
 
 	// take average of every individual led over time
 	for(int i=0;i<irled_count;i++) {
-		offset_reflective[i] /= count;
-		offset_ambient[i] /= count;
-		offset_proximity[i] /= count;
+		offset_reflective[i] /= count * turns;
+		offset_ambient[i] /= count * turns;
+		offset_proximity[i] /= count * turns;
 	}
 
 	// by default save to file
@@ -421,9 +431,9 @@ void CLeds::calibrate(bool turn_around) {
 		} else {
 			char default_str[64];
 			for(int i=0;i<irled_count;i++) {
-				std::cout << "Write reflective offset " << offset_reflective[i] << " for led " << i << std::endl;
-				std::cout << "Write ambient offset " << offset_ambient[i] << " for led " << i << std::endl;
-				std::cout << "Write proximity offset " << offset_proximity[i] << " for led " << i << std::endl;
+				std::cout << log_prefix << "Write reflective offset " << offset_reflective[i] << " for led " << i << std::endl;
+				std::cout << log_prefix << "Write ambient offset " << offset_ambient[i] << " for led " << i << std::endl;
+				std::cout << log_prefix << "Write proximity offset " << offset_proximity[i] << " for led " << i << std::endl;
 
 				snprintf(default_str, sizeof(default_str), "%d", offset_reflective[i]);
 				optionfile.WriteTupleString(entity, "reflective_calibrated", i, default_str);
@@ -432,9 +442,9 @@ void CLeds::calibrate(bool turn_around) {
 				snprintf(default_str, sizeof(default_str), "%d", offset_proximity[i]);
 				optionfile.WriteTupleString(entity, "proximity_calibrated", i, default_str);
 
-				std::cout << "Write reflective variance " << hist_reflective.variance(i) << " for led " << i << std::endl;
-				std::cout << "Write ambient variance " << hist_ambient.variance(i) << " for led " << i << std::endl;
-				std::cout << "Write proximity variance " << hist_proximity.variance(i) << " for led " << i << std::endl;
+				std::cout << log_prefix << "Write reflective variance " << hist_reflective.variance(i) << " for led " << i << std::endl;
+				std::cout << log_prefix << "Write ambient variance " << hist_ambient.variance(i) << " for led " << i << std::endl;
+				std::cout << log_prefix << "Write proximity variance " << hist_proximity.variance(i) << " for led " << i << std::endl;
 
 				snprintf(default_str, sizeof(default_str), "%d", hist_reflective.variance(i));
 				optionfile.WriteTupleString(entity, "reflective_variance", i, default_str);
@@ -449,7 +459,7 @@ void CLeds::calibrate(bool turn_around) {
 	}
 
 	power_all(LT_REFLECTIVE, false);
-	std::cout << "Turn the normal LEDs back on" << std::endl;
+	std::cout << log_prefix << "Turn the normal LEDs back on" << std::endl;
 	power_all(LT_NORMAL);
 
 	enable_reflective = e_reflective;
@@ -502,14 +512,16 @@ void CLeds::get_calibration() {
 		std::cerr << "No property called " << property_name << std::endl;
 	}
 
-	std::cout << "Calibrated values for reflective IR sensors: ";
-	dobots::print(offset_reflective.begin(), offset_reflective.end());
+	if (log_level >= LOG_INFO) {
+		std::cout << log_prefix << "Calibrated values for reflective IR sensors: ";
+		dobots::print(offset_reflective.begin(), offset_reflective.end());
 
-	std::cout << "Calibrated values for ambient sensors: ";
-	dobots::print(offset_ambient.begin(), offset_ambient.end());
+		std::cout << log_prefix << "Calibrated values for ambient sensors: ";
+		dobots::print(offset_ambient.begin(), offset_ambient.end());
 
-	std::cout << "Calibrated values for proximity sensors: ";
-	dobots::print(offset_proximity.begin(), offset_proximity.end());
+		std::cout << log_prefix << "Calibrated values for proximity sensors: ";
+		dobots::print(offset_proximity.begin(), offset_proximity.end());
+	}
 
 	property_name = "proximity_variance";
 	if( CProperty* prop = optionfile.GetProperty( entity, property_name.c_str() ) ) {
@@ -575,17 +587,17 @@ void CLeds::update() {
 
 		if (enable_reflective) {
 			hist_reflective.average(values.begin());
-			std::cout << "Reflective (smoothed) ";
+			std::cout << log_prefix << "Reflective (smoothed) ";
 			dobots::print(values.begin(), values.end());
 		}
 		if (enable_ambient) {
 			hist_ambient.average(values.begin());
-			std::cout << "Ambient (smoothed) ";
+			std::cout << log_prefix << "Ambient (smoothed) ";
 			dobots::print(values.begin(), values.end());
 		}
 		if (enable_proximity) {
 			hist_proximity.average(values.begin());
-			std::cout << "Proximity (twice smoothed) ";
+			std::cout << log_prefix << "Proximity (twice smoothed) ";
 			dobots::print(values.begin(), values.end());
 		}
 	}
@@ -647,11 +659,11 @@ void CLeds::direction(int & sign_speed, int & radius) {
 	avg_values.resize(irled_count, 0);
 	hist_reflective.average(avg_values.begin());
 
-	std::cout << "Averages: ";
+	std::cout << log_prefix << "Averages: ";
 	for (int i = 0; i < avg_values.size(); ++i) {
-		std::cout << avg_values[i] << ' ';
+		std::cout << log_prefix << avg_values[i] << ' ';
 	}
-	std::cout << std::endl;
+	std::cout << log_prefix << std::endl;
 
 	// not every LED is as important, weight the ones in the front more than the ones at the rear
 	std::vector<float> weights;
@@ -668,11 +680,11 @@ void CLeds::direction(int & sign_speed, int & radius) {
 	// multiply values with above weights
 	std::transform(avg_values.begin(), avg_values.end(), weights.begin(), avg_values.begin(), std::multiplies<float>());
 
-	std::cout << "Weighted averages: ";
+	std::cout << log_prefix << "Weighted averages: ";
 	for (int i = 0; i < avg_values.size(); ++i) {
-		std::cout << avg_values[i] << ' ';
+		std::cout << log_prefix << avg_values[i] << ' ';
 	}
-	std::cout << std::endl;
+	std::cout << log_prefix << std::endl;
 
 	// smooth the values with their neighbours
 	std::vector<int32_t> values;
@@ -743,25 +755,39 @@ void CLeds::direction(int & sign_speed, int & radius) {
 }
 
 
-bool CLeds::collision() {
+bool CLeds::collision(LedLocation loc, int adjust_threshold) {
+	int intLoc = ((((int) loc)/2)*2);
+
 	LedLocation best_led;
-	if (variance_reflective[(int)LL_FRONT_LEFT] < variance_reflective[(int)LL_FRONT_RIGHT] ) {
-		best_led = LL_FRONT_LEFT;
+//	printf("variance ref for %d is %d and for %d is %d \n",intLoc,variance_reflective[intLoc],intLoc+1,variance_reflective[intLoc+1]);
+	if (variance_reflective[intLoc] < variance_reflective[intLoc+1] ) {
+		best_led = (LedLocation)intLoc;
 	} else {
-		best_led = LL_FRONT_RIGHT;
+		best_led = (LedLocation)(intLoc+1);
+	}
+	int threshold = 15 + adjust_threshold;
+	switch (type) {
+		case RobotBase::SCOUTBOT:{
+			threshold = 20 + adjust_threshold;
+		}
+			break;
+		case RobotBase::ACTIVEWHEEL:{
+			threshold = 100;
+		} break;
+		default:
+			break;
 	}
 
-	int threshold = 15; //50;
-//	int threshold = 50;
 	sample(); // cannot hurt, and you might forget
 	update(best_led);
 	int avg = hist_reflective.average((int)best_led) ;
 
-	std::cout << "Smoothing average from best LED [" << best_led << "]: " << avg << std::endl;
+	std::cout << log_prefix << "Smoothing average from best LED [" << best_led << "]: " << avg << std::endl;
 
 	// values go up if there is something close, in this case the right one responds much more indifferent to lighting
 	// conditions
 	if (avg > threshold) {
+	//	std::cout << log_prefix << "Smoothing average from best LED [" << best_led << "]: " << avg << std::endl;
 		return true;
 	}
 	return false;
@@ -776,7 +802,7 @@ bool CLeds::collision() {
 	int collision = 0;
 	int avg_fl = hist_reflective.average((int)LL_FRONT_LEFT) ;
 	int avg_fr = hist_reflective.average((int)LL_FRONT_RIGHT) ;
-	std::cout << avg_fl << " and " << avg_fr << std::endl;
+	std::cout << log_prefix << avg_fl << " and " << avg_fr << std::endl;
 
 	if (avg_fl + avg_fr > threshold) {
 		return true;

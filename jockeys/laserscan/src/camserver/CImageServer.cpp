@@ -29,8 +29,8 @@ void* connectLoop(void *serv)
 	{
 		newServer = accept(server->serverSocket, (struct sockaddr *)&clientAddr,&addrLen);
 		if (newServer > -1){
-			if (CISdebug) fprintf(stdout,"CImageServer: Incoming connection from %s.\n",inet_ntoa(clientAddr.sin_addr));
-			if (CISdebug) fprintf(stdout,"CImageServer: Incoming connection accepted on socket level %i.\n",newServer);
+			if (CISdebug) fprintf(stdout,"%sIncoming connection from %s.\n",server->log_prefix.c_str(), inet_ntoa(clientAddr.sin_addr));
+			if (CISdebug) fprintf(stdout,"%sIncoming connection accepted on socket level %i.\n",server->log_prefix.c_str(), newServer);
 			sem_wait(&server->connectSem);
 			server->mySocket = newServer;
 			sem_post(&server->connectSem);
@@ -45,7 +45,7 @@ void* connectLoop(void *serv)
 
 int CImageServer::initServer(const char* port)
 {
-	if (CISdebug) fprintf(stdout,"CImageServer: Initialize server.\n");
+	if (CISdebug) fprintf(stdout,"%sInitialize server.\n", log_prefix.c_str());
 	int used_port = atoi(port);
 	stop = false;
 	struct sockaddr_in mySocketAddr;
@@ -55,17 +55,17 @@ int CImageServer::initServer(const char* port)
 	serverSocket = socket(AF_INET, SOCK_STREAM, 0);
 	if (serverSocket < 0)
 	{
-		if (CISdebug) fprintf(stdout,"CImageServer: Cannot create socket.\n");
+		if (CISdebug) fprintf(stdout,"%sCannot create socket.\n", log_prefix.c_str());
 		return -1;
 	}
 	if (bind(serverSocket,( struct sockaddr *)&mySocketAddr,sizeof(mySocketAddr)) < 0)
 	{
-		if (CISdebug) fprintf(stdout,"CImageServer: Cannot bind socket.\n");
+		if (CISdebug) fprintf(stdout,"%sCannot bind socket.\n", log_prefix.c_str());
 		return -2;
 	}
 	if (listen(serverSocket,1) < 0)
 	{
-		if (CISdebug) fprintf(stdout,"CImageServer: Cannot make socket listen.\n");
+		if (CISdebug) fprintf(stdout,"%sCannot make socket listen.\n", log_prefix.c_str());
 	}
 	pthread_t* thread=(pthread_t*)malloc(sizeof(pthread_t));
 	pthread_create(thread,NULL,&connectLoop,(void*)this);
@@ -88,19 +88,19 @@ void* serverLoop(void* serv)
 	bool connected = true;
 	while (connected && !server->stop){
 		dataOk = 0;
-		if (CISdebug) fprintf(stdout,"CImageServer: Wait for a message.\n");
+		if (CISdebug) fprintf(stdout,"%sWait for a message.\n", server->log_prefix.c_str() );
 		int msg = server->checkForMessage(info.socket);
-		if (CISdebug) fprintf(stdout,"CImageServer: Message received from %i.\n",info.socket);
+		if (CISdebug) fprintf(stdout,"%sMessage received from %i.\n",server->log_prefix.c_str(),info.socket);
 		sem_wait(info.sem);
 		server->sendImage(info.socket);
-		if (CISdebug) fprintf(stdout,"CImageServer: Post to capturing semaphore.\n");
+		if (CISdebug) fprintf(stdout,"%sPost to capturing semaphore.\n",server->log_prefix.c_str());
 		sem_post(&server->captureSem);
 		//		sem_post(info.sem);
 		//remove this so "the other" can send sem_post
 		usleep(100000);
 		if (msg == 1){
 			connected = false;
-			fprintf(stdout,"CImageServer: Disconnecting.\n");
+			fprintf(stdout,"%sDisconnecting.\n", server->log_prefix.c_str());
 		}
 	}
 	server->closeConnection(info.socket);
@@ -113,11 +113,11 @@ int CImageServer::checkForMessage(int socket)
 	int receiveResult = recv(socket,&message,1,MSG_WAITALL);
 	if ( receiveResult >0)
 	{
-		if (CISdebug) fprintf(stdout,"CImageServer: Packet accepted length %i.\n", receiveResult);
+		if (CISdebug) fprintf(stdout,"%sPacket accepted length %i.\n", log_prefix.c_str(), receiveResult);
 	}
 	else
 	{
-		if (CISdebug) fprintf(stdout,"CImageServer: Disconnect detected.\n");
+		if (CISdebug) fprintf(stdout,"%sDisconnect detected.\n", log_prefix.c_str());
 		message = 1;
 	}
 	return message;
@@ -126,12 +126,12 @@ int CImageServer::checkForMessage(int socket)
 int CImageServer::sendImage(int socket)
 {
 	if (send(socket,image->data,image-> getsize(),MSG_NOSIGNAL) == image->getsize()){
-		if (CISdebug) fprintf(stdout,"CImageServer: Image sent.\n");
+		if (CISdebug) fprintf(stdout,"%sImage sent.\n", log_prefix.c_str());
 		return 0; 
 	}
 	else
 	{
-		if (CISdebug) fprintf(stdout,"CImageServer: Network error.\n");
+		if (CISdebug) fprintf(stdout,"%sNetwork error.\n", log_prefix.c_str());
 		return -1;
 	}
 	return 0;

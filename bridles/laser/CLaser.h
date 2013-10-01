@@ -55,6 +55,11 @@ public:
 
 	//! If it is off, turn it on, and the other way around
 	void Toggle();
+
+	//! Set prefix for log messages
+	inline void setLogPrefix(std::string log_prefix) {
+		this->log_prefix = log_prefix + "CCamera: ";
+	}
 protected:
 
 private:
@@ -64,6 +69,8 @@ private:
 	//! Reference to the robot class and type in the "irobot" library
 	RobotBase *robot;
 	RobotBase::RobotType robot_type;
+
+	std::string log_prefix;
 };
 
 #endif /* CLASER_H_ */

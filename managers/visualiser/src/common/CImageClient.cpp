@@ -1,7 +1,7 @@
 #include "CImageClient.h"
 
-//#define NETWORK_BLOCK MSG_DONTWAIT
-#define NETWORK_BLOCK 0 
+#define NETWORK_BLOCK MSG_DONTWAIT
+//#define NETWORK_BLOCK 0
 
 CImageClient::CImageClient()
 {
@@ -84,6 +84,7 @@ int CImageClient::checkForImage(CRawImage* image)
 	  if (lengthReceived < 0){
 		  usleep(10000);
 		  errcount++;
+		  result = 0;
 	  }else{
 		  totalReceived += lengthReceived;
 	  }
@@ -92,6 +93,8 @@ int CImageClient::checkForImage(CRawImage* image)
   if (totalReceived==image->size){
 	  memcpy(image->data,data,image->size);
 	  totalReceived = 0;
+  } else {
+	  result = 0;
   }
   return result;
 }

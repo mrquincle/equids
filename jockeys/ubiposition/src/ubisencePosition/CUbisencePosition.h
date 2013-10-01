@@ -25,7 +25,7 @@ public:
 	CUbisencePosition();
 	virtual ~CUbisencePosition();
 	int initServer(const int channel);
-	int stopServer();
+	void stopServer();
 	UbiPosition getPosition();
 	bool validPosition;
 	bool threadFinished;

@@ -380,7 +380,7 @@ bool IPC::ConnectToServer(const char * host, int port)
 
 bool Connection::SendData(const uint8_t type, uint8_t *data, int data_size)
 {
-    printf("Send data [%i] of size %i to %s:%d\n", type, data_size, inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+//    printf("Send data [%i] of size %i to %s:%d\n", type, data_size, inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
     ELolMessage msg;
 #ifdef IPC_TEST
     ElolmsgInit(&msg, 0, type, data, data_size);

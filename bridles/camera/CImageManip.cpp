@@ -133,12 +133,27 @@ void CImageManip::diff_red(CRawImage* laserImage, CRawImage* noLaserImage, CRawI
 
 	VALUE_TYPE* im_diff = diffImage->data;
 
+	int margin_left = 150;
+	int margin_right = 220;
+
 	// x over width, y over height
 	for (int y = 0; y < h; y++) {
-		for (int x = 0; x < w; x++) {
+		int x, pos;
+		for (x = 0; x < margin_left-1; x++) {
+			pos = 3*(y*w+x);
+			im_diff[pos+0] = 0;
+			im_diff[pos+1] = 0;
+			im_diff[pos+2] = 0;
+		}
+		x = margin_left-1;
+		pos = 3*(y*w+x);
+		im_diff[pos+0] = 200;
+		im_diff[pos+1] = 200;
+		im_diff[pos+2] = 200;
 
+		for (x = margin_left; x < laserImage->getwidth() - margin_right; x++) {
 			bool d;
-			int pos = 3*(y*w+x);
+			pos = 3*(y*w+x);
 			d = isMoreRed(*laserImage, *noLaserImage, pos, threshold, diff_threshold);
 
 			if (d) {
@@ -151,7 +166,19 @@ void CImageManip::diff_red(CRawImage* laserImage, CRawImage* noLaserImage, CRawI
 				im_diff[pos+2] = 0;
 			}
 		}
-	}
+		x = laserImage->getwidth() - margin_right - 1;
+		pos = 3*(y*w+x);
+		im_diff[pos+0] = 200;
+		im_diff[pos+1] = 200;
+		im_diff[pos+2] = 200;
+
+		for (x = laserImage->getwidth() - margin_right; x < laserImage->getwidth(); x++) {
+			pos = 3*(y*w+x);
+			im_diff[pos+0] = 0;
+			im_diff[pos+1] = 0;
+			im_diff[pos+2] = 0;
+		}
+}
 }
 
 /**

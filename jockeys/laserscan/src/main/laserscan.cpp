@@ -26,6 +26,8 @@
 
 #include <signal.h>
 #include <sys/syslog.h>
+#include <math.h>
+#include <iomanip>
 
 /***********************************************************************************************************************
  * Controller include
@@ -38,7 +40,10 @@
  **********************************************************************************************************************/
 
 //! The name of the controller can be used for controller selection
-std::string NAME = "LaserScan";
+static const std::string NAME = "LaserScan";
+
+//! Convenience function for printing to standard out
+#define DEBUG NAME << '[' << getpid() << "] " << __func__ << "(): "
 
 /***********************************************************************************************************************
  * Implementation
@@ -57,7 +62,23 @@ void sigproc(int) {
 		std::cout << "You used Ctrl+c to quit. We will gracefully end. User Ctrl+\\ if you want to end directly."
 				<< std::endl;
 	}
+}
 
+static inline float getPhi(struct UbiPosition pos1, struct UbiPosition pos2) {
+	float phi = atan2( pos2.y - pos1.y,  pos2.x - pos1.x );
+	return phi;
+}
+
+static inline void print(const MappedObjectPosition& p, std::string extra_text="") {
+    std::cout << DEBUG << extra_text << std::fixed << std::setw( 9 ) << std::setprecision( 7 ) <<
+    		"position [ " << p.xPosition << ',' << p.yPosition << ',' << p.zPosition << ',' << p.phiPosition <<
+    		" ] with uncertainty: [" <<
+    		p.xUncertainty << ',' << p.yUncertainty << ',' << p.zUncertainty << ',' << p.phiUncertainty << " ]" << std::endl;
+}
+
+static inline void print(const UbiPosition& p, std::string extra_text="") {
+    std::cout << DEBUG << extra_text << std::fixed << std::setw( 9 ) << std::setprecision( 7 ) <<
+    		"position [ " << p.x << ',' << p.y << ',' << p.z << "] at t=" << p.time_stamp << std::endl;
 }
 
 /**
@@ -67,7 +88,9 @@ int main(int argc, char **argv) {
 
 	signal(SIGINT, sigproc);
 
+	std::cout << "################################################################################" << std::endl;
 	std::cout << "Run " << NAME << " compiled at time " << __TIME__ << std::endl;
+	std::cout << "################################################################################" << std::endl;
 
 	LaserScanController controller;
 	controller.parsePort(argc, argv);
@@ -77,9 +100,17 @@ int main(int argc, char **argv) {
 	if (argc >= 3) {
 		cam_port = std::string(argv[2]);
 	}
-	std::cout << "Streaming images will be on port " << cam_port << " on receiving MSG_CAM_VIDEOSTREAM_START" << std::endl;
+	std::cout << DEBUG << "Streaming images will be on port " << cam_port << " on receiving MSG_CAM_VIDEOSTREAM_START" << std::endl;
 
-	if (argc >= 4) {
+	bool enable_option = false;
+	if (argc == 4) {
+		std::string arg4 = std::string(argv[3]);
+		if (arg4.find("standalone") != std::string::npos) {
+			enable_option = true;
+		}
+	}
+
+	if (argc >= 5) {
 		std::cerr << "Too many arguments" << std::endl;
 	}
 	// temporary data structures, so we do not allocate memory all the time
@@ -89,20 +120,27 @@ int main(int argc, char **argv) {
 	CMessage message;
 	bool quitController = false;
 	bool runController = false;
+
+	UbiPosition position_before;
+	UbiPosition position_after;
+	UbiPosition temp;
+	ObjectType object_type;
+
+	int acquisition_position_count = 2; // should be > 0
+
+	int get_position_before = 0;
+	int get_position_after = 0;
+
 	while (!quitController){
+
+		usleep(50000);
+		if (!runController)
+			usleep(450000);
+
 		message = controller.getMessage();
 
 		if (message.type != MSG_NONE) {
-//			std::cout << "******************************************************************************" << std::endl;
-			std::cout << "Command: " << message.getStrType();
-//			if (message.len) {
-//				std::cout << " with payload of length " << message.len << ", namely: ";
-//				for (int i = 0; i < message.len; i++) {
-//					std::cout << (int)message.data[i] << ',';
-//				}
-//			}
-			std::cout << std::endl;
-//			std::cout << "******************************************************************************" << std::endl;
+			std::cout << DEBUG << "Command: " << message.getStrType() << std::endl;
 		}
 
 		if (gStop) {
@@ -121,10 +159,25 @@ int main(int argc, char **argv) {
 			runController = true;
 			controller.start();
 			controller.acknowledge();
-			std::cout << "Started controller" << std::endl;
+			std::cout << DEBUG << "Started controller" << std::endl;
+			break;
+		}
+		case MSG_CAM_TURN_ON_ALL_THE_TIME: {
+			bool value = false;
+			if (message.len == 1) {
+				uint8_t val = message.data[0];
+				value = (bool)val;
+			} else if (message.len == 0) {
+				value = true;
+			}
+			std::cout << DEBUG << "Set camera to exclusive use to this controller" << std::endl;
+			controller.setCameraExclusive(value);
+			controller.startVideoStream(cam_port);
+			controller.acknowledge();
 			break;
 		}
 		case MSG_CAM_VIDEOSTREAM_START: { // you also have to call MSG_START
+			std::cout << DEBUG << "Received message video start" << std::endl;
 //			runController = true;
 //			controller.start();
 //			controller.setVerbosity(LOG_DEBUG);
@@ -156,14 +209,94 @@ int main(int argc, char **argv) {
 			}
 			break;
 		}
-		case MSG_LASER_DETECT_STEP: {
-			std::cout << "Detect step with the laser" << std::endl;
-			int len = sizeof(struct MappedObjectPosition);
-			if (message.len != len) {
-				std::cerr << "Error, expected payload of MappedObjectPosition of size " << len << " while it is " << message.len << std::endl;
+		case MSG_UBISENCE_POSITION: {
+			// second time
+			if (get_position_after) {
+				get_position_after--;
+				int len = sizeof(struct UbiPosition);
+				if (message.len != len) {
+					std::cerr << DEBUG << "Error, expected payload of UbiPosition of size " << len << " while it is " << message.len << std::endl;
+				}
+				if (get_position_after == acquisition_position_count-1) {
+					memcpy(&position_after, message.data, message.len);
+				} else {
+					memcpy(&temp, message.data, message.len);
+					position_after.x = (position_after.x + temp.x);
+					position_after.y = (position_after.y + temp.y);
+					position_after.z = (position_after.z + temp.z);
+				}
+
+				std::cout << DEBUG << "Got position after moving backwards: " << get_position_after << std::endl;
+				if (!get_position_after) {
+					position_after.x = position_after.x / acquisition_position_count;
+					position_after.y = position_after.y / acquisition_position_count;
+					position_after.z = position_after.z / acquisition_position_count;
+					MappedObjectPosition positionForMappedObject;
+					// store the object on the position before(!)
+					positionForMappedObject.xPosition = position_before.x;
+					positionForMappedObject.yPosition = position_before.y;
+					positionForMappedObject.zPosition = position_before.z;
+					positionForMappedObject.phiPosition = getPhi(position_before, position_after);
+					controller.sendDetectedObject(object_type, positionForMappedObject);
+					print(positionForMappedObject, "Object ");
+					controller.calcDistance(true);
+				}
 			}
-			memcpy(&positionForMappedObject, message.data, message.len);
-			controller.sendDetectedObject(positionForMappedObject);
+
+			// first time
+			if (get_position_before) {
+				get_position_before--;
+				int len = sizeof(struct UbiPosition);
+				if (message.len != len) {
+					std::cerr << DEBUG << "Error, expected payload of UbiPosition of size " << len << " while it is " << message.len << std::endl;
+				}
+				std::ostringstream msg; msg.clear(); msg.str(""); msg << (acquisition_position_count - get_position_before) << ' ';
+				std::string nr = msg.str();
+				if (get_position_before == acquisition_position_count-1) {
+					memcpy(&position_before, message.data, message.len);
+					print(position_before,nr);
+				} else {
+					memcpy(&temp, message.data, message.len);
+					print(temp,nr);
+					position_before.x = (position_before.x + temp.x);
+					position_before.y = (position_before.y + temp.y);
+					position_before.z = (position_before.z + temp.z);
+				}
+
+				std::cout << DEBUG << "Got position before moving backwards: " << get_position_before << std::endl;
+				if (!get_position_before) {
+					position_before.x = position_before.x / acquisition_position_count;
+					position_before.y = position_before.y / acquisition_position_count;
+					position_before.z = position_before.z / acquisition_position_count;
+					get_position_after = acquisition_position_count;
+					print(position_before, "Before ");
+					int distance = 0;
+					bool success = controller.getDistance(distance);
+					bool good_position = (success && (distance > 10) && (distance < 30));
+					if (good_position) {
+						std::cout << DEBUG << "Distance is already a nice 10-30cm, no need to back up for better position" << std::endl;
+					} else {
+						std::cout << DEBUG << "Move back a bit to get better position for laser" << std::endl;
+						controller.head_back();
+					}
+					object_type = controller.getDetectedObject();
+					std::cout << DEBUG << "Move back more for better Ubisense positioning" << std::endl;
+					if (good_position) {
+						// not backed up before, so do it a bit more now, maybe better controller.head_back(1) two times
+						controller.head_back(2);
+					} else {
+						controller.head_back();
+					}
+				}
+			}
+			break;
+		}
+		case MSG_LASER_DETECT_STEP: {
+			controller.calcDistance(false);
+			get_position_before = acquisition_position_count;
+			get_position_after = 0;
+			std::cout << DEBUG << "Detect step with the laser" << std::endl;
+			std::cout << DEBUG << "Waiting for redirected ZigBee messages over ethernet" << std::endl;
 			break;
 		}
 		case MSG_QUIT: {

@@ -22,8 +22,8 @@ double ODOMETRY_XERROR = 0.00014;
 double ODOMETRY_YERROR = 0.00003;
 double ODOMETRY_PHIERROR = 0.0001;
 
-double DOCK_MINIMAL_Z_POS_ONGROUND = 0.25;
-double DOCK_MINIMAL_Z_POS_ONWALL = 0.5;
+double DOCK_MINIMAL_Z_POS_ONGROUND = 0.30;
+double DOCK_MINIMAL_Z_POS_ONWALL = 0.6;
 /*
  double MEASUREMENT_XERROR =  0.000126829009494;
  double MEASUREMENT_YERROR = 0.000007700015105;
@@ -39,7 +39,7 @@ double kna2 = 2.3060e-05;
 double ODOMETRY_DL_VARIANCE = 0;
 double ODOMETRY_DR_VARIANCE = 0;
 double ODOMETRY_B_VARIANCE = 0.01;
-float TOLERANCE = 1;
+float TOLERANCE = 0.5;
 double TOLERANCEPHI = 0.2;
 double addP = 0.2;
 double hL = 0.01;
@@ -1013,14 +1013,16 @@ int Map::nearestTypeID(NearestObjectOfTypeToThisPosition nearestTo) {
 	for (var = 0; var < this->mapSize; ++var) {
 
 		MappedObjectPosition actualObj = this->getMappedPosition(var);
-		printf("triing object type %d on pos %f %f \n", actualObj.type,
+      if (actualObj.xPosition<10.0) {
+		   printf("triing object type %d on pos %f %f \n", actualObj.type,
 				actualObj.xPosition, actualObj.yPosition);
-		double actual[2] = { actualObj.xPosition, actualObj.yPosition };
-		double actualdist = euclideanDistance(position, actual);
-		if (actualObj.type == nearestTo.type && actualdist < dist) {
-			dist = actualdist;
-			num = var;
-		}
+		   double actual[2] = { actualObj.xPosition, actualObj.yPosition };
+		   double actualdist = euclideanDistance(position, actual);
+		   if (actualObj.type == nearestTo.type && actualdist < dist) {
+			   dist = actualdist;
+			   num = var;
+		   }
+      }
 	}
 	return num;
 }
@@ -1277,7 +1279,21 @@ void Map::mergeMap() {
 		printf("adding to map \n");
 		saveObjectToMap(averaged[var]);
 	}
+	for (int var = 0; var < this->mapSize; ++var) {
+		printf("LM%d=[LM%d [%2.7f ; %2.7f ; %2.7f ; %2.7f ]]; \n", var, var,
+							gsl_matrix_get(this->state, var * 4 + 3, 0),
+							gsl_matrix_get(this->state, var * 4 + 4, 0),
+							gsl_matrix_get(this->state, var * 4 + 5, 0),
+							gsl_matrix_get(this->state, var * 4 + 6, 0));
+		printf("LM%dUNCERT=[LM%dUNCERT [%2.7f ; %2.7f ; %2.7f ; %2.7f ]]; \n",
+							var, var, gsl_matrix_get(this->P, var * 4 + 3, var * 4 + 3),
+							gsl_matrix_get(this->P, var * 4 + 4, var * 4 + 4),
+							gsl_matrix_get(this->P, var * 4 + 5, var * 4 + 5),
+							gsl_matrix_get(this->P, var * 4 + 6, var * 4 + 6));
+	}
 
+	MapData data = { this->state, this->P ,this->mappedObjectTypes};
+	writeToFile("/flash/map.map", data);
 	delete[] alreadyLooped;
 }
 
@@ -1285,7 +1301,7 @@ bool Map::areSame(MappedObjectPosition mappedObject1,
 		MappedObjectPosition mappedObject2) {
 	bool toReturn = false;
 	//test if objects are of same types
-	if(mappedObject1.type==mappedObject2.type && (mappedObject2.type==DOCK_CIRCLE || mappedObject2.type==NORMAL_CIRCLE || mappedObject2.type==DOCK_CIRCLE_ORGANISM )){
+	if((mappedObject2.type==DOCK_CIRCLE || mappedObject2.type==NORMAL_CIRCLE || mappedObject2.type==DOCK_CIRCLE_ORGANISM )){
 	//calculate distances between objects
 	float vzdalenost = pow(
 			pow(mappedObject1.xPosition - mappedObject2.xPosition, 2)
@@ -1311,11 +1327,15 @@ MappedObjectPosition Map::averagePositions(
 	double sum_of_koeffs_y = 0;
 	double sum_of_koeffs_z = 0;
 	double sum_of_koeffs_phi = 0;
+	double maxZ = 0;
 	for (int var = 0; var < sameObjects.size(); ++var) {
 		sum_of_koeffs_x += (1.0 / sameObjects[var].xUncertainty);
 		sum_of_koeffs_y += (1.0 / sameObjects[var].yUncertainty);
 		sum_of_koeffs_z += (1.0 / sameObjects[var].zUncertainty);
 		sum_of_koeffs_phi += (1.0 / sameObjects[var].phiUncertainty);
+		if(sameObjects[var].zPosition > maxZ){
+			maxZ=sameObjects[var].zPosition;
+		}
 	}
 
 	for (int var = 0; var < sameObjects.size(); ++var) {
@@ -1344,6 +1364,13 @@ MappedObjectPosition Map::averagePositions(
 	returnPos.yUncertainty = returnPos.yUncertainty / sum_of_koeffs_y;
 	returnPos.zUncertainty = returnPos.zUncertainty / sum_of_koeffs_z;
 	returnPos.phiUncertainty = returnPos.phiUncertainty / sum_of_koeffs_phi;
+	if (maxZ < DOCK_MINIMAL_Z_POS_ONGROUND) {
+			returnPos.type = NORMAL_CIRCLE;
+				} else if(maxZ > DOCK_MINIMAL_Z_POS_ONGROUND && maxZ < DOCK_MINIMAL_Z_POS_ONWALL){
+					returnPos.type = DOCK_CIRCLE;
+				}else{
+					returnPos.type = DOCK_CIRCLE_ORGANISM;;
+				}
 	}else{
 		returnPos = sameObjects[0];
 	}

@@ -165,7 +165,7 @@ void readMessages() {
 					ActiveWheel *bot = (ActiveWheel*) robot;
 					printf("changing hinge \n");
 					bot->MoveHingeToAngle(8.3);
-					motor->getPosition()[5] = 2.792526803; //setting hinge to 160°
+					motor->getPosition()[5] = 163.4/180.0*M_PI;; //setting hinge to 160°
 					usleep(500000);
 
 				}
@@ -179,7 +179,9 @@ void readMessages() {
 			motor->setSpeeds(0, 0);
 			leds->color(LC_RED);
 			robot->pauseSPI(true);
-
+			while (!robot->isSPIPaused()) {
+							usleep(10000);
+			}
 			actualTask = WAIT;
 			message_server->sendMessage(MSG_ACKNOWLEDGE, NULL, 0);
 		}

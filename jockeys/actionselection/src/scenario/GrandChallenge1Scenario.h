@@ -46,9 +46,12 @@ public:
 	{
 		S_START,
 		S_MAPPING,
+		S_REMOTE_CONTROL,
 		S_EXPLORATION,
 		S_DETECT_OBJECT,
+		S_OBJECT_DETECTED,
 		S_RECRUITING,
+        S_CONNECTING,
 		S_ASSEMBLE,
 		S_MACROLOCOMOTION,
 		S_CLIMB_STEP,
@@ -68,12 +71,21 @@ public:
 	//! Run indefinitely
 	void Run();
 
+	//! Create msg
+	void CreateMsgLaserDetectObject(CMessage &msg);
+
 	// Define the jockeys for this scenario
 	jockey_id J_MAPPING;
 	jockey_id J_LASER_RECOGNITION;
 	jockey_id J_VISUAL_EXPLORATION;
 	jockey_id J_INFRARED_EXPLORATION;
 	jockey_id J_WENGUO; // for self-assembly
+	jockey_id J_ZBMESSENGER;
+	jockey_id J_CAMERADETECTION;//blob detection
+	jockey_id J_POSITION;
+    jockey_id J_MOVETO;
+    jockey_id J_REMOTE_CONTROL;
+
 
 private:
 	//! State for the state machine in Run()

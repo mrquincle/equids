@@ -46,7 +46,8 @@ LaserExplorationScenario::~LaserExplorationScenario() {
 bool LaserExplorationScenario::Init() {
 	bool continue_program = true;
 
-	J_POSITION = equids->find("ubiposition");
+	int id = V_UBIPOSITION;
+	J_POSITION = equids->find("ubiposition", id);
 
 	//! Send an error message or also quit program..
 	if (J_POSITION==-1) {
@@ -54,7 +55,8 @@ bool LaserExplorationScenario::Init() {
 		continue_program = true;
 	}
 
-	J_LASER_RECOGNITION = equids->find("laserscan");
+	id = V_LASERSCAN;
+	J_LASER_RECOGNITION = equids->find("laserscan", id);
 	if (J_LASER_RECOGNITION==-1) {
 		std::cout << "Not defined jockey \"laserscan\"" << std::endl;
 		continue_program = false;

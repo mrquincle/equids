@@ -8,6 +8,7 @@ CJockey::CJockey() {
 	argv[0] = NULL;
 	started = false;
 	sem_init(&messSem, 0, 1);
+   actual_position.time_stamp = -1;
 }
 
 CJockey::~CJockey() {
@@ -22,6 +23,9 @@ static void getMessageCallback(const ELolMessage *msg, void * connection, void *
 }
 
 bool CJockey::addMessage(const ELolMessage *msg) {
+   if (msg->command == MSG_UBISENCE_POSITION) {
+      memcpy(&actual_position, msg->data, sizeof(UbiPosition));
+   }
 	if (msg->command == MSG_QUIT) {
 		quit();
 	} else if (msg->command == MSG_ACKNOWLEDGE) {
@@ -29,7 +33,6 @@ bool CJockey::addMessage(const ELolMessage *msg) {
 	} else if (redirection(msg)) {
 //redirection already done inside redirection(msg)
 	} else {
-
 		sem_wait(&messSem);
 		if (incomingMessages.size() > 50) {
 			printf(
@@ -90,8 +93,8 @@ void CJockey::stop(bool wait_acknow) {
 			usleep(10000);
 		}
 	}
-	this->redirectinTable.clear();
-	this->incomingMessages.clear();
+//	this->redirectinTable.clear();
+//	this->incomingMessages.clear();
 }
 
 bool CJockey::redirection(const ELolMessage *msg) {
@@ -112,6 +115,7 @@ void CJockey::addRedirection(int redirectTo, TMessageType redirectedMessT) {
 	Redirection red = { redirectTo, redirectedMessT };
 	redirectinTable.push_back(red);
 }
+
 void CJockey::removeRedirection(int redirectTo, TMessageType redirectedMessT) {
 	for (int var = 0; var < redirectinTable.size(); ++var) {
 		if(redirectinTable[var].toJockey == redirectTo && redirectinTable[var].messagetype == redirectedMessT){

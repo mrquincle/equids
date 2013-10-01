@@ -10,28 +10,23 @@ struct DetectedBlob {
 	float phi;
 };
 
-#ifndef __TState__
-#define __TState__
+
 typedef enum {
-	S_START = 0,
-	S_CALIBRATE_ODOMETRY,
-	S_BUILD_MAP,
-	S_WAIT_FOR_MAP_FROM_OTHERS,
-	S_DOCK_SOCKET,
-	S_DOCKED,
-	S_STREAM_VIDEO,
-	S_MAPPING_DETECTION,
-	S_UBIPOS,
+	S_START,
+	S_MAPPING,
 	S_REMOTE_CONTROL,
-	S_DOCK_NOW,
-	S_ORGANISM_REMOTECONTROL,
-	S_ORGANISM_DOCKING,
-	S_REMOTE_CONTROLLED_BY_LEADER,
-	S_LEADER_OF_ORGANISM_DOCKING,
-	S_LEADER_OF_ORGANISM_REMOTECONTROL,
+	S_EXPLORATION,
+	S_DETECT_OBJECT,
+	S_OBJECT_DETECTED,
+	S_RECRUITING,
+    S_CONNECTING,
+	S_ASSEMBLE,
+	S_MACROLOCOMOTION,
+	S_CLIMB_STEP,
+	S_DISASSEMBLE_5_TO_3,
 	S_QUIT
-} TState;
-#endif
+} TStateMST;
+
 
 struct DetectedBlobWSize {
 	uint8_t size;
@@ -58,7 +53,7 @@ struct UbiPosition {
 };
 
 enum MapObjectType {
-	NORMAL_CIRCLE,
+	NORMAL_CIRCLE = 0,
 	DOCK_CIRCLE,
 	DOCK_CIRCLE_ORGANISM,
 	SMALL_STEP,
@@ -66,6 +61,17 @@ enum MapObjectType {
 	WALL,
 	ROBOT,
 	UNIDENTIFIED
+};
+
+static const char* StrMapObjectType[] = {
+		"Normal circle",
+		"Dock circle",
+		"Dock circle on organism",
+		"Small step",
+		"Large step",
+		"Wall",
+		"Robot",
+		"Unidentified"
 };
 
 /**
@@ -110,7 +116,8 @@ typedef enum {
 	A_CLOSE_DOCK_RIGHT,
 	A_CLOSE_DOCK_REAR,
 	A_MOVE_HINGE,
-	A_MOVE_DOCKING
+	A_MOVE_DOCKING,
+	A_SET_LEDS_COLOR
 } RemoteRobotAction;
 
 struct RemoteControlData {
@@ -122,6 +129,7 @@ struct RemoteControlData {
 	int8_t dockingAngleLeft; //if action is A_MOVE_DOCKING  can be set in -90 - 90 ,
 	int8_t dockingAngleRight;
 	uint8_t source;
+	uint8_t ledcolor;
 	RemoteRobotAction action;
 };
 

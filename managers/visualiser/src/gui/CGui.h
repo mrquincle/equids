@@ -13,7 +13,7 @@ public:
 
   void drawImage(CRawImage* image);
   void drawStatus(bool *status);
-  void initJockeys();
+  void initJockeys(int jockey_count);
   void update();
   
 private:

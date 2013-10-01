@@ -50,12 +50,18 @@ JOCKEYS=
 
 CLEANJOCKEYS=$(addsuffix .clean,$(JOCKEYS))
 
-jockeys: $(JOCKEYS)
+JOCKEYNAMESONLY=$(subst jockeys/,,$(JOCKEYS))
+
+jockeys: $(JOCKEYS) result
 
 $(JOCKEYS):  
 	$(MAKE) -C $@
 
 all: check-env jockeys upload
+
+result:
+	@echo "Compiled the jockeys:"
+	@echo "$(JOCKEYS)"
 
 $(CLEANJOCKEYS): %.clean:
 	$(MAKE) -C $* clean	
@@ -72,18 +78,19 @@ clean: check-env clean-jockeys
 upload:
 ifdef IP
 	
-	echo "upload"
-	echo "uploading $$(CAMCFG)"
+	@echo "upload"
+	@echo "uploading $(CAMCFG)"
 	rcp -rp $(CAMCFG) root@$(IP):/flash/
 	@for i in $(CFG) ;\
 	do \
-	echo "uploading /$$i..."; \
+	echo "uploading $$i..."; \
 	rcp $$i root@$(IP):/flash/ ; \
 	done
-	@for i in $(JOCKEYS) ;\
+	@for i in $(JOCKEYNAMESONLY) ;\
 	do \
-	echo "uploading /$$i..."; \
-	rcp $$i/bin/* root@$(IP):/flash/ ; \
+	echo "uploading jockeys/$$i..."; \
+	echo "rcp jockeys/$$i/bin/$$i root@$(IP):/flash/$$i" ; \
+	rcp jockeys/$$i/bin/$$i root@$(IP):/flash/$$i ; \
 	done
 endif
 
@@ -94,5 +101,5 @@ endif
 
 
 # List all the phony targets
-.PHONY: jockeys $(JOCKEYS) all clean-jockeys $(CLEANJOCKEYS) clean
+.PHONY: jockeys $(JOCKEYS) all clean-jockeys $(CLEANJOCKEYS) clean result upload
 

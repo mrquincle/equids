@@ -37,6 +37,7 @@ CTransformation::CTransformation(int widthi, int heighti, float diam,
 
 	if (!(file = fopen(filename.c_str(), "r"))) {
 		std::cout << "CANNOT FIND CALIBRESULTS IN " << filename << std::endl;
+		return;
 	}
 	trackedObjectDiameter = diam;
 

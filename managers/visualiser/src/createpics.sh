@@ -7,3 +7,5 @@ convert -size 300x48 canvas:black -fill 'gray(10%)' -font Bookman-DemiItalic -po
 convert tmp.bmp +matte images/I$f.bmp
 done
 rm tmp.bmp
+
+

@@ -132,23 +132,20 @@ endif
 MIDDLEWARE_INCLUDES=
 MIDDLEWARE_LIBS=
 
-WAPI_PATH=$(MIDDLEWARE_PATH_ROOT)/equids/libs/wapi
+#don't do that!! add it to paths.local.mk
+#WAPI_PATH=$(MIDDLEWARE_PATH_ROOT)/equids/libs/wapi
+#WAPI_LIB_PATH=$(MIDDLEWARE_PATH_ROOT)/equids/libs/wapi
 
 ifeq ($(TARGET_MIDDLEWARE),HDMR)
 
 HDMR_PATH=$(MIDDLEWARE_PATH_ROOT)/hdmrplus_install
 SOAP_PATH=$(MIDDLEWARE_PATH_ROOT)/gsoap-2.8.7
 
-
 MIDDLEWARE_INCLUDES=-I$(HDMR_PATH)/include -I$(SOAP_PATH)/gsoap 
 MIDDLEWARE_LIBS=-L$(HDMR_PATH)/lib -L$(SOAP_PATH)/gsoap -lirobot_app \
 	-lirobot_common -lirobot_wrap -lPeer -lUdata -lpthread
 
-ifeq ($(ZIGBEE),true)
-MIDDLEWARE_INCLUDES+=-I$(WAPI_PATH)/include
-MIDDLEWARE_LIBS+=-L$(WAPI_PATH)/lib -lWAPI
-endif
-
+# end of hdmr+ middleware
 endif
 
 ifeq ($(TARGET_MIDDLEWARE),IROBOT)
@@ -158,12 +155,20 @@ IROBOT_PATH=$(MIDDLEWARE_PATH_ROOT)/irobot
 
 MIDDLEWARE_INCLUDES=-I$(IROBOT_PATH)/include #-I$(LIBCAM_PATH)/include 
 MIDDLEWARE_LIBS=-L$(IROBOT_PATH)/lib -lirobot
+
+# end of irobot middleware
 endif
 
 ifeq ($(ZIGBEE),true)
+$(info ZigBee enabled)
+$(info WAPI_PATH=$(WAPI_PATH) )
+$(info WAPI_LIB_PATH=$(WAPI_LIB_PATH) )
 MIDDLEWARE_INCLUDES+=-I$(WAPI_PATH)/include
-MIDDLEWARE_LIBS+=-L$(WAPI_PATH) -lWAPI
+MIDDLEWARE_LIBS+=-L$(WAPI_LIB_PATH) -lWAPI 
+else
+$(info ZigBee disabled)
 endif
+
 
 ####################################################################################
 # Additional options for all your controllers

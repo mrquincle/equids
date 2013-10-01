@@ -18,6 +18,8 @@
 #include <Mapping.h>
 #include <CLeds.h>
 #include <wapi/wapi.h>
+#include <iostream>
+#include <iomanip>
 
 using namespace wapi;
 using namespace std;
@@ -31,10 +33,9 @@ using namespace std;
 #define NAME "Mapping"
 #define MINIMAL_RUNS 1
 #define WAIT_FOR_NO_MOVING 2
-#define DEBUG NAME << '[' << getpid() << "] " << __func__ << "(): "
+#define DEBUGSTRING NAME << '[' << getpid() << "] " << __func__ << "(): "
 #define UBISENCE_POSITION_CHANNEL 55
 #define UBISENCE_MESSAGE_SERVER_CHANNEL 56
-#define DEBUGSTRING NAME << '[' << getpid() << "] " << __func__ << "(): "
 typedef enum {
 	WAIT = 0, MAPPING
 } ActualMappingState;
@@ -81,20 +82,20 @@ void initialize() {
 		robot->SetPrintEnabled(i, false);
 	switch (robot_type) {
 	case RobotBase::UNKNOWN:
-		std::cout << "Detected unknown robot" << std::endl;
+		std::cout << DEBUGSTRING << "Detected unknown robot" << std::endl;
 		break;
 	case RobotBase::KABOT:
-		std::cout << "Detected Karlsruhe robot" << std::endl;
+		std::cout << DEBUGSTRING << "Detected Karlsruhe robot" << std::endl;
 		break;
 	case RobotBase::ACTIVEWHEEL: {
-		std::cout << "Detected Active Wheel robot" << std::endl;
+		std::cout << DEBUGSTRING << "Detected Active Wheel robot" << std::endl;
 	}
 		break;
 	case RobotBase::SCOUTBOT:
-		std::cout << "Detected Scout robot" << std::endl;
+		std::cout << DEBUGSTRING << "Detected Scout robot" << std::endl;
 		break;
 	default:
-		std::cout << DEBUG
+		std::cout << DEBUGSTRING
 				<< "No known type (even not unknown). Did initialization go well?"
 				<< std::endl;
 	}
@@ -103,21 +104,25 @@ void initialize() {
 	if (robotID != NULL) {
 		myID = atoi(robotID);
 	}
-printf("\n\n\n my id is: %d\n\n\n",myID);
+	std::cout << DEBUGSTRING << "Robot id is: " << myID << std::endl;
 
-	std::cout << "Timer inicialization" << std::endl;
+	std::cout << DEBUGSTRING << "Timer initialization" << std::endl;
 	timer = new CTimer();
 	timer->start();
 
-	std::cout << "Create motor object" << std::endl;
+	std::cout << DEBUGSTRING << "Create motor object" << std::endl;
 	motor = new CMotors(robot, robot_type);
-	std::cout << "Create CLeds object" << std::endl;
+	std::ostringstream msg; msg.clear(); msg << NAME << '[' << getpid() << "] ";
+	motor->setLogPrefix(msg.str());
+	std::cout << DEBUGSTRING << "Create CLeds object" << std::endl;
 	leds = new CLeds(robot,robot_type);
-	std::cout << "init motors" << std::endl;
+	msg.clear(); msg << NAME << '[' << getpid() << "] ";
+	leds->setLogPrefix(msg.str());
+	std::cout << DEBUGSTRING << "init motors" << std::endl;
 	motor->init();
-	std::cout << "after motor init" << std::endl;
+	std::cout << DEBUGSTRING << "after motor init" << std::endl;
 	motor->setSpeeds(0, 0);
-	std::cout << "after motor init" << std::endl;
+	std::cout << DEBUGSTRING << "after motor init" << std::endl;
 	usleep(20000);
 	slamMap = new Map(motor->getPosition(), robot_type,myID);
 }
@@ -127,6 +132,28 @@ bool isPossible(DetectedBlob* detectedBlob) {
 			&& detectedBlob->z > -4);
 }
 
+void sendMap(){
+	if(slamMap!=NULL){
+	for (int var = 0; var < slamMap->mapSize; ++var) {
+		MappedObjectPosition pos = slamMap->getMappedPosition(var);
+		pos.mappedBy = myID;
+
+		CMessage packedMessage;
+		uint64_t broadcast = Ubitag::BROADCAST;
+		printf("packing object num %d \n",var);
+		packedMessage = CMessage::packToZBMessage(
+				broadcast, MSG_MAP_DATA,
+				&pos,
+				sizeof(MappedObjectPosition));
+		printf("sending object num %d \n",var);
+
+		message_server->sendMessage(MSG_ZIGBEE_MSG,
+				packedMessage.data, packedMessage.len);
+		usleep(200000);
+	}
+	}
+}
+
 void readMessages() {
 
 	messagee = message_server->getMessage();
@@ -134,9 +161,9 @@ void readMessages() {
 	if (messagee.type != MSG_NONE) {
 		switch (messagee.type) {
 		case MSG_INIT: {
-			std::cout << "message init" << std::endl;
+			std::cout << DEBUGSTRING << "message init" << std::endl;
 			initialize();
-			std::cout << "after initialize()" << std::endl;
+			std::cout << DEBUGSTRING << "after initialize()" << std::endl;
 			actualTask = WAIT;
 			robot->pauseSPI(true);
 			while (!robot->isSPIPaused()) {
@@ -159,7 +186,7 @@ void readMessages() {
 				ActiveWheel *bot = (ActiveWheel*) robot;
 				printf("changing hinge \n");
 				bot->MoveHingeToAngle(8.3);
-				motor->getPosition()[5] = 2.792526803; //setting hinge to 160°
+				motor->getPosition()[5] = 163.4/180.0*M_PI; //setting hinge to 160°
 				usleep(500000);
 
 			}
@@ -213,11 +240,11 @@ void readMessages() {
 				 detected->detectedBlob.x, detected->detectedBlob.y,
 				 detected->detectedBlob.z, detected->detectedBlob.phi);*/
 				/*
-				 double pok[4]={detected->detectedBlob.x, detected->detectedBlob.y, detected->detectedBlob.phi,
+				 float pok[4]={detected->detectedBlob.x, detected->detectedBlob.y, detected->detectedBlob.phi,
 				 detected->detectedBlob.z};
-				 Map::convertCameraMeasurement(pok,(160/180.0)*M_PI,robot_type);
-				 printf("converted APPING x:%f y:%f z:%f phi:%f \n",pok[0],pok[1],pok[3],pok[2]);
-				 */
+				 Map::convertCameraMeasurement(pok,motor->getPosition()[5],robot_type);
+				 printf("converted MAPPING x:%f y:%f z:%f phi:%f \n",pok[0],pok[1],pok[3],pok[2]);
+				*/
 			}
 		}
 			;
@@ -256,6 +283,8 @@ void readMessages() {
 			if(mapedObject.mappedBy==myID){
 				printf("save object to map\n");
 				slamMap->saveObjectToMap(mapedObject);
+				sendMap();
+
 			}else{
 				printf("add other objects\n");
 				slamMap->addOtherRobotsObjects(mapedObject);
@@ -331,20 +360,29 @@ int main(int argc, char **argv) {
 	a.sa_handler = &interrupt_signal_handler;
 	sigaction(SIGINT, &a, NULL);
 
+	std::cout << "################################################################################" << std::endl;
+	std::cout << "Run " << NAME << " compiled at time " << __TIME__ << std::endl;
+	std::cout << "################################################################################" << std::endl;
+
 	if (argc > 1) {
 		portMS = std::string(argv[1]);
 	} else {
-		std::cout << DEBUG << "Usage: message_server_port_number" << std::endl;
+		std::cout << DEBUGSTRING << "Usage: message_server_port_number" << std::endl;
 		return 1;
 	}
 
-	std::cout << "Create (receiving) message server on port " << portMS
+	std::cout << DEBUGSTRING << "Create (receiving) message server on port " << portMS
 			<< std::endl;
 
 	message_server = new CMessageServer();
-	std::cout << "Initialize CMessageServer" << std::endl;
+	std::cout << DEBUGSTRING << "Initialize CMessageServer" << std::endl;
 	message_server->initServer(portMS.c_str());
-	std::cout << "Initialized CMessageServer" << std::endl;
+	std::cout << DEBUGSTRING << "Initialized CMessageServer" << std::endl;
+
+	std::ostringstream ss; ss.clear(); ss.str("");
+	ss << DEBUGSTRING;
+	std::string debug_str = ss.str();
+
 	while (!stop) {
 		if (detectedBlob != NULL) {
 			delete detectedBlob;
@@ -356,27 +394,29 @@ int main(int argc, char **argv) {
 		case MAPPING: {
 			// detect only when motor is stopped
 			leds->colorToggle(LC_ORANGE);
+			if(robot_type == RobotBase::SCOUTBOT){
+						message_server->sendMessage(MSG_MAP_COMPLETE, NULL, 0);
+			}else{
 			if (ubiposition == NULL) {
 				//wait until usbisence postion is present to initialize position of motors
 				break;
 			} else {
 				if (initialUbiPosition == NULL) {
 					//initialize motor position
-					printf("inititial position: %f %f ..........",
+					printf("%sInitial position: %f %f ..........\n", debug_str.c_str(),
 							ubiposition->x, ubiposition->y);
 					motor->setMotorPosition(ubiposition->x, ubiposition->y, 0);
-					printf("after motor: %f %f ..........",
+					printf("%sAfter motor: %f %f ..........\n", debug_str.c_str(),
 							motor->getPosition()[0], motor->getPosition()[1]);
 					if(mapProcedure == NULL){
 					mapProcedure = new Mapping(motor);
 					}
 
-					if(slamMap!=NULL){
-						delete slamMap;
-						slamMap= NULL;
+					if(slamMap==NULL){
+					slamMap = new Map(motor->getPosition(), robot_type,myID);
 					}
 					usleep(10000);
-					slamMap = new Map(motor->getPosition(), robot_type,myID);
+
 					if(initialUbiPosition == NULL){
 					initialUbiPosition = new UbiPosition();
 					}
@@ -404,21 +444,34 @@ int main(int argc, char **argv) {
 						double ubisenceangle = atan2(
 								endingUbiPosition->y - initialUbiPosition->y,
 								endingUbiPosition->x - initialUbiPosition->x);
+						switch (robot_type) {
+							case RobotBase::ACTIVEWHEEL:{
+								float distance_to_tag = 0.07;
+								endingUbiPosition->x=endingUbiPosition->x+sin(ubisenceangle)*distance_to_tag;
+								endingUbiPosition->y=endingUbiPosition->y-cos(ubisenceangle)*distance_to_tag;
+							};break;
+							default:{
+								float distance_to_tag = 0.05;
+								endingUbiPosition->x=endingUbiPosition->x+cos(ubisenceangle)*distance_to_tag;
+								endingUbiPosition->y=endingUbiPosition->y+sin(ubisenceangle)*distance_to_tag;
+							};break;
+						}
+
 						motor->setMotorPosition(endingUbiPosition->x,
 								endingUbiPosition->y, ubisenceangle);
-						printf("initialUbiPosition : %f %f ..........\n",
+						printf("%sinitialUbiPosition : %f %f ..........\n", debug_str.c_str(),
 								initialUbiPosition->x, initialUbiPosition->y);
-						printf("endingUbiPosition : %f %f ..........\n",
+						printf("%sendingUbiPosition : %f %f ..........\n", debug_str.c_str(),
 								endingUbiPosition->x, endingUbiPosition->y);
-						printf("uhel : %f  ..........\n", ubisenceangle);
+						printf("%suhel : %f  ..........\n", debug_str.c_str(),ubisenceangle);
 
 					} else {
 						motor->setSpeeds(motor->calibratedSpeed, 0);
 						double motorInitial[]={initialUbiPosition->x,initialUbiPosition->y};
-						printf("motorintial %f %f \n",motorInitial[0],motorInitial[1]);
+						printf("%smotorintial %f %f \n",debug_str.c_str(),motorInitial[0],motorInitial[1]);
 						double motorDriven = euclideanDistance(motor->getPosition(),motorInitial);
-						printf("motorDriven %f\n",motorDriven);
-						printf("drivenDist %f \n",drivenDist);
+						std::cout << DEBUGSTRING << "motorDriven " << motorDriven << std::endl;
+						printf("%sdrivenDist %f \n",debug_str.c_str(),drivenDist);
 						if(drivenDist+0.4 < motorDriven){
 							motor->setSpeeds(0 , 0);
 							for (int var = 0; var < 30; ++var) {
@@ -458,7 +511,6 @@ int main(int argc, char **argv) {
 							mapProcedure->wait_stopped += 10; //add to mapping motion to wait longer if robot see something and want stabilized image
 							}
 						} else {
-							wait_no_moving = WAIT_FOR_NO_MOVING; //set to max if robot do not see anthing
 							slamMap->odometryChange(motor->getPosition());
 						}
 					} else {
@@ -472,6 +524,7 @@ int main(int argc, char **argv) {
 						if (slamMap->newDetected) {
 							slamMap->newDetected = false;
 							mapProcedure->wait_stopped += 40;
+							sendMap();
 						}
 						if (slamMap->seeAfterLongTime) {
 							slamMap->seeAfterLongTime = false;
@@ -485,60 +538,56 @@ int main(int argc, char **argv) {
 						//send map
 						actualTask = WAIT;
 						motor->setSpeeds(0, 0);
-						MapData data = { slamMap->state, slamMap->P ,slamMap->mappedObjectTypes};
-						slamMap->writeToFile("/flash/map.map", data);
-						if (myID != -1) {
 
-							for (int var = 0; var < slamMap->mapSize; ++var) {
-								MappedObjectPosition pos = slamMap->getMappedPosition(var);
-								pos.mappedBy = myID;
-
-								CMessage packedMessage;
-								uint64_t broadcast = Ubitag::BROADCAST;
-								printf("packing object num %d \n",var);
-								packedMessage = CMessage::packToZBMessage(
-										broadcast, MSG_MAP_DATA,
-										&pos,
-										sizeof(MappedObjectPosition));
-								printf("sending object num %d \n",var);
-
-								message_server->sendMessage(MSG_ZIGBEE_MSG,
-										packedMessage.data, packedMessage.len);
-								usleep(100000);
-							}
-
-						} else {
-							printf(
-									"can not send mapdata, because of missing own id\n");
-						}
 						message_server->sendMessage(MSG_MAP_COMPLETE, NULL, 0);
-						std::cout << " Map sended " << std::endl;
+						std::cout << DEBUGSTRING << " Map sended " << std::endl;
 						slamMap->mappingEnded = true;
 						slamMap->mergeMap();
-						std::cout << " Map after merging " << std::endl;
-						printf("ROBPOS=[ROBPOS [%2.7f ; %2.7f ; %2.7f ; 1 ]]; \n",
-										slamMap->getRobotPosition()[0],
-										slamMap->getRobotPosition()[1],
-										slamMap->getRobotPosition()[0]);
+						sendMap();
+						std::cout << DEBUGSTRING << " Map after merging " << std::endl;
+						std::cout << DEBUGSTRING << std::fixed << std::setw( 9 ) << std::setprecision( 7 ) << "Robot position = [ " <<
+								slamMap->getRobotPosition()[0] << " | " <<
+								slamMap->getRobotPosition()[1] << " | " <<
+								slamMap->getRobotPosition()[2] << " ] ";
+//						printf("ROBPOS=[ROBPOS [%2.7f ; %2.7f ; %2.7f ; 1 ]]; \n",
+//								slamMap->getRobotPosition()[0],
+//								slamMap->getRobotPosition()[1],
+//								slamMap->getRobotPosition()[0]);
+//						printf("ROBPOS=[ROBPOS [%2.7f ; %2.7f ; %2.7f ; 1 ]]; \n",
+//								slamMap->getRobotPosition()[0],
+//								slamMap->getRobotPosition()[1],
+//								slamMap->getRobotPosition()[0]);
 						for (int var = 0; var < slamMap->mapSize ; ++var) {
 							MappedObjectPosition object = slamMap->getMappedPosition(var);
-							printf("LM%d=[LM%d [%2.7f ; %2.7f ; %2.7f ; %2.7f ]]; \n", var, var,
-									object.xPosition,
-									object.yPosition,
-									object.phiPosition,
-									object.zPosition);
-							printf(
-									"LM%dUNCERT=[LM%dUNCERT [%2.7f ; %2.7f ; %2.7f ; %2.7f ]]; \n",
-									var, var, object.xUncertainty,
-									object.yUncertainty,
-									object.phiUncertainty,
-									object.zUncertainty);
+							std::cout << DEBUGSTRING << std::fixed << std::setw( 9 ) << std::setprecision( 7 ) << "Object position (" <<
+									var << ") = [ " <<
+									object.xPosition << " | " <<
+									object.yPosition << " | " <<
+									object.phiPosition << " | " <<
+									object.zPosition << " ] " << std::endl;
+//							printf("LM%d=[LM%d [%2.7f ; %2.7f ; %2.7f ; %2.7f ]]; \n", var, var,
+//									object.xPosition,
+//									object.yPosition,
+//									object.phiPosition,
+//									object.zPosition);
+							std::cout << DEBUGSTRING << std::fixed << std::setw( 9 ) << std::setprecision( 7 ) << "Object position uncertainty (" <<
+									var << ") = [ " <<
+									object.xUncertainty << " | " <<
+									object.yUncertainty << " | " <<
+									object.phiUncertainty << " | " <<
+									object.zUncertainty << " ] " << std::endl;
+//
+//							printf("LM%dUNCERT=[LM%dUNCERT [%2.7f ; %2.7f ; %2.7f ; %2.7f ]]; \n",
+//									var, var, object.xUncertainty,
+//									object.yUncertainty,
+//									object.phiUncertainty,
+//									object.zUncertainty);
 						}
 
-
-						std::cout << " Map end " << std::endl;
+						std::cout << DEBUGSTRING << " Map end " << std::endl;
 					}
 				}
+			}
 			}
 			usleep(50000);
 		}
@@ -563,6 +612,6 @@ int main(int argc, char **argv) {
 	delete slamMap;
 	delete mapProcedure;
 	delete message_server;
-	std::cout << "Exit Motor Calibration" << std::endl;
+	std::cout << DEBUGSTRING << "Exit Mapping" << std::endl;
 	return 0;
 }
