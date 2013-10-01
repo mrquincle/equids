@@ -1,0 +1,69 @@
+#!/bin/sh
+
+# some functions
+
+elementIn() {
+  local e
+  for e in "${@:2}"; do [[ "$e" == "$1" ]] && return 0; done
+  return 1
+}
+
+# get access to $sr_id etc.
+if [ "$sr_ip" != "192.168.52.$sr_id" ]; then
+	echo "Old robot, make sure /etc/profile has the proper values!"
+	if [ "$sr_id" = "" ]; then
+		echo "Old robot, not even sr_id set. We will use 50 as id!"
+		sr_id="50"
+	fi
+	ifconfig eth0 "192.168.52.$sr_id"
+fi
+
+if [ -x /flash/ima/ZBStart.sh ] ; then
+	/flash/ima/ZBStart.sh
+fi
+
+echo "export SCOUT_SPI_GPIO_FIX=1" >> /etc/profile
+echo "export TERM=xterm" >> /etc/profile
+echo "export ROBOT=scout" >> /etc/profile
+LD_LIBRARY_PATH=/flash
+
+if [ -x /flash/almende ] ; then
+	LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/flash/almende
+fi
+
+if [ -x /flash/morph ] ; then
+	LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/flash/morph
+fi
+
+echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> /etc/profile
+
+# robots checked: 207
+MOTOR_ORIENTATION1=default
+MOTOR_ORIENTATION2=default
+MOTOR_ORIENTATION3=default
+
+# tried, making an array, but syntax for sh does not work properly (robot_id[0]="215", etc.)
+if [ "$sr_id" -eq "215" ]; then
+	MOTOR_ORIENTATION1=reversed
+elif [ "$sr_id" -eq "217" ]; then
+	MOTOR_ORIENTATION1=reversed
+fi
+echo "MOTOR_ORIENTATION1=$MOTOR_ORIENTATION1"
+echo "MOTOR_ORIENTATION2=$MOTOR_ORIENTATION2"
+echo "MOTOR_ORIENTATION3=$MOTOR_ORIENTATION3"
+echo "export MOTOR_ORIENTATION1=$MOTOR_ORIENTATION1" >> /etc/profile
+echo "export MOTOR_ORIENTATION2=$MOTOR_ORIENTATION2" >> /etc/profile
+echo "export MOTOR_ORIENTATION3=$MOTOR_ORIENTATION3" >> /etc/profile
+
+STREAM_ONLY_CAMERA=false
+echo "Set for laserscan streaming option to $STREAM_ONLY_CAMERA"
+echo "export STREAM_ONLY_CAMERA=$STREAM_ONLY_CAMERA" >> /etc/profile
+
+echo "Set up ethernet on the WLAN side"
+ifconfig eth0:0 192.168.1.$sr_id up
+
+echo "Set up route to reach all 192.168.1.X addresses"
+route add -net 192.168.1.0 netmask 255.255.255.0 gw 192.168.52.1 dev eth
+
+

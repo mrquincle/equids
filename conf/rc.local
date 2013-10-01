@@ -1,0 +1,180 @@
+#!/bin/sh
+
+# some functions
+
+elementIn() {
+  local e
+  for e in "${@:2}"; do [[ "$e" == "$1" ]] && return 0; done
+  return 1
+}
+
+# get access to $sr_id etc.
+if [ "$sr_ip" != "192.168.52.$sr_id" ]; then
+	echo "Old robot, make sure /etc/profile has the proper values!"
+	if [ "$sr_id" = "" ]; then
+		echo "Old robot, not even sr_id set. We will use 50 as id!"
+		sr_id="50"
+	fi
+	ifconfig eth0 "192.168.52.$sr_id"
+fi
+
+robot=
+if [ "$sr_id" -lt "100" ]; then
+	robot="activewheel"
+	echo "export ROBOT=activewheel" >> /etc/profile
+elif [ "$sr_id" -gt "200" ]; then
+	robot="scout"
+	echo "export ROBOT=scout" >> /etc/profile
+	echo "export SCOUT_SPI_GPIO_FIX=1" >> /etc/profile
+else
+	robot="kitrobot"
+	echo "export ROBOT=kitrobot" >> /etc/profile
+fi
+
+echo "export TERM=xterm" >> /etc/profile
+LD_LIBRARY_PATH=/flash
+
+if [ -x /flash/almende ] ; then
+	LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/flash/almende
+fi
+
+if [ -x /flash/morph ] ; then
+	LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/flash/morph
+fi
+
+if [ -x /flash/ima ] ; then
+	LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/flash/ima
+fi
+
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
+echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> /etc/profile
+
+# robots checked: 207
+MOTOR_ORIENTATION1=default
+MOTOR_ORIENTATION2=default
+MOTOR_ORIENTATION3=default
+
+# tried, making an array, but syntax for sh does not work properly (robot_id[0]="215", etc.)
+if [ "$sr_id" -eq "215" ]; then
+	MOTOR_ORIENTATION1=reversed
+elif [ "$sr_id" -eq "217" ]; then
+	MOTOR_ORIENTATION1=reversed
+fi
+echo "MOTOR_ORIENTATION1=$MOTOR_ORIENTATION1"
+echo "MOTOR_ORIENTATION2=$MOTOR_ORIENTATION2"
+echo "MOTOR_ORIENTATION3=$MOTOR_ORIENTATION3"
+echo "export MOTOR_ORIENTATION1=$MOTOR_ORIENTATION1" >> /etc/profile
+echo "export MOTOR_ORIENTATION2=$MOTOR_ORIENTATION2" >> /etc/profile
+echo "export MOTOR_ORIENTATION3=$MOTOR_ORIENTATION3" >> /etc/profile
+
+STREAM_ONLY_CAMERA=false
+echo "Set for laserscan streaming option to $STREAM_ONLY_CAMERA"
+echo "export STREAM_ONLY_CAMERA=$STREAM_ONLY_CAMERA" >> /etc/profile
+
+echo "Set up ethernet on the WLAN side"
+ifconfig eth0:0 192.168.1.$sr_id up
+
+if [ "$robot" = "activewheel" ]; then
+	echo "Call startwlan.sh for active wheel"
+	./flash/startwlan.sh
+else
+	echo "Not an activewheel, so no ./flash/startwlan.sh needed"
+fi
+
+echo "Set up route to reach all 192.168.1.X addresses"
+route add -net 192.168.1.0 netmask 255.255.255.0 gw 192.168.52.1 dev eth0
+
+if [ -x /flash/ima/ZBStart.sh ]; then
+	/flash/ima/ZBStart.sh &
+else
+	echo "Warning, there is no /flash/ima/ZBStart.sh file"
+fi
+
+if [ "$robot" = "activewheel" ]; then
+	echo "Flip camera and show only that, not the total laserscan"
+	echo "export FLIP_CAMERA=true" >> /etc/profile
+	echo "export STREAM_ONLY_CAMERA=true" >> /etc/profile
+fi
+
+
+if [ "$robot" = "activewheel" ]; then
+
+# General functions
+echo 'roboreset       2000/udp' >> /etc/services
+echo 'roboreset dgram udp nowait root /flash/mspreset.sh mspreset.sh' >> /etc/inetd.conf
+
+echo 'hingestop 2222 /udp' >> /etc/services
+echo 'hingestop dgram udp nowait root /flash/robotest robotest -c 5 22 2' >> /etc/inetd.conf
+
+echo 'flaten 2080 /udp' >> /etc/services
+echo 'flaten dgram udp nowait root /flash/flatenkabot.sh flatenkabot.sh' >> /etc/inetd.conf
+
+echo 'rebootrobot 2050 /udp' >> /etc/services
+echo 'rebootrobot dgram udp nowait root /sbin/reboot reboot' >> /etc/inetd.conf
+
+# 
+echo 'controller      3001/udp' >> /etc/services
+echo 'controller_killer      3000/udp' >> /etc/services        
+echo 'controller dgram udp nowait root /flash/schlacfn/motca.sh motca.sh' >> /etc/inetd.conf 
+echo 'controller_killer dgram udp nowait root /bin/killall killall -9 motca_robot' >> /etc/inetd.conf  
+
+# Ahhs
+echo 'ahhskiller      65001/udp' >> /etc/services
+echo 'robocontroller  65111/udp' >> /etc/services
+echo 'ahhskiller dgram udp nowait root /bin/killall killall -9 ahhsHead' >> /etc/inetd.conf    
+echo 'robocontroller dgram udp nowait root /flash/ahhs/ahhsHead ahhsHead' >> /etc/inetd.conf
+
+# VU/Symbrion
+echo 'symbrion_killer      4000/udp' >> /etc/services        
+echo 'symbrion_controller  4001/udp' >> /etc/services
+echo 'symbrion_killer dgram udp nowait root /bin/killall killall symbrion' >> /etc/inetd.conf  
+echo 'symbrion_controller dgram udp nowait root /flash/vu/runAsSlave.sh runAsSlave.sh' >> /etc/inetd.conf  
+
+# Power Sharing
+echo 'powersharing_a      2020/udp' >> /etc/services
+echo 'powersharing_b      2021/udp' >> /etc/services
+echo 'powersharing_c      2022/udp' >> /etc/services
+echo 'powersharing_d      2023/udp' >> /etc/services
+echo 'powersharing_off      2024/udp' >> /etc/services
+
+echo 'powersharing_a dgram udp nowait root /flash/powersharing.sh powersharing.sh 0' >> /etc/inetd.conf
+echo 'powersharing_b dgram udp nowait root /flash/powersharing.sh powersharing.sh 1' >> /etc/inetd.conf
+echo 'powersharing_c dgram udp nowait root /flash/powersharing.sh powersharing.sh 2' >> /etc/inetd.conf
+echo 'powersharing_d dgram udp nowait root /flash/powersharing.sh powersharing.sh 3' >> /etc/inetd.conf
+echo 'powersharing_off dgram udp nowait root /flash/powersharing.sh powersharing.sh off' >> /etc/inetd.conf
+
+# Docking Motors                                                                                           
+echo 'docking_c_a      2040/udp' >> /etc/services                                                          
+echo 'docking_c_b      2041/udp' >> /etc/services                                                          
+echo 'docking_c_c      2042/udp' >> /etc/services                                                          
+echo 'docking_c_d      2043/udp' >> /etc/services                                                          
+echo 'docking_o_a      2044/udp' >> /etc/services
+echo 'docking_o_b      2045/udp' >> /etc/services   
+echo 'docking_o_c      2046/udp' >> /etc/services   
+echo 'docking_o_d      2047/udp' >> /etc/services   
+                                                    
+echo 'docking_c_a dgram udp nowait root /flash/docking.sh docking.sh 0 c' >> /etc/inetd.conf
+echo 'docking_c_b dgram udp nowait root /flash/docking.sh docking.sh 1 c' >> /etc/inetd.conf           
+echo 'docking_c_c dgram udp nowait root /flash/docking.sh docking.sh 2 c' >> /etc/inetd.conf                
+echo 'docking_c_d dgram udp nowait root /flash/docking.sh docking.sh 3 c' >> /etc/inetd.conf                
+echo 'docking_o_a dgram udp nowait root /flash/docking.sh docking.sh 0 o' >> /etc/inetd.conf                
+echo 'docking_o_b dgram udp nowait root /flash/docking.sh docking.sh 1 o' >> /etc/inetd.conf                
+echo 'docking_o_c dgram udp nowait root /flash/docking.sh docking.sh 2 o' >> /etc/inetd.conf                    
+echo 'docking_o_d dgram udp nowait root /flash/docking.sh docking.sh 3 o' >> /etc/inetd.conf
+
+fi
+
+# do not forget the & !!!
+
+if [ "$sr_id" -eq "70" ]; then
+	echo "Start laserscan"
+	./flash/laserscan 10001 10002 &	
+fi
+
+if [ "$robot" = "scout" ]; then
+	echo "Start jockey framework"
+	./flash/start.sh &
+fi
+
+
